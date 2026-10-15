@@ -12,11 +12,11 @@ export function ExamEvaluation({ onBack, onNavigateToStudentInfo }) {
   // Step 1: Form Configuration (manual selection by teacher)
   const [selectedBatch, setSelectedBatch] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('');
-  const [examTitle, setExamTitle] = useState('Mid-Term Examination');
+  const [examTitle, setExamTitle] = useState('');
   const [examDate, setExamDate] = useState(() => {
     return new Date().toISOString().split('T')[0];
   });
-  const [totalMarks, setTotalMarks] = useState(100);
+  const [totalMarks, setTotalMarks] = useState('');
 
   // Ready state: user must manually pick both batch and subject
   const readyToShow = Boolean(selectedBatch && selectedSubject);
@@ -87,7 +87,7 @@ export function ExamEvaluation({ onBack, onNavigateToStudentInfo }) {
     const num = Number(value);
     if (isNaN(num)) return;
     if (num < 0) return;
-    if (num > totalMarks) {
+    if (totalMarks && Number(totalMarks) > 0 && num > Number(totalMarks)) {
       showToast(`Marks cannot exceed Total Marks (${totalMarks})`);
       return;
     }
@@ -179,6 +179,14 @@ export function ExamEvaluation({ onBack, onNavigateToStudentInfo }) {
 
   // Click Submit -> Show Confirmation Modal
   const handleInitiateSubmit = () => {
+    if (!examTitle.trim()) {
+      showToast('⚠️ Please enter an Exam Title.');
+      return;
+    }
+    if (!totalMarks || Number(totalMarks) <= 0) {
+      showToast('⚠️ Please enter valid Total Exam Marks.');
+      return;
+    }
     if (evaluationStats.totalEvaluated === 0 && evaluationStats.totalAbsent === 0) {
       showToast('Please enter marks or mark absent for at least one student.');
       return;
@@ -401,7 +409,7 @@ export function ExamEvaluation({ onBack, onNavigateToStudentInfo }) {
               className="ee-text-input"
               value={examTitle}
               onChange={(e) => setExamTitle(e.target.value)}
-              placeholder="e.g. Mid-Term Exam"
+              placeholder="Type Here..."
             />
           </div>
 
@@ -438,15 +446,12 @@ export function ExamEvaluation({ onBack, onNavigateToStudentInfo }) {
               <input
                 id="ee-total-marks"
                 type="number"
-                min="10"
-                max="500"
-                step="5"
+                min="1"
+                max="1000"
                 className="ee-number-input"
+                placeholder="Enter Marks"
                 value={totalMarks}
-                onChange={(e) => {
-                  const val = Number(e.target.value);
-                  if (val > 0) setTotalMarks(val);
-                }}
+                onChange={(e) => setTotalMarks(e.target.value)}
               />
               <span className="ee-marks-unit">Marks</span>
             </div>

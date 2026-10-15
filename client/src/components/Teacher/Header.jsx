@@ -1,114 +1,82 @@
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+
 export function Header({
   activePage = 'dashboard',
   hasNotifications = true,
   onToggleSidebar,
-  onHomeClick,
   onNotificationClick,
   onProfileClick,
-  onLogoClick
+  onLogout
 }) {
-  const isDashboard = typeof activePage === 'string' && activePage.toLowerCase() === 'dashboard';
+  const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
+  const dropdownRef = useRef(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setProfileDropdownOpen(false);
+      }
+    }
+    if (profileDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [profileDropdownOpen]);
 
   const getPageTitle = (page) => {
     switch (page) {
       case 'dashboard':
-        return 'Teacher Dashboard';
+        return 'Dashboard';
       case 'academics':
-        return 'Academic & Batches';
+        return 'Academics';
       case 'study-material':
         return 'Study Materials';
       case 'finance':
-        return 'Finance & Payments';
+        return 'Finance';
       case 'notice':
         return 'Notice Board';
       case 'settings':
-        return 'Settings & Profile';
+        return 'Settings';
       default:
         return 'Teacher Portal';
+    }
+  };
+
+  const handleLogoutClick = () => {
+    setProfileDropdownOpen(false);
+    if (onLogout) {
+      onLogout();
+    } else {
+      localStorage.removeItem('digitute_active_view');
+      window.location.hash = '#landing';
+      window.location.reload();
     }
   };
 
   return (
     <header className="dt-header" role="banner">
       <div className="dt-header-container">
-        {/* Left: Brand Logo & Title (Navigation handled by BottomNav on mobile) */}
+        {/* Left: Mobile = DigiTute Logo & Name | PC = Active Page Title */}
         <div className="dt-header-left-group">
-
-          {/* Brand Logo & Title */}
-          <div 
-            className="dt-header-left" 
-            onClick={onLogoClick || onHomeClick} 
-            role="button" 
-            tabIndex={0}
-          >
-            <div className="dt-header-logo-icon" aria-hidden="true">
-              <svg
-                viewBox="0 0 34 28"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-                className="dt-logo-svg"
-              >
-                <path
-                  d="M17 6 C13 3, 5.5 3, 2.5 5 L2.5 22.5 C5.5 20.5, 13 20.5, 17 23.5 Z"
-                  stroke="#0F172A"
-                  strokeWidth="2.2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  fill="#FFFFFF"
-                />
-                <path
-                  d="M17 6 C21 3, 28.5 3, 31.5 5 L31.5 22.5 C28.5 20.5, 21 20.5, 17 23.5 Z"
-                  stroke="#0F172A"
-                  strokeWidth="2.2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  fill="#FFFFFF"
-                />
-                <path d="M17 6 L17 23.5" stroke="#0F172A" strokeWidth="2" strokeLinecap="round" />
-                <path
-                  d="M13 15 L22 6 M22 6 L16.5 6 M22 6 L22 11.5"
-                  stroke="#2563EB"
-                  strokeWidth="2.4"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
+          {/* Mobile-only: DigiTute brand logo + name */}
+          <div className="dt-header-mobile-brand" aria-hidden="false">
+            <div className="dt-header-logo-icon">
+              <svg className="dt-logo-svg" viewBox="0 0 40 34" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="0" y="0" width="40" height="34" rx="8" fill="#2563EB"/>
+                <text x="50%" y="55%" dominantBaseline="middle" textAnchor="middle" fill="#FFFFFF" fontSize="16" fontWeight="800" fontFamily="system-ui,sans-serif">DT</text>
               </svg>
             </div>
-            <div className="dt-header-brand-title">DigiTute</div>
-            <span className="dt-header-role-badge">Teacher Portal</span>
+            <span className="dt-header-brand-title">DigiTute</span>
           </div>
-
-          {/* Desktop Breadcrumb/Page Indicator */}
-          <div className="dt-header-desktop-title" aria-hidden="true">
-            <span className="dt-header-divider-slash">/</span>
-            <span className="dt-header-active-page-title">{getPageTitle(activePage)}</span>
-          </div>
+          {/* PC-only: current active page title */}
+          <h1 className="dt-header-page-title">{getPageTitle(activePage)}</h1>
         </div>
 
-        {/* Right: Actions (Notification bell, Profile, Teacher status) */}
+        {/* Right: Actions (Notification bell, Profile dropdown) */}
         <div className="dt-header-actions">
-          {/* Quick Home / Dashboard Button */}
-          <button
-            type="button"
-            className={`dt-header-icon-btn home-btn ${isDashboard ? 'is-active' : ''}`}
-            onClick={onHomeClick}
-            aria-label="Dashboard"
-            title="Dashboard"
-          >
-            <svg
-              viewBox="0 0 24 24"
-              fill={isDashboard ? "#2563EB" : "none"}
-              stroke={isDashboard ? "#2563EB" : "#1E293B"}
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-              <polyline points="9 22 9 12 15 12 15 22" />
-            </svg>
-          </button>
-
           {/* Notifications Button */}
           <button
             type="button"
@@ -131,31 +99,74 @@ export function Header({
             {hasNotifications && <span className="dt-header-badge-dot" aria-label="New notifications" />}
           </button>
 
-          {/* Profile Button */}
-          <button
-            type="button"
-            className="dt-header-icon-btn profile-btn"
-            onClick={onProfileClick}
-            aria-label="Teacher Profile"
-            title="Teacher Profile"
-          >
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="#1E293B"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
+          {/* Profile Dropdown Container */}
+          <div className="dt-header-profile-wrapper" ref={dropdownRef}>
+            <button
+              type="button"
+              className={`dt-header-icon-btn profile-btn ${profileDropdownOpen ? 'is-open' : ''}`}
+              onClick={() => setProfileDropdownOpen(prev => !prev)}
+              aria-label="Teacher Profile Menu"
+              aria-expanded={profileDropdownOpen}
+              title="Teacher Profile"
             >
-              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-              <circle cx="12" cy="7" r="4" />
-            </svg>
-          </button>
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="#1E293B"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                <circle cx="12" cy="7" r="4" />
+              </svg>
+            </button>
 
-          {/* Desktop Teacher Tag */}
-          <div className="dt-header-teacher-meta">
-            <span className="dt-header-teacher-name">Sudipta Sir</span>
-            <span className="dt-header-teacher-status">Faculty of DigiTute</span>
+            {/* Desktop Teacher Tag */}
+            <div 
+              className="dt-header-teacher-meta" 
+              onClick={() => setProfileDropdownOpen(prev => !prev)}
+              role="button"
+              tabIndex={0}
+              style={{ cursor: 'pointer' }}
+            >
+              <span className="dt-header-teacher-name">Sudipta Sir</span>
+              <span className="dt-header-teacher-status">Faculty of DigiTute</span>
+            </div>
+
+            {/* Profile Dropdown Menu */}
+            {profileDropdownOpen && (
+              <div className="dt-header-dropdown-menu" role="menu">
+                <div className="dt-header-dropdown-header">
+                  <div className="dt-dropdown-avatar">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2">
+                      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                      <circle cx="12" cy="7" r="4" />
+                    </svg>
+                  </div>
+                  <div className="dt-dropdown-user-info">
+                    <strong className="dt-dropdown-user-name">Sudipta Sir</strong>
+                    <span className="dt-dropdown-user-role">Faculty of DigiTute</span>
+                  </div>
+                </div>
+
+                <div className="dt-dropdown-divider" />
+
+                <button
+                  type="button"
+                  className="dt-dropdown-item logout-item"
+                  onClick={handleLogoutClick}
+                  role="menuitem"
+                >
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#EF4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                    <polyline points="16 17 21 12 16 7" />
+                    <line x1="21" y1="12" x2="9" y2="12" />
+                  </svg>
+                  <span>Log Out</span>
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>

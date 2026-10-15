@@ -112,24 +112,18 @@ export function Attendance({ onBack, _onNavigate, initialBatch, initialSubject }
   const absentCount = absentList.length;
   const attendancePercentage = totalCount > 0 ? Math.round((presentCount / totalCount) * 100) : 0;
 
-  // Filtered list based on search and tab filter
+  // Filtered list based on tab filter
   const displayedStudents = useMemo(() => {
-    const q = searchQuery.toLowerCase().trim();
     return students.filter((s) => {
-      const matchesSearch =
-        !q ||
-        s.name.toLowerCase().includes(q) ||
-        s.roll.toLowerCase().includes(q);
-
       const status = attendanceMap[s.id] || 'present';
       const matchesFilter =
         filterView === 'all' ||
         (filterView === 'present' && status === 'present') ||
         (filterView === 'absent' && status === 'absent');
 
-      return matchesSearch && matchesFilter;
+      return matchesFilter;
     });
-  }, [students, attendanceMap, searchQuery, filterView]);
+  }, [students, attendanceMap, filterView]);
 
   // Click submit -> Open Confirmation Popup
   const handleInitiateSubmit = () => {
@@ -359,18 +353,6 @@ export function Attendance({ onBack, _onNavigate, initialBatch, initialSubject }
               <span className="att-pill-label">Absent</span>
               <span className="att-pill-val">{absentCount}</span>
             </div>
-
-            <button
-              type="button"
-              className="att-mark-all-btn"
-              onClick={handleSelectAllPresent}
-              title="Mark all students Present"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="20 6 9 17 4 12" />
-              </svg>
-              <span>Select All (Present)</span>
-            </button>
           </section>
 
           {/* ── FILTER TABS & SEARCH ── */}
@@ -399,29 +381,7 @@ export function Attendance({ onBack, _onNavigate, initialBatch, initialSubject }
               </button>
             </div>
 
-            <div className="att-search-box">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="11" cy="11" r="8" />
-                <line x1="21" y1="21" x2="16.65" y2="16.65" />
-              </svg>
-              <input
-                type="text"
-                className="att-search-input"
-                placeholder="Search by name..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-              {searchQuery && (
-                <button
-                  type="button"
-                  className="att-search-clear"
-                  onClick={() => setSearchQuery('')}
-                  aria-label="Clear search"
-                >
-                  ✕
-                </button>
-              )}
-            </div>
+            
           </div>
 
           {/* ── SUBMISSION SUCCESS BANNER IF JUST SUBMITTED ── */}

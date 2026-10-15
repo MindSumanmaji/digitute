@@ -380,39 +380,44 @@ const Dashboard = ({ onNavigate }) => {
                 tabIndex={0}
                 title="Click to open Doubt Corner for this batch"
               >
-                <div className="doubt-ring-container" aria-label={`${liveDoubtStats ? liveDoubtStats.solvedPct : batchStats.solved}% resolved doubts`}>
-                  <svg className="doubt-ring-svg doubt-ring-spinning" viewBox="0 0 60 60">
-                    <circle cx="30" cy="30" r="25" fill="none" stroke="#EEF2FF" strokeWidth="5" />
-                    <circle
-                      cx="30" cy="30" r="25"
-                      fill="none"
-                      stroke="#4F46E5"
-                      strokeWidth="5"
-                      strokeDasharray="157"
-                      strokeDashoffset={ringOffset(animatedSolved)}
-                      strokeLinecap="round"
-                      transform="rotate(-90 30 30)"
-                    />
-                  </svg>
-                  <div className="doubt-ring-inner">
-                    <span className="doubt-ring-percent">{animatedSolved}%</span>
-                    <span className="doubt-ring-tag">Solved</span>
-                  </div>
-                </div>
-                <div className="doubt-divider" aria-hidden="true" />
-                <div className="doubt-pending-group">
+                <div className="doubt-header-top">
                   <span className="doubt-header-label">Doubt Status</span>
-                  <div className="doubt-pending-row">
-                    <div className="doubt-doc-badge" aria-hidden="true">
-                      <svg width="22" height="26" viewBox="0 0 22 26" fill="none">
-                        <path d="M2.5 2C2.5 1.44772 2.94772 1 3.5 1H14.5L20.5 7V24C20.5 24.5523 20.0523 25 19.5 25H3.5C2.94772 25 2.5 24.5523 2.5 24V2Z" stroke="#0F172A" strokeWidth="1.8" strokeLinejoin="round" fill="#FFFFFF" />
-                        <path d="M14.5 1V7H20.5" stroke="#0F172A" strokeWidth="1.8" strokeLinejoin="round" />
-                        <text x="11.5" y="17.5" textAnchor="middle" fontSize="11" fontWeight="800" fill="#0F172A" fontFamily="Inter, sans-serif">?</text>
-                      </svg>
+                </div>
+                <div className="doubt-card-body">
+                  <div className="doubt-ring-container" aria-label={`${liveDoubtStats ? liveDoubtStats.solvedPct : batchStats.solved}% resolved doubts`}>
+                    <svg className="doubt-ring-svg doubt-ring-spinning" viewBox="0 0 60 60">
+                      <circle cx="30" cy="30" r="25" fill="none" stroke="#EEF2FF" strokeWidth="5" />
+                      <circle
+                        cx="30" cy="30" r="25"
+                        fill="none"
+                        stroke="#4F46E5"
+                        strokeWidth="5"
+                        strokeDasharray="157"
+                        strokeDashoffset={ringOffset(animatedSolved)}
+                        strokeLinecap="round"
+                        transform="rotate(-90 30 30)"
+                      />
+                    </svg>
+                    <div className="doubt-ring-inner">
+                      <span className="doubt-ring-percent">{animatedSolved}%</span>
+                      <span className="doubt-ring-tag">Solved</span>
                     </div>
-                    <div className="doubt-pending-meta">
-                      <span className="doubt-pending-sub">Pending</span>
-                      <span className="doubt-pending-num">{liveDoubtStats ? liveDoubtStats.pending : batchStats.pending}</span>
+                  </div>
+                  <div className="doubt-divider" aria-hidden="true" />
+                  <div className="doubt-pending-group">
+                    <div className="doubt-pending-row">
+                      <div className="doubt-sandwatch-badge" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#DC2626" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M5 22h14" />
+                          <path d="M5 2h14" />
+                          <path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22" />
+                          <path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2" />
+                        </svg>
+                      </div>
+                      <div className="doubt-pending-meta">
+                        <span className="doubt-pending-sub">Pending</span>
+                        <span className="doubt-pending-num">{liveDoubtStats ? liveDoubtStats.pending : batchStats.pending}</span>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -495,7 +500,7 @@ const Dashboard = ({ onNavigate }) => {
 
           <div className="quick-actions-grid">
             {/* Take Attendance */}
-            <button type="button" className="action-card attendance-action" onClick={() => onNavigate && onNavigate('academics')} aria-label="Take Attendance">
+            <button type="button" className="action-card attendance-action" onClick={() => onNavigate && onNavigate('academics', { section: 'attendance', batch: selectedBatch, subject: selectedSubject })} aria-label="Take Attendance">
               <div className="action-card-header">
                 <div className="action-icon-box attendance-icon-box" aria-hidden="true">
                   <svg viewBox="0 0 24 24" fill="none" stroke="#4F46E5" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
@@ -532,7 +537,7 @@ const Dashboard = ({ onNavigate }) => {
             </button>
 
             {/* Create DPP */}
-            <button type="button" className="action-card ddp-action" onClick={() => onNavigate && onNavigate('academics')} aria-label="Create DPP">
+            <button type="button" className="action-card ddp-action" onClick={() => onNavigate && onNavigate('academics', { section: 'dpp-management', batch: selectedBatch, subject: selectedSubject })} aria-label="Create DPP">
               <div className="action-card-header">
                 <div className="action-icon-box ddp-icon-box" aria-hidden="true">
                   <svg viewBox="0 0 24 24" fill="none" stroke="#EA580C" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
