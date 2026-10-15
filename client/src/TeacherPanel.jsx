@@ -63,6 +63,7 @@ export function TeacherPanel({ onBackToLanding }) {
           onNotificationClick={() => handleTabChange('settings')}
           onProfileClick={() => handleTabChange('settings')}
           onTabChange={handleTabChange}
+          onLogout={onBackToLanding}
         />
 
         {/* Page Content */}

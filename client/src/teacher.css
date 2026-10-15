@@ -373,6 +373,11 @@
   to   { opacity: 1; transform: translate(-50%, 0); }
 }
 
+@keyframes dt-dropdown-pop {
+  from { opacity: 0; transform: translateY(-6px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
 .app-layout {
   /* --- 1. CSS CUSTOM PROPERTIES (DESIGN TOKENS) --- */
   --primary: #2D3A8C;
@@ -436,7 +441,30 @@
 
   &, & *, & *::before, & *::after {
     box-sizing: border-box;
+    margin: 0;
+    padding: 0;
     -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Defend against leaking global styles from other panels */
+  h1, h2, h3, h4, h5, h6, p {
+    margin: 0;
+    padding: 0;
+    max-width: none;
+  }
+
+  label {
+    display: block;
+    gap: 0;
+    font: inherit;
+    color: inherit;
+  }
+
+  select {
+    min-height: unset;
+    border-radius: var(--radius-sm, 8px);
+    font: inherit;
+    color: inherit;
   }
 
   img, picture, svg, video {
@@ -1339,6 +1367,143 @@ textarea.input-field {
   font-size: 0.6875rem;
   color: #2563EB;
   font-weight: 600;
+}
+
+/* ── Header Page Title ── */
+.dt-header-page-title {
+  display: none;
+  font-size: 1.0625rem;
+  font-weight: 700;
+  color: #0F172A;
+  letter-spacing: -0.01em;
+  margin: 0;
+  padding: 0;
+}
+
+/* Mobile brand: DigiTute logo + name */
+.dt-header-mobile-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* PC view: show page title, hide mobile brand */
+@media (min-width: 768px) {
+  .dt-header-mobile-brand {
+    display: none !important;
+  }
+  .dt-header-page-title {
+    display: block !important;
+  }
+}
+
+/* ── Profile Dropdown ── */
+.dt-header-profile-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dt-header-profile-wrapper .dt-header-teacher-meta {
+  cursor: pointer;
+  user-select: none;
+}
+
+.dt-header-icon-btn.profile-btn.is-open {
+  background: #EFF6FF;
+  border-color: #BFDBFE;
+}
+
+.dt-header-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 220px;
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(15, 23, 42, 0.12), 0 2px 8px rgba(15, 23, 42, 0.06);
+  z-index: 300;
+  overflow: hidden;
+  animation: dt-dropdown-pop 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+
+
+.dt-header-dropdown-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  background: #F8FAFC;
+}
+
+.dt-dropdown-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: #EFF6FF;
+  border: 1px solid #BFDBFE;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.dt-dropdown-avatar svg {
+  width: 20px;
+  height: 20px;
+}
+
+.dt-dropdown-user-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dt-dropdown-user-name {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: #0F172A;
+}
+
+.dt-dropdown-user-role {
+  font-size: 0.75rem;
+  color: #64748B;
+}
+
+.dt-dropdown-divider {
+  height: 1px;
+  background: #E2E8F0;
+  margin: 0;
+}
+
+.dt-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 16px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #374151;
+  transition: background 0.12s ease;
+  text-align: left;
+}
+
+.dt-dropdown-item:hover {
+  background: #F9FAFB;
+}
+
+.dt-dropdown-item.logout-item {
+  color: #EF4444;
+}
+
+.dt-dropdown-item.logout-item:hover {
+  background: #FEF2F2;
 }
 
 @media (min-width: 768px) {
@@ -2606,6 +2771,45 @@ textarea.input-field {
   font-weight: 800;
   color: #0F172A;
   line-height: 1;
+}
+
+/* ── Doubt Card Updated Layout ── */
+.doubt-header-top {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 8px;
+}
+
+.doubt-header-top .doubt-header-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #64748B;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.doubt-card-body {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.doubt-sandwatch-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.doubt-status-card {
+  display: flex;
+  flex-direction: column;
+  padding: 10px 14px 12px;
+  cursor: pointer;
+  min-height: 82px;
+  justify-content: center;
 }
 
 /* ==========================================================================
@@ -5139,9 +5343,13 @@ textarea.input-field {
    DESKTOP PC LAYOUT FIXES (sidebar = 250px, content = full remaining)
    ===================================================================== */
 
-/* Override max-width on desktop - use full content area width */
+/* Override max-width on desktop - use full content area width for Attendance, Student Info, Syllabus Setup, Exam Evaluation, and Doubt Corner */
 @media (min-width: 768px) {
-  .att-container {
+  .att-container,
+  .si-wrapper,
+  .ss-wrapper,
+  .ee-container,
+  .dc-container {
     max-width: none !important;
     padding: 20px 28px 40px;
   }
@@ -5152,7 +5360,11 @@ textarea.input-field {
 }
 
 @media (min-width: 1024px) {
-  .att-container {
+  .att-container,
+  .si-wrapper,
+  .ss-wrapper,
+  .ee-container,
+  .dc-container {
     padding: 24px 32px 48px;
   }
   .att-student-grid {
@@ -5162,7 +5374,11 @@ textarea.input-field {
 }
 
 @media (min-width: 1280px) {
-  .att-container {
+  .att-container,
+  .si-wrapper,
+  .ss-wrapper,
+  .ee-container,
+  .dc-container {
     padding: 28px 40px 48px;
   }
   .att-student-grid {
@@ -5172,7 +5388,11 @@ textarea.input-field {
 }
 
 @media (min-width: 1440px) {
-  .att-container {
+  .att-container,
+  .si-wrapper,
+  .ss-wrapper,
+  .ee-container,
+  .dc-container {
     max-width: none !important;
     padding: 28px 48px 48px;
   }
@@ -9605,10 +9825,11 @@ textarea.input-field {
 
 .ee-container {
   width: 100%;
-  max-width: 860px;
+  max-width: 900px;
   margin: 0 auto;
-  padding: 16px 16px 110px;
+  padding: 12px 14px calc(var(--bottom-nav-height, 68px) + 24px);
   animation: eeFadeIn 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  box-sizing: border-box;
 }
 
 
@@ -10369,65 +10590,66 @@ textarea.input-field {
 
 /* --- Sticky Bottom Submit Bar --- */
 .ee-bottom-submit-bar {
-  position: sticky;
-  bottom: 0;
+  position: relative;
   width: 100%;
-  padding: 12px 18px;
-  background: rgba(255, 255, 255, 0.98);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border-top: 1px solid #E2E8F0;
-  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.08);
+  max-width: 480px;
+  margin: 32px auto 16px;
+  padding: 16px 20px;
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 16px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   gap: 12px;
-  flex-wrap: wrap;
-  margin-top: 16px;
-  z-index: 90;
+  box-sizing: border-box;
 }
 
 @media (max-width: 767px) {
-  .ee-bottom-submit-bar {
-    position: fixed !important;
-    bottom: 68px !important;
-    left: 0 !important;
-    right: 0 !important;
+  .ee-container {
     width: 100% !important;
-    max-width: 100% !important;
-    background: #FFFFFF !important;
-    border-top: 1.5px solid #CBD5E1 !important;
-    box-shadow: 0 -6px 24px rgba(15, 23, 42, 0.14) !important;
-    padding: 10px 14px !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: space-between !important;
-    gap: 10px !important;
-    z-index: 110 !important;
+    max-width: 900px !important;
+    margin: 0 auto !important;
+    padding: 12px 14px calc(var(--bottom-nav-height, 68px) + 24px) !important;
     box-sizing: border-box !important;
   }
 
-  .ee-submit-results-btn {
-    padding: 11px 18px !important;
-    font-size: 0.88rem !important;
-    font-weight: 800 !important;
-    flex-shrink: 0 !important;
-    border-radius: 12px !important;
-    box-shadow: 0 4px 14px rgba(245, 158, 11, 0.4) !important;
-  }
-
-  .ee-container {
-    padding-bottom: 180px !important;
-  }
-}
-
-@media (min-width: 768px) {
   .ee-bottom-submit-bar {
-    position: sticky;
-    bottom: 0;
-    border-radius: 0 0 16px 16px;
+    position: relative !important;
+    bottom: auto !important;
+    left: auto !important;
+    right: auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    background: #FFFFFF !important;
+    border: 1px solid #E2E8F0 !important;
+    border-radius: 16px !important;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06) !important;
+    padding: 16px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    margin: 24px auto 16px !important;
+    box-sizing: border-box !important;
+    z-index: 10 !important;
+  }
+
+  .ee-submit-results-btn {
+    width: 100% !important;
+    max-width: 320px !important;
+    padding: 12px 20px !important;
+    font-size: 0.92rem !important;
+    font-weight: 800 !important;
+    justify-content: center !important;
+    border-radius: 12px !important;
+    box-shadow: 0 4px 14px rgba(245, 158, 11, 0.35) !important;
   }
 }
+
+
 .ee-bottom-info {
   display: flex;
   flex-direction: column;
@@ -10924,6 +11146,9 @@ textarea.input-field {
 
 .si-wrapper {
   width: 100%;
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 12px 14px calc(var(--bottom-nav-height, 68px) + 24px);
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -12423,6 +12648,9 @@ textarea.input-field {
 
 .ss-wrapper {
   width: 100%;
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 12px 14px calc(var(--bottom-nav-height, 68px) + 24px);
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -15703,4 +15931,15 @@ textarea.input-field {
 }
 
 
+}
+
+
+/* ── Blurry/Subtle Placeholders for Form Inputs ── */
+.ee-text-input::placeholder,
+.ee-number-input::placeholder,
+.dpp-text-input::placeholder,
+.dpp-qitem-textarea::placeholder {
+  color: #94A3B8;
+  font-weight: 400;
+  opacity: 0.85;
 }

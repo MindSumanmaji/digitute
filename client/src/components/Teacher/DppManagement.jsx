@@ -24,7 +24,7 @@ export function DppManagement({ onBack, initialBatch = '', initialSubject = '' }
     d.setDate(d.getDate() + 3);
     return d.toISOString().split('T')[0];
   });
-  const [totalMarks, setTotalMarks] = useState('20');
+  const [totalQuestions, setTotalQuestions] = useState('');
   const [instructions, setInstructions] = useState('');
 
   // Mode: 'file' (Upload Image/PDF) or 'typed' (Manual Typing)
@@ -84,7 +84,7 @@ export function DppManagement({ onBack, initialBatch = '', initialSubject = '' }
   }, [selectedBatch, selectedSubject]);
 
   // Effective topic string
-  const effectiveTopic = customTopic.trim() || selectedTopic;
+  const effectiveTopic = selectedTopic.trim();
 
   // Handle batch change
   const handleBatchChange = (batch) => {
@@ -173,36 +173,51 @@ export function DppManagement({ onBack, initialBatch = '', initialSubject = '' }
     showToast('✓ Sample PDF attached for testing');
   };
 
+  // Sync total questions with typed questions format
+  const handleTotalQuestionsChange = (val) => {
+    setTotalQuestions(val);
+    const count = parseInt(val, 10);
+    if (!isNaN(count) && count > 0 && count <= 100) {
+      setTypedQuestions((prev) => {
+        if (prev.length === count) return prev;
+        if (prev.length < count) {
+          const added = Array.from({ length: count - prev.length }, (_, i) => ({
+            id: `q-${Date.now()}-${prev.length + i + 1}`,
+            text: '',
+          }));
+          return [...prev, ...added];
+        }
+        return prev.slice(0, count);
+      });
+    } else if (val === '') {
+      setTypedQuestions([]);
+    }
+  };
+
   // Manual questions management
   const handleAddQuestion = () => {
-    const nextNum = typedQuestions.length + 1;
+    const nextCount = typedQuestions.length + 1;
+    setTotalQuestions(String(nextCount));
     setTypedQuestions((prev) => [
       ...prev,
       {
-        id: `q-${Date.now()}`,
+        id: `q-${Date.now()}-${nextCount}`,
         text: '',
-        marks: '10',
       },
     ]);
   };
 
   const handleRemoveQuestion = (id) => {
-    if (typedQuestions.length <= 1) {
-      showToast('At least one question is required.');
-      return;
-    }
-    setTypedQuestions((prev) => prev.filter((q) => q.id !== id));
+    setTypedQuestions((prev) => {
+      const filtered = prev.filter((q) => q.id !== id);
+      setTotalQuestions(filtered.length > 0 ? String(filtered.length) : '');
+      return filtered;
+    });
   };
 
   const handleQuestionTextChange = (id, text) => {
     setTypedQuestions((prev) =>
       prev.map((q) => (q.id === id ? { ...q, text } : q))
-    );
-  };
-
-  const handleQuestionMarksChange = (id, marks) => {
-    setTypedQuestions((prev) =>
-      prev.map((q) => (q.id === id ? { ...q, marks } : q))
     );
   };
 
@@ -217,7 +232,11 @@ export function DppManagement({ onBack, initialBatch = '', initialSubject = '' }
       return false;
     }
     if (!effectiveTopic) {
-      showToast('⚠️ Please select or enter a Topic.');
+      showToast('⚠️ Please enter a Topic.');
+      return false;
+    }
+    if (!totalQuestions || parseInt(totalQuestions, 10) <= 0) {
+      showToast('⚠️ Please enter Total Questions.');
       return false;
     }
 
@@ -255,12 +274,12 @@ export function DppManagement({ onBack, initialBatch = '', initialSubject = '' }
       topic: effectiveTopic,
       title: dppTitle.trim() || `DPP — ${effectiveTopic}`,
       dueDate: dueDate,
-      totalMarks: Number(totalMarks) || 20,
+      totalQuestions: parseInt(totalQuestions, 10) || (contentMode === 'file' ? 1 : typedQuestions.length),
+      questionsCount: parseInt(totalQuestions, 10) || (contentMode === 'file' ? 1 : typedQuestions.length),
       submissionType: contentMode,
       fileName: contentMode === 'file' ? uploadedFile?.name : null,
       fileSize: contentMode === 'file' ? uploadedFile?.size : null,
       fileType: contentMode === 'file' ? uploadedFile?.type : null,
-      questionsCount: contentMode === 'file' ? 1 : typedQuestions.length,
       typedQuestions: contentMode === 'typed' ? typedQuestions : null,
       instructions: instructions.trim() || null,
       submittedCount: 0,
@@ -408,7 +427,7 @@ export function DppManagement({ onBack, initialBatch = '', initialSubject = '' }
                 <div className="dpp-success-meta-chips">
                   <span className="dpp-schip">Subject: {lastPublishedDpp.subject}</span>
                   <span className="dpp-schip">Due: {lastPublishedDpp.dueDate}</span>
-                  <span className="dpp-schip">Marks: {lastPublishedDpp.totalMarks}</span>
+                  <span className="dpp-schip">Questions: {lastPublishedDpp.totalQuestions || lastPublishedDpp.questionsCount || 1}</span>
                 </div>
               </div>
               <div className="dpp-success-actions">
@@ -488,54 +507,28 @@ export function DppManagement({ onBack, initialBatch = '', initialSubject = '' }
                 </div>
               </div>
 
-              {/* Topic Selector */}
+              {/* Topic Input */}
               <div className="dpp-form-group">
-                <label className="dpp-form-label" htmlFor="dpp-topic-select">
+                <label className="dpp-form-label" htmlFor="dpp-topic-input">
                   <span>Topic</span>
                   <span className="dpp-required">*</span>
                 </label>
-                <div className="dpp-select-wrap">
-                  <select
-                    id="dpp-topic-select"
-                    className="dpp-select-input"
-                    value={selectedTopic}
-                    onChange={(e) => {
-                      setSelectedTopic(e.target.value);
-                      if (e.target.value !== '__custom__') {
-                        setCustomTopic('');
-                      }
-                    }}
-                    disabled={!selectedSubject}
-                  >
-                    <option value="" disabled>
-                      {selectedSubject ? '— Select Topic —' : '— Select Subject First —'}
-                    </option>
-                    {suggestedTopics.map((t) => (
-                      <option key={t} value={t}>{t}</option>
-                    ))}
-                    <option value="__custom__">✏️ Custom / Other Topic...</option>
-                  </select>
-                  <div className="dpp-chevron-arrow">▼</div>
-                </div>
-              </div>
-            </div>
-
-            {/* Custom Topic Input if chosen */}
-            {selectedTopic === '__custom__' && (
-              <div className="dpp-custom-topic-row">
-                <label className="dpp-form-label" htmlFor="dpp-custom-topic-input">
-                  <span>Type Custom Topic</span>
-                </label>
                 <input
-                  id="dpp-custom-topic-input"
+                  id="dpp-topic-input"
                   type="text"
                   className="dpp-text-input"
-                  placeholder="e.g. Dijkstra Algorithm & Shortest Path Problems"
-                  value={customTopic}
-                  onChange={(e) => setCustomTopic(e.target.value)}
+                  placeholder="Type topics..."
+                  value={selectedTopic}
+                  onChange={(e) => {
+                    setSelectedTopic(e.target.value);
+                    if (e.target.value && !dppTitle) {
+                      setDppTitle(`DPP — ${e.target.value}`);
+                    }
+                  }}
+                  disabled={!selectedSubject}
                 />
               </div>
-            )}
+            </div>
 
             {/* DPP Metadata sub-grid */}
             <div className="dpp-grid-3 dpp-meta-subgrid">
@@ -568,19 +561,21 @@ export function DppManagement({ onBack, initialBatch = '', initialSubject = '' }
                 />
               </div>
 
-              {/* Total Marks */}
+              {/* Total Questions */}
               <div className="dpp-form-group">
-                <label className="dpp-form-label" htmlFor="dpp-marks-input">
-                  <span>Total Marks</span>
+                <label className="dpp-form-label" htmlFor="dpp-questions-count">
+                  <span>Total Questions</span>
+                  <span className="dpp-required">*</span>
                 </label>
                 <input
-                  id="dpp-marks-input"
+                  id="dpp-questions-count"
                   type="number"
-                  min="5"
+                  min="1"
                   max="100"
                   className="dpp-text-input"
-                  value={totalMarks}
-                  onChange={(e) => setTotalMarks(e.target.value)}
+                  placeholder="Enter number of questions"
+                  value={totalQuestions}
+                  onChange={(e) => handleTotalQuestionsChange(e.target.value)}
                 />
               </div>
             </div>
@@ -743,21 +738,15 @@ export function DppManagement({ onBack, initialBatch = '', initialSubject = '' }
                 </div>
 
                 <div className="dpp-questions-list">
-                  {typedQuestions.map((q, idx) => (
-                    <div key={q.id} className="dpp-question-item-card">
-                      <div className="dpp-qitem-top">
-                        <span className="dpp-qnum-tag">Question {idx + 1}</span>
-                        <div className="dpp-qitem-marks-wrap">
-                          <label htmlFor={`marks-${q.id}`}>Marks:</label>
-                          <input
-                            id={`marks-${q.id}`}
-                            type="number"
-                            min="1"
-                            max="50"
-                            className="dpp-qmarks-input"
-                            value={q.marks}
-                            onChange={(e) => handleQuestionMarksChange(q.id, e.target.value)}
-                          />
+                  {typedQuestions.length === 0 ? (
+                    <div className="dpp-empty-questions-prompt" style={{ padding: '28px 16px', textAlign: 'center', background: '#F8FAFC', borderRadius: '14px', border: '1.5px dashed #CBD5E1', color: '#64748B', fontSize: '0.88rem' }}>
+                      <p>Please enter <strong>Total Questions</strong> above to generate question format.</p>
+                    </div>
+                  ) : (
+                    typedQuestions.map((q, idx) => (
+                      <div key={q.id} className="dpp-question-item-card">
+                        <div className="dpp-qitem-top">
+                          <span className="dpp-qnum-tag">Question {idx + 1}</span>
                           <button
                             type="button"
                             className="dpp-remove-q-btn"
@@ -768,17 +757,17 @@ export function DppManagement({ onBack, initialBatch = '', initialSubject = '' }
                             ✕
                           </button>
                         </div>
-                      </div>
 
-                      <textarea
-                        className="dpp-qtextarea"
-                        rows="3"
-                        placeholder="Type the question text, problem statements, or instructions here..."
-                        value={q.text}
-                        onChange={(e) => handleQuestionTextChange(q.id, e.target.value)}
-                      />
-                    </div>
-                  ))}
+                        <textarea
+                          className="dpp-qtextarea"
+                          rows="3"
+                          placeholder={`Type Question ${idx + 1} description, problem statement, or instructions here...`}
+                          value={q.text}
+                          onChange={(e) => handleQuestionTextChange(q.id, e.target.value)}
+                        />
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
             )}
@@ -824,7 +813,7 @@ export function DppManagement({ onBack, initialBatch = '', initialSubject = '' }
                       <span className="dpp-sheet-topic">{effectiveTopic || 'Topic Name'}</span>
                     </div>
                     <div className="dpp-sheet-stats">
-                      <span className="dpp-sheet-stat">Marks: {totalMarks}</span>
+                      <span className="dpp-sheet-stat">Questions: {totalQuestions || (contentMode === "file" ? 1 : typedQuestions.length)}</span>
                       <span className="dpp-sheet-stat">Due: {dueDate}</span>
                     </div>
                   </div>
@@ -946,8 +935,8 @@ export function DppManagement({ onBack, initialBatch = '', initialSubject = '' }
                     <span className="dpp-pmeta-val">{dpp.dueDate}</span>
                   </div>
                   <div className="dpp-pmeta-item">
-                    <span className="dpp-pmeta-label">Total Marks:</span>
-                    <span className="dpp-pmeta-val">{dpp.totalMarks} Marks</span>
+                    <span className="dpp-pmeta-label">Total Questions:</span>
+                    <span className="dpp-pmeta-val">{dpp.totalQuestions || dpp.questionsCount || 1} Questions</span>
                   </div>
                   <div className="dpp-pmeta-item">
                     <span className="dpp-pmeta-label">Format:</span>
