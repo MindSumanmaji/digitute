@@ -418,7 +418,7 @@
   --radius-pill: 9999px;
 
   --max-app-width: 480px;
-  --bottom-nav-height: 68px;
+  --bottom-nav-height: 0px;
   --header-height: 60px;
   --page-spacing: 16px;
 
@@ -1232,9 +1232,33 @@ textarea.input-field {
   gap: 10px;
 }
 
-/* Hamburger Toggle Button - hidden as mobile navigation is handled by bottom bar */
+/* Hamburger Toggle Button - visible on mobile, hidden on desktop */
 .dt-header-hamburger-btn {
-  display: none !important;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  background: transparent;
+  border: none;
+  color: #1E293B;
+  cursor: pointer;
+  padding: 0;
+  margin-left: -4px;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.dt-header-hamburger-btn:hover,
+.dt-header-hamburger-btn:active {
+  background-color: #F1F5F9;
+  color: #0F172A;
+}
+
+@media (min-width: 768px) {
+  .dt-header-hamburger-btn {
+    display: none !important;
+  }
 }
 
 /* Brand Logo */
@@ -1615,6 +1639,18 @@ textarea.input-field {
   text-align: left;
 }
 
+.dt-sidebar-brand-mark {
+  height: 38px;
+  width: 38px;
+  flex: 0 0 38px;
+  border-radius: 11px;
+  background: #111827;
+  color: #FFFFFF;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.12);
+}
+
 .dt-sidebar-logo-icon {
   width: 32px;
   height: 28px;
@@ -1624,30 +1660,27 @@ textarea.input-field {
   flex-shrink: 0;
 }
 
-.dt-sidebar-logo-icon .dt-logo-svg {
-  width: 100%;
-  height: 100%;
-}
-
 .dt-sidebar-brand-info {
   display: flex;
   flex-direction: column;
-  min-width: 0;
+  line-height: 1.15;
+  white-space: nowrap;
 }
 
 .dt-sidebar-brand-name {
-  font-size: 1.2rem;
+  font-size: 1.18rem;
   font-weight: 800;
   color: #0F172A;
   letter-spacing: -0.025em;
-  line-height: 1.1;
 }
 
 .dt-sidebar-brand-sub {
-  font-size: 0.6875rem;
-  font-weight: 600;
-  color: #2563EB;
-  letter-spacing: 0.02em;
+  margin-top: 3px;
+  font-size: 0.58rem;
+  font-weight: 700;
+  color: #64748B;
+  letter-spacing: 1.15px;
+  text-transform: uppercase;
 }
 
 /* Close button for mobile drawer */
@@ -1778,13 +1811,13 @@ textarea.input-field {
 
 /* Active State */
 .dt-sidebar-item.is-active {
-  background-color: #EFF6FF;
-  color: #1D4ED8;
+  background-color: #F0FDF4;
+  color: #0D9488;
   font-weight: 600;
 }
 
 .dt-sidebar-item.is-active .dt-sidebar-icon {
-  color: #2563EB;
+  color: #0D9488;
 }
 
 .dt-sidebar-active-indicator {
@@ -15942,4 +15975,64 @@ textarea.input-field {
   color: #94A3B8;
   font-weight: 400;
   opacity: 0.85;
+}
+
+/* Hide bottom navigation bar in favor of hamburger drawer navigation */
+.dt-bottom-nav {
+  display: none !important;
+}
+
+@media (max-width: 767px) {
+  .app-main-content {
+    padding-bottom: 24px !important;
+  }
+  .dt-sidebar {
+    width: 270px !important;
+    max-width: 82vw !important;
+  }
+}
+
+/* ── Sidebar Bottom Logout Button ── */
+.dt-sidebar-footer {
+  padding: 12px 14px;
+  border-top: 1px solid #F1F5F9;
+  background-color: #FFFFFF;
+  margin-top: auto;
+  flex-shrink: 0;
+}
+
+.dt-sidebar-logout-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid #FEE2E2;
+  background: #FEF2F2;
+  color: #DC2626;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.16s ease;
+  box-sizing: border-box;
+}
+
+.dt-sidebar-logout-btn:hover {
+  background: #FEE2E2;
+  color: #B91C1C;
+  border-color: #FECACA;
+}
+
+.dt-sidebar-logout-btn:active {
+  transform: scale(0.99);
+}
+
+.dt-sidebar-logout-btn .dt-sidebar-icon {
+  color: #DC2626;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }

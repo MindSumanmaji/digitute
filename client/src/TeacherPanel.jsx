@@ -50,6 +50,7 @@ export function TeacherPanel({ onBackToLanding }) {
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
         onTabChange={handleTabChange}
+        onLogout={onBackToLanding}
       />
 
       {/* Main Column Layout */}

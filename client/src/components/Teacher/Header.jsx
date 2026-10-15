@@ -61,21 +61,34 @@ export function Header({
       <div className="dt-header-container">
         {/* Left: Mobile = DigiTute Logo & Name | PC = Active Page Title */}
         <div className="dt-header-left-group">
-          {/* Mobile-only: DigiTute brand logo + name */}
-          <div className="dt-header-mobile-brand" aria-hidden="false">
-            <div className="dt-header-logo-icon">
-              <svg className="dt-logo-svg" viewBox="0 0 40 34" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <rect x="0" y="0" width="40" height="34" rx="8" fill="#2563EB"/>
-                <text x="50%" y="55%" dominantBaseline="middle" textAnchor="middle" fill="#FFFFFF" fontSize="16" fontWeight="800" fontFamily="system-ui,sans-serif">DT</text>
-              </svg>
-            </div>
-            <span className="dt-header-brand-title">DigiTute</span>
-          </div>
+          {/* Mobile Hamburger Toggle (3 dashes) */}
+          <button
+            type="button"
+            className="dt-header-hamburger-btn"
+            onClick={onToggleSidebar}
+            aria-label="Open navigation menu"
+            title="Open menu"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              width="22"
+              height="22"
+              fill="none"
+              stroke="#1E293B"
+              strokeWidth="2.2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <line x1="4" y1="6" x2="20" y2="6" />
+              <line x1="4" y1="12" x2="20" y2="12" />
+              <line x1="4" y1="18" x2="20" y2="18" />
+            </svg>
+          </button>
+
           {/* PC-only: current active page title */}
           <h1 className="dt-header-page-title">{getPageTitle(activePage)}</h1>
         </div>
 
-        {/* Right: Actions (Notification bell, Profile dropdown) */}
         <div className="dt-header-actions">
           {/* Notifications Button */}
           <button
