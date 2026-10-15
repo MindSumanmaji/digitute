@@ -13,10 +13,6 @@ export default function TeachersView({ teachers, batches = [], onAddTeacher }) {
   return (
     <div className="module-container">
       <div className="module-header">
-        <div>
-          <h1>Teachers & Faculty Staff</h1>
-          <p>Onboard teachers, map assigned courses, configure payout models and monitor monthly class logs.</p>
-        </div>
         <div className="module-actions">
           <button className="button-primary" onClick={onAddTeacher}>
             <Plus size={16} /> Add new teacher
@@ -35,7 +31,7 @@ export default function TeachersView({ teachers, batches = [], onAddTeacher }) {
           />
         </div>
         <div className="data-table-filters">
-          <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{filteredTeachers.length} verified faculty members</span>
+          <span style={{ fontSize: 14, color: 'var(--text-3)' }}>{filteredTeachers.length} verified faculty members</span>
         </div>
       </div>
 
@@ -75,9 +71,9 @@ export default function TeachersView({ teachers, batches = [], onAddTeacher }) {
                 <div className="teacher-info" style={{ flex: 1 }}>
                   <strong>{teacher.name}</strong>
                   <span>{teacher.qualification}</span>
-                  <div style={{ display: 'flex', gap: 12, marginTop: 4, fontSize: 10, color: 'var(--text-3)' }}>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Phone size={12} /> {teacher.phone}</span>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Mail size={12} /> {teacher.email}</span>
+                  <div style={{ display: 'flex', gap: 14, marginTop: 5, fontSize: 14, color: 'var(--text-3)' }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Phone size={14} /> {teacher.phone}</span>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Mail size={14} /> {teacher.email}</span>
                   </div>
                 </div>
               </div>
@@ -88,8 +84,8 @@ export default function TeachersView({ teachers, batches = [], onAddTeacher }) {
               </div>
 
               <div className="teacher-assignments-section">
-                <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.5px', color: '#909ca0', textTransform: 'uppercase', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 5 }}>
-                  <BookOpen size={12} /> Assigned Batches & Teaching Subjects
+                <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: '.5px', color: '#909ca0', textTransform: 'uppercase', marginBottom: 9, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <BookOpen size={14} /> Assigned Batches & Teaching Subjects
                 </div>
                 <div className="teacher-assignments-list">
                   {assignments.map((item, idx) => (

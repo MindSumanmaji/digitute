@@ -24,10 +24,6 @@ export default function FinanceView({ students, transactions, onCollectFee, onSe
   return (
     <div className="module-container">
       <div className="module-header">
-        <div>
-          <h1>Finance & Fee Collection</h1>
-          <p>Monitor real-time cash counter & Razorpay collections, automated monthly invoicing, student defaulters and receipts.</p>
-        </div>
         <div className="module-actions">
           <button className="button-secondary" onClick={() => onSendReminder('all')}>
             <MessageSquare size={16} /> 1-Click WhatsApp Reminders
@@ -121,7 +117,7 @@ export default function FinanceView({ students, transactions, onCollectFee, onSe
               />
             </div>
             <div className="data-table-filters">
-              <span style={{ fontSize: 11, color: 'var(--text-3)' }}>
+              <span style={{ fontSize: 14, color: 'var(--text-3)' }}>
                 Total outstanding: <strong style={{ color: '#b96f13' }}>₹{totalDues.toLocaleString('en-IN')}</strong>
               </span>
             </div>
@@ -170,7 +166,7 @@ export default function FinanceView({ students, transactions, onCollectFee, onSe
                             rel="noopener noreferrer"
                             className="whatsapp-btn"
                           >
-                            <MessageSquare size={11} /> Send Due Alert
+                            <MessageSquare size={13} /> Send Due Alert
                           </a>
                         </div>
                       </td>
@@ -180,11 +176,11 @@ export default function FinanceView({ students, transactions, onCollectFee, onSe
                       </td>
 
                       <td>
-                        <strong className="due-amount" style={{ fontSize: 12 }}>
+                        <strong className="due-amount" style={{ fontSize: 15 }}>
                           ₹{s.dueAmount.toLocaleString('en-IN')}
                         </strong>
                         {s.status === 'Overdue' && (
-                          <span style={{ display: 'block', fontSize: 9, color: '#cf4953' }}>
+                          <span style={{ display: 'block', fontSize: 11.5, color: '#cf4953' }}>
                             Overdue (Includes fine)
                           </span>
                         )}
@@ -193,7 +189,7 @@ export default function FinanceView({ students, transactions, onCollectFee, onSe
                       <td style={{ textAlign: 'right' }}>
                         <button
                           className="button-primary"
-                          style={{ minHeight: 28, fontSize: 10, padding: '0 10px' }}
+                          style={{ minHeight: 34, fontSize: 13, padding: '0 14px' }}
                           onClick={() => onCollectFee(s)}
                         >
                           Collect Cash
@@ -212,7 +208,7 @@ export default function FinanceView({ students, transactions, onCollectFee, onSe
         <div className="data-table-card">
           <div className="data-table-toolbar">
             <div className="data-table-search">
-              <Search size={15} />
+              <Search size={16} />
               <input
                 type="text"
                 placeholder="Search by receipt no, student or batch..."
@@ -221,7 +217,7 @@ export default function FinanceView({ students, transactions, onCollectFee, onSe
               />
             </div>
             <div className="data-table-filters">
-              <span style={{ fontSize: 11, color: 'var(--text-3)' }}>
+              <span style={{ fontSize: 14, color: 'var(--text-3)' }}>
                 Showing {filteredTransactions.length} recent settlements
               </span>
             </div>
@@ -244,7 +240,7 @@ export default function FinanceView({ students, transactions, onCollectFee, onSe
                 {filteredTransactions.map((tx) => (
                   <tr key={tx.id}>
                     <td>
-                      <strong style={{ color: 'var(--teal-dark)', fontFamily: 'monospace', fontSize: 11 }}>
+                      <strong style={{ color: 'var(--teal-dark)', fontFamily: 'monospace', fontSize: 14.5 }}>
                         {tx.receiptNo}
                       </strong>
                     </td>
@@ -252,12 +248,12 @@ export default function FinanceView({ students, transactions, onCollectFee, onSe
                     <td>
                       <div>
                         <strong>{tx.studentName}</strong>
-                        <div style={{ fontSize: 9.5, color: 'var(--text-3)' }}>{tx.batch} · {tx.rollNo}</div>
+                        <div style={{ fontSize: 13.5, color: 'var(--text-3)' }}>{tx.batch} · {tx.rollNo}</div>
                       </div>
                     </td>
 
                     <td>
-                      <strong style={{ fontSize: 12, color: 'var(--text)' }}>
+                      <strong style={{ fontSize: 16, color: 'var(--text)' }}>
                         ₹{tx.amount.toLocaleString('en-IN')}
                       </strong>
                     </td>
@@ -268,17 +264,17 @@ export default function FinanceView({ students, transactions, onCollectFee, onSe
                       </span>
                     </td>
 
-                    <td><span style={{ fontSize: 10, color: 'var(--text-2)' }}>{tx.date}</span></td>
+                    <td><span style={{ fontSize: 13.5, color: 'var(--text-2)' }}>{tx.date}</span></td>
 
-                    <td><span style={{ fontSize: 10, color: 'var(--text-3)' }}>{tx.collectedBy}</span></td>
+                    <td><span style={{ fontSize: 13.5, color: 'var(--text-3)' }}>{tx.collectedBy}</span></td>
 
                     <td style={{ textAlign: 'right' }}>
                       <button
                         className="button-secondary"
-                        style={{ minHeight: 28, fontSize: 10, padding: '0 9px' }}
+                        style={{ minHeight: 36, fontSize: 14, padding: '0 14px' }}
                         onClick={() => onPrintReceipt(tx)}
                       >
-                        <Printer size={12} /> Receipt
+                        <Printer size={14} /> Receipt
                       </button>
                     </td>
                   </tr>

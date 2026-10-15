@@ -5,10 +5,6 @@ export default function ReportsView({ onExportReport }) {
   return (
     <div className="module-container">
       <div className="module-header">
-        <div>
-          <h1>Reports & Revenue Analytics</h1>
-          <p>Analyze institute cash flow, online payment adoption, batch profitability margins and student retention trends.</p>
-        </div>
         <div className="module-actions">
           <button className="button-primary" onClick={onExportReport}>
             <Download size={16} /> Export financial CSV
@@ -61,8 +57,8 @@ export default function ReportsView({ onExportReport }) {
       <div className="data-table-card">
         <div className="data-table-toolbar">
           <div>
-            <strong style={{ fontSize: 13, fontFamily: 'Manrope, sans-serif' }}>Batch Contribution & Performance Ledger</strong>
-            <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 2 }}>Breakdown of fee collections and faculty payouts by course</div>
+            <strong style={{ fontSize: 15.5, fontFamily: 'Manrope, sans-serif' }}>Batch Contribution & Performance Ledger</strong>
+            <div style={{ fontSize: 13, color: 'var(--text-3)', marginTop: 3 }}>Breakdown of fee collections and faculty payouts by course</div>
           </div>
         </div>
 

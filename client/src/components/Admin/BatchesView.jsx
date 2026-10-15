@@ -12,10 +12,6 @@ export default function BatchesView({ batches, onCreateBatch, onSelectBatch }) {
   return (
     <div className="module-container">
       <div className="module-header">
-        <div>
-          <h1>Batches & Courses</h1>
-          <p>Configure course structures, base tuition fees, subject teachers, earning share and weekly routines.</p>
-        </div>
         <div className="module-actions">
           <button className="button-primary" onClick={onCreateBatch}>
             <Plus size={16} /> Create new batch
@@ -34,7 +30,7 @@ export default function BatchesView({ batches, onCreateBatch, onSelectBatch }) {
           />
         </div>
         <div className="data-table-filters">
-          <span style={{ fontSize: 11, color: 'var(--text-3)' }}>Showing {filteredBatches.length} active batches</span>
+          <span style={{ fontSize: 14, color: 'var(--text-3)' }}>{filteredBatches.length} active batches</span>
         </div>
       </div>
 
@@ -44,9 +40,9 @@ export default function BatchesView({ batches, onCreateBatch, onSelectBatch }) {
             <div className="batch-card-top">
               <div>
                 <strong>{batch.name}</strong>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, color: 'var(--text-3)', fontSize: 10.5 }}>
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                    <Users size={13} /> {batch.studentCount || 0} students enrolled
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, color: 'var(--text-3)', fontSize: 14 }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                    <Users size={15} /> {batch.studentCount || 0} students enrolled
                   </span>
                 </div>
               </div>
@@ -54,25 +50,25 @@ export default function BatchesView({ batches, onCreateBatch, onSelectBatch }) {
             </div>
 
             <div className="batch-fee-row">
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 <span>{batch.feeType === 'ONE_TIME' ? 'FULL COURSE FEE' : 'MONTHLY TUITION FEE'}</span>
                 <strong>
                   ₹{(batch.feeAmount || batch.monthlyFee || 0).toLocaleString('en-IN')}
-                  <small style={{ fontSize: 9.5, fontWeight: 500, color: 'var(--text-3)', marginLeft: 4 }}>
+                  <small style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-3)', marginLeft: 4 }}>
                     {batch.feeType === 'ONE_TIME' ? ' / full course' : ' / month'}
                   </small>
                 </strong>
               </div>
-              <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', gap: 4 }}>
                 <span>BILLING TYPE</span>
-                <span style={{ fontWeight: 700, color: 'var(--teal-dark)', fontSize: 11 }}>
+                <span style={{ fontWeight: 700, color: 'var(--teal-dark)', fontSize: 14 }}>
                   {batch.feeType === 'ONE_TIME' ? 'One-Time Enrolment' : 'Monthly Recurring'}
                 </span>
               </div>
             </div>
 
             <div>
-              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.5px', color: '#909ca0', textTransform: 'uppercase', marginBottom: 6 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: '.5px', color: '#909ca0', textTransform: 'uppercase', marginBottom: 8 }}>
                 Subjects & Teacher Earning Share
               </div>
               <div className="batch-subjects">
@@ -87,7 +83,7 @@ export default function BatchesView({ batches, onCreateBatch, onSelectBatch }) {
                   return (
                     <div key={idx} className="batch-subject-item">
                       <span>{subj.name} · <small style={{ color: 'var(--teal-dark)', fontWeight: 600 }}>{subj.teacher}</small></span>
-                      <span style={{ background: '#eef8f5', color: 'var(--teal-dark)', fontWeight: 700, padding: '2px 7px', borderRadius: 5, fontSize: 10.5 }}>
+                      <span style={{ background: '#eef8f5', color: 'var(--teal-dark)', fontWeight: 700, padding: '3px 8px', borderRadius: 5, fontSize: 13 }}>
                         {shareDisplay}
                       </span>
                     </div>
@@ -97,7 +93,7 @@ export default function BatchesView({ batches, onCreateBatch, onSelectBatch }) {
             </div>
 
             <div>
-              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.5px', color: '#909ca0', textTransform: 'uppercase', marginBottom: 6 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: '.5px', color: '#909ca0', textTransform: 'uppercase', marginBottom: 8 }}>
                 Class Schedule & Routine
               </div>
               <div className="batch-routine-preview">
