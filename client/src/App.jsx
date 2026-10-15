@@ -91,19 +91,10 @@ export default function App() {
             </span>
           </a>
 
-          <button 
-            className="menu-toggle" 
-            aria-label="Open menu" 
-            aria-expanded={mobileMenuOpen}
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          >
-            {mobileMenuOpen ? '×' : '☰'}
-          </button>
-
-          <div className={`navlinks ${mobileMenuOpen ? 'open' : ''}`}>
-            <a href="#support" onClick={() => setMobileMenuOpen(false)}>What we offer</a>
-            <a href="#team" onClick={() => setMobileMenuOpen(false)}>Our teachers</a>
-            <a href="#approach" onClick={() => setMobileMenuOpen(false)}>Why DigiTute</a>
+          <div className="navlinks">
+            <a href="#support">What we offer</a>
+            <a href="#team">Our teachers</a>
+            <a href="#approach">Why DigiTute</a>
           </div>
         </nav>
       </header>
@@ -615,13 +606,15 @@ export default function App() {
       {/* Footer */}
       <footer>
         <div className="wrap footer-row">
-          <a className="brand" href="#home">
-            <span className="brand-mark">D</span>
-            <span>
-              DigiTute<small>OFFLINE. CONNECTED.</small>
-            </span>
-          </a>
-          <p>© {new Date().getFullYear()} DigiTute · Digital support for in-person learning</p>
+          <div className="footer-brand-col">
+            <a className="brand" href="#home">
+              <span className="brand-mark">D</span>
+              <span>
+                DigiTute<small>OFFLINE. CONNECTED.</small>
+              </span>
+            </a>
+            <p className="footer-copy">© {new Date().getFullYear()} DigiTute · Digital support for in-person learning</p>
+          </div>
           <div className="footer-links">
             <a href="#support">What we offer</a>
             <a href="#team">Our teachers</a>
