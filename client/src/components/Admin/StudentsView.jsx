@@ -26,10 +26,6 @@ export default function StudentsView({ students, onNewAdmission }) {
   return (
     <div className="module-container">
       <div className="module-header">
-        <div>
-          <h1>Students & Admissions</h1>
-          <p>Manage student enrolments, guardian communication and batch assignments.</p>
-        </div>
         <div className="module-actions">
           <button className="button-primary" onClick={onNewAdmission}>
             <Plus size={16} /> New admission
@@ -58,7 +54,7 @@ export default function StudentsView({ students, onNewAdmission }) {
               {batches.map(b => <option key={b} value={b}>{b === 'All' ? 'All Batches' : b}</option>)}
             </select>
 
-            <span style={{ fontSize: 11, color: 'var(--text-3)', marginLeft: 4 }}>
+            <span style={{ fontSize: 14, color: 'var(--text-3)', marginLeft: 6 }}>
               {filteredStudents.length} Students
             </span>
           </div>
@@ -101,23 +97,23 @@ export default function StudentsView({ students, onNewAdmission }) {
                     </td>
 
                     <td>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 600 }}>
-                          <Phone size={11} style={{ color: 'var(--text-3)' }} />
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14.5, fontWeight: 600 }}>
+                          <Phone size={13} style={{ color: 'var(--text-3)' }} />
                           <span>{student.phone}</span>
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 10, color: 'var(--text-3)' }}>
-                          <Mail size={11} />
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13.5, color: 'var(--text-3)' }}>
+                          <Mail size={13} />
                           <span>{student.email}</span>
                         </div>
                       </div>
                     </td>
 
                     <td>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                        <span style={{ fontSize: 11, fontWeight: 600 }}>{student.guardianName || 'Guardian'}</span>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <span style={{ fontSize: 10, color: 'var(--text-3)' }}>{student.guardianPhone || student.phone}</span>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        <span style={{ fontSize: 14.5, fontWeight: 600 }}>{student.guardianName || 'Guardian'}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                          <span style={{ fontSize: 13.5, color: 'var(--text-3)' }}>{student.guardianPhone || student.phone}</span>
                           {(student.guardianWhatsapp || student.guardianPhone || student.phone) && (
                             <a
                               href={`https://wa.me/${(student.guardianWhatsapp || student.guardianPhone || student.phone).replace(/[^0-9]/g, '')}`}
@@ -126,7 +122,7 @@ export default function StudentsView({ students, onNewAdmission }) {
                               className="whatsapp-btn"
                               title="Chat on WhatsApp"
                             >
-                              <MessageSquare size={11} /> WhatsApp
+                              <MessageSquare size={13} /> WhatsApp
                             </a>
                           )}
                         </div>
@@ -134,15 +130,15 @@ export default function StudentsView({ students, onNewAdmission }) {
                     </td>
 
                     <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, color: 'var(--text-2)' }}>
-                        <MapPin size={12} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, color: 'var(--text-2)' }}>
+                        <MapPin size={14} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
                         <span>{student.address || 'Kolkata, West Bengal'}</span>
                       </div>
                     </td>
 
                     <td style={{ textAlign: 'right' }}>
                       <span className="status-badge paid">
-                        <CheckCircle2 size={11} /> Active
+                        <CheckCircle2 size={13} /> Active
                       </span>
                     </td>
                   </tr>

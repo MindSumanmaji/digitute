@@ -17,6 +17,7 @@ import {
 } from './data/mockData';
 
 import BatchesView from './components/Admin/BatchesView';
+import RoutineScheduleView from './components/Admin/RoutineScheduleView';
 import TeachersView from './components/Admin/TeachersView';
 import StudentsView from './components/Admin/StudentsView';
 import FinanceView from './components/Admin/FinanceView';
@@ -28,9 +29,10 @@ const navGroups = [
     label: 'WORKSPACE',
     items: [
       { label: 'Home', icon: Home },
-      { label: 'Batches & Courses', icon: BookOpen, count: '4' },
-      { label: 'Teachers & Staff', icon: UserCog, count: '4' },
-      { label: 'Students & Admissions', icon: Users, count: '6' },
+      { label: 'Batches & Courses', icon: BookOpen },
+      { label: 'Routine & Schedule', icon: CalendarDays },
+      { label: 'Teachers & Staff', icon: UserCog },
+      { label: 'Students & Admissions', icon: Users },
     ],
   },
   {
@@ -71,7 +73,7 @@ function Brand({ collapsed }) {
   return (
     <div className={`brand ${collapsed ? 'brand-collapsed' : ''}`}>
       <div className="brand-mark"><GraduationCap size={21} strokeWidth={2.4} /></div>
-      {!collapsed && <div className="brand-copy"><span>DigiTute</span><small>COACHING PORTAL</small></div>}
+      {!collapsed && <div className="brand-copy"><span>DigiTute</span><small>ADMIN WORKSPACE</small></div>}
     </div>
   );
 }
@@ -88,18 +90,12 @@ function Sidebar({ activePage, onNavigate, collapsed, setCollapsed, mobileOpen, 
           </button>
           <button className="icon-button mobile-close" aria-label="Close navigation" onClick={() => setMobileOpen(false)}><X size={19} /></button>
         </div>
-        <div className="institute-switcher">
-          <div className="institute-avatar"><Building2 size={17} /></div>
-          {!collapsed && <><div className="institute-copy"><strong>DigiTute Centre</strong><span>Admin workspace</span></div><div className="online-dot" style={{ position: 'static' }} /></>}
-        </div>
         <nav className="side-nav">
           {navGroups.map((group) => (
             <div className="nav-group" key={group.label}>
-              {!collapsed && <div className="nav-group-label">{group.label}</div>}
               {group.items.map((item) => {
                 const Icon = item.icon;
                 const active = activePage === item.label;
-                const countBadge = item.label === 'Batches & Courses' ? batchCount : item.label === 'Teachers & Staff' ? teacherCount : item.label === 'Students & Admissions' ? studentCount : null;
                 return (
                   <button
                     key={item.label}
@@ -108,7 +104,6 @@ function Sidebar({ activePage, onNavigate, collapsed, setCollapsed, mobileOpen, 
                   >
                     <Icon size={18} />
                     {!collapsed && <span className="nav-item-label">{item.label}</span>}
-                    {!collapsed && countBadge && <span className={`nav-count ${active ? 'nav-count-active' : ''}`}>{countBadge}</span>}
                     {collapsed && <span className="nav-tooltip">{item.label}</span>}
                   </button>
                 );
@@ -131,25 +126,9 @@ function Topbar({ searchQuery, setSearchQuery, onMobileMenu, darkMode, setDarkMo
         <button className="icon-button mobile-menu-button" aria-label="Open menu" onClick={onMobileMenu}>
           <Menu size={20} />
         </button>
-        <div className="breadcrumb">
-          <span>DigiTute</span>
-          <span>/</span>
-          <strong>Admin Portal</strong>
-        </div>
       </div>
 
       <div className="topbar-right">
-        <div className="global-search">
-          <Search size={15} />
-          <input
-            type="text"
-            placeholder="Search students, batches or ledger..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-          <kbd><Command size={10} />K</kbd>
-        </div>
-
         <button
           className="icon-button theme-toggle"
           aria-label="Toggle dark mode"
@@ -330,7 +309,6 @@ function TodaySchedule({ onViewAll }) {
             <div className="schedule-info">
               <div className="schedule-title-row">
                 <strong>{item.subject}</strong>
-                <span className="room-pill">{item.room}</span>
               </div>
               <p>{item.batch}</p>
               <div className="teacher-line">
@@ -358,30 +336,11 @@ function HomeView({ searchQuery, onQuickAction, onNavigate, onCollect, students 
 
   return (
     <>
-      <div className="welcome-row">
-        <div>
-          <div className="eyebrow"><span className="eyebrow-dot" /> TUESDAY, 13 OCTOBER 2026</div>
-          <h1>Good morning, Admin <span className="wave">✦</span></h1>
-          <p>Here is what is happening at DigiTute Coaching Centre today.</p>
-        </div>
-        <div className="welcome-actions">
-          <button className="button-primary" onClick={() => onQuickAction('New admission')}><Plus size={17} /> New admission</button>
-        </div>
-      </div>
-
-      <div className="section-heading">
-        <div>
-          <h2>Institute Overview</h2>
-          <p>Key academic & financial metrics at a glance.</p>
-        </div>
-        <div className="period-button"><CalendarDays size={15} /> This month</div>
-      </div>
-
       <div className="metrics-grid">{metrics.map((metric) => <MetricCard key={metric.label} {...metric} />)}</div>
 
       <div className="main-grid">
         <CollectionChart period={period} setPeriod={setPeriod} />
-        <TodaySchedule onViewAll={() => onNavigate('Batches & Courses')} />
+        <TodaySchedule onViewAll={() => onNavigate('Routine & Schedule')} />
       </div>
 
       <div className="bottom-grid">
@@ -436,20 +395,20 @@ function HomeView({ searchQuery, onQuickAction, onNavigate, onCollect, students 
             <button className="text-link" onClick={() => onNavigate('Notice Board')}>View all <ChevronRight size={13} /></button>
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 14 }}>
-            <div style={{ padding: 12, borderRadius: 9, background: '#f8fbfb', border: '1px solid #ebf2f0', display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 14 }}>
+            <div style={{ padding: 14, borderRadius: 10, background: '#f8fbfb', border: '1px solid #ebf2f0', display: 'flex', flexDirection: 'column', gap: 6 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <strong style={{ fontSize: 11.5 }}>Kali Puja & Diwali Vacation</strong>
-                <span className="notice-audience-pill" style={{ fontSize: 8.5 }}>All Students</span>
+                <strong style={{ fontSize: 16 }}>Kali Puja & Diwali Vacation</strong>
+                <span className="notice-audience-pill" style={{ fontSize: 13 }}>All Students</span>
               </div>
-              <p style={{ margin: 0, fontSize: 10, color: 'var(--text-2)' }}>Classes suspended from 28th Oct to 3rd Nov 2026.</p>
+              <p style={{ margin: 0, fontSize: 14, color: 'var(--text-2)' }}>Classes suspended from 28th Oct to 3rd Nov 2026.</p>
             </div>
-            <div style={{ padding: 12, borderRadius: 9, background: '#f8fbfb', border: '1px solid #ebf2f0', display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <div style={{ padding: 14, borderRadius: 10, background: '#f8fbfb', border: '1px solid #ebf2f0', display: 'flex', flexDirection: 'column', gap: 6 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <strong style={{ fontSize: 11.5 }}>October Fee Due Reminder</strong>
-                <span className="notice-audience-pill" style={{ fontSize: 8.5 }}>Pending Dues</span>
+                <strong style={{ fontSize: 16 }}>October Fee Due Reminder</strong>
+                <span className="notice-audience-pill" style={{ fontSize: 13 }}>Pending Dues</span>
               </div>
-              <p style={{ margin: 0, fontSize: 10, color: 'var(--text-2)' }}>Kindly clear dues by 10th Oct to avoid late fines.</p>
+              <p style={{ margin: 0, fontSize: 14, color: 'var(--text-2)' }}>Kindly clear dues by 10th Oct to avoid late fines.</p>
             </div>
           </div>
         </section>
@@ -613,20 +572,20 @@ function Modal({ modal, onClose, onSubmit, selectedItem, batches, teachers }) {
           <div>
             <h2>
               {isAdmission ? 'New Student Admission' :
-               isBatch ? 'Create New Course Batch' :
-               isTeacher ? 'Add Faculty Member' :
-               isCollect ? (modal.startsWith('Collect for ') ? modal : 'Collect Tuition Fee') :
-               isReceipt ? 'Official Payment Receipt' :
-               isNotice ? 'Broadcast Announcement' :
-               isExport ? 'Export Institute Report' : modal}
+                isBatch ? 'Create New Course Batch' :
+                  isTeacher ? 'Add Faculty Member' :
+                    isCollect ? (modal.startsWith('Collect for ') ? modal : 'Collect Tuition Fee') :
+                      isReceipt ? 'Official Payment Receipt' :
+                        isNotice ? 'Broadcast Announcement' :
+                          isExport ? 'Export Institute Report' : modal}
             </h2>
             <p>
               {isAdmission ? 'Enter student and guardian contact details for batch enrolment.' :
-               isBatch ? 'Configure batch name, tuition fee model, faculty revenue sharing and class schedule.' :
-               isTeacher ? 'Onboard teacher with qualification, subjects and payout model.' :
-               isCollect ? 'Record counter cash payment and issue digital receipt slip.' :
-               isReceipt ? 'Official money voucher with institute seal.' :
-               isNotice ? 'Publish notification to student and faculty portals.' : 'Confirm action.'}
+                isBatch ? 'Configure batch name, tuition fee model, faculty revenue sharing and class schedule.' :
+                  isTeacher ? 'Onboard teacher with qualification, subjects and payout model.' :
+                    isCollect ? 'Record counter cash payment and issue digital receipt slip.' :
+                      isReceipt ? 'Official money voucher with institute seal.' :
+                        isNotice ? 'Publish notification to student and faculty portals.' : 'Confirm action.'}
             </p>
           </div>
           <button className="icon-button" onClick={onClose}><X size={19} /></button>
@@ -1000,11 +959,11 @@ function Modal({ modal, onClose, onSubmit, selectedItem, batches, teachers }) {
               <button type="button" className="button-secondary" onClick={onClose}>Cancel</button>
               <button type="submit" className="button-primary">
                 {isAdmission ? 'Complete Admission' :
-                 isBatch ? 'Create Batch' :
-                 isTeacher ? 'Add Faculty' :
-                 isCollect ? 'Confirm & Issue Receipt' :
-                 isNotice ? 'Publish Notice' :
-                 isExport ? 'Download CSV' : 'Submit'}
+                  isBatch ? 'Create Batch' :
+                    isTeacher ? 'Add Faculty' :
+                      isCollect ? 'Confirm & Issue Receipt' :
+                        isNotice ? 'Publish Notice' :
+                          isExport ? 'Download CSV' : 'Submit'}
                 <ChevronRight size={15} />
               </button>
             </div>
@@ -1122,32 +1081,32 @@ export default function AdminPanel({ onBackToLanding }) {
         active: true,
         subjects: form.subjects && form.subjects.length > 0
           ? form.subjects
-              .filter(s => s.name && s.name.trim() !== '')
-              .map(s => {
-                const matchedTeacher = teachers.find(t => t.id === s.teacherId);
-                const share = Number(s.sharePercent) || 35;
-                return {
-                  name: s.name.trim(),
-                  teacherId: s.teacherId || (matchedTeacher?.id || 't-1'),
-                  teacher: s.teacher || (matchedTeacher?.name || 'Faculty'),
-                  sharePercent: share,
-                  earningModel: `${share}% Share`
-                };
-              })
+            .filter(s => s.name && s.name.trim() !== '')
+            .map(s => {
+              const matchedTeacher = teachers.find(t => t.id === s.teacherId);
+              const share = Number(s.sharePercent) || 35;
+              return {
+                name: s.name.trim(),
+                teacherId: s.teacherId || (matchedTeacher?.id || 't-1'),
+                teacher: s.teacher || (matchedTeacher?.name || 'Faculty'),
+                sharePercent: share,
+                earningModel: `${share}% Share`
+              };
+            })
           : [
-              { name: 'Core Subject', teacher: 'Arindam Roy', teacherId: 't-1', sharePercent: 35, earningModel: '35% Share' }
-            ],
+            { name: 'Core Subject', teacher: 'Arindam Roy', teacherId: 't-1', sharePercent: 35, earningModel: '35% Share' }
+          ],
         routine: form.routine && form.routine.length > 0
           ? form.routine
-              .filter(r => r.subject && r.subject.trim() !== '')
-              .map(r => ({
-                day: r.day || 'Monday',
-                subject: r.subject.trim(),
-                time: r.time || '04:00 PM - 05:30 PM'
-              }))
+            .filter(r => r.subject && r.subject.trim() !== '')
+            .map(r => ({
+              day: r.day || 'Monday',
+              subject: r.subject.trim(),
+              time: r.time || '04:00 PM - 05:30 PM'
+            }))
           : [
-              { day: 'Monday', subject: 'Core Subject', time: '04:00 PM - 05:30 PM' }
-            ],
+            { day: 'Monday', subject: 'Core Subject', time: '04:00 PM - 05:30 PM' }
+          ],
       };
       setBatches(prev => [newB, ...prev]);
       showToast('Batch Created', `${form.title} created with ${newB.subjects.length} subjects & timetable.`);
@@ -1264,7 +1223,15 @@ export default function AdminPanel({ onBackToLanding }) {
             <BatchesView
               batches={batches}
               onCreateBatch={() => openAction('Create batch')}
-              onSelectBatch={() => {}}
+              onSelectBatch={() => { }}
+            />
+          )}
+
+          {activePage === 'Routine & Schedule' && (
+            <RoutineScheduleView
+              batches={batches}
+              teachers={teachers}
+              showToast={showToast}
             />
           )}
 
