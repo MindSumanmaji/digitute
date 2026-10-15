@@ -133,7 +133,7 @@ export default function MeritListModal({
                     <th>Marks Obtained</th>
                     <th>Percentage</th>
                     <th>Percentile</th>
-                    <th>Standing</th>
+                    <th>Action</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -184,9 +184,22 @@ export default function MeritListModal({
                       </td>
                       <td className="sp-merit-percentile-cell">{st.percentile}</td>
                       <td>
-                        <span className={`sp-merit-standing-tag ${st.rank <= 3 ? 'tag-podium' : st.rank <= 5 ? 'tag-top5' : ''}`}>
-                          {st.standing || (st.rank <= 3 ? 'Top Performer' : st.rank <= 5 ? 'TOP 5' : 'Honorable Mention')}
-                        </span>
+                        <button 
+                          type="button"
+                          className="sp-merit-view-profile-btn"
+                          onClick={() => {
+                            if (showToast) {
+                              showToast(`Viewing profile of ${st.name} (${st.roll}) will be available soon!`);
+                            }
+                          }}
+                          title={`View ${st.name}'s Profile`}
+                        >
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                            <circle cx="12" cy="7" r="4" />
+                          </svg>
+                          <span>View Profile</span>
+                        </button>
                       </td>
                     </tr>
                   ))}

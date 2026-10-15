@@ -27,12 +27,11 @@ export default function MeritListPage({ test, onBack, showToast }) {
     <div className="sp-view-container sp-merit-page">
       {/* 1. Header Navigation Bar */}
       <div className="sp-merit-page-header">
-        <div>
+        <div className="sp-merit-header-left">
           <button 
-            className="sp-analysis-back-btn" 
+            className="sp-analysis-back-btn sp-merit-back-btn" 
             onClick={onBack}
             title="Return to Test Results"
-            style={{ marginBottom: '14px' }}
           >
             <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="15 18 9 12 15 6" />
@@ -40,20 +39,19 @@ export default function MeritListPage({ test, onBack, showToast }) {
             Back to Results
           </button>
           
-          <h1 className="sp-page-title" style={{ fontSize: '24px', margin: '0 0 6px 0' }}>
+          <h1 className="sp-page-title sp-merit-title">
             🏆 {test.name} - Batch Merit List
           </h1>
-          <p className="sp-page-subtitle" style={{ margin: 0 }}>
+          <p className="sp-page-subtitle sp-merit-subtitle">
             {test.subject} · Conducted on {test.date} · Total Marks: {test.total} · Batch: Class XII - Science
           </p>
         </div>
 
         {/* Action Buttons */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <div className="sp-merit-actions-wrap">
           <button 
-            className="sp-btn-secondary"
+            className="sp-btn-secondary sp-merit-download-btn"
             onClick={() => showToast('Official merit list PDF generated & downloaded successfully!')}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '9px 16px', borderRadius: '10px', fontSize: '13px', fontWeight: 600, background: '#ffffff', border: '1px solid #cbd5e1', cursor: 'pointer', color: '#1e293b' }}
           >
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
@@ -66,18 +64,20 @@ export default function MeritListPage({ test, onBack, showToast }) {
       </div>
 
       {/* 2. Sub-Tabs Bar: Merit List vs My Scorecard */}
-      <div className="sp-modal-tabs-row" style={{ marginTop: '16px', marginBottom: '22px' }}>
+      <div className="sp-modal-tabs-row sp-merit-tabs-row">
         <button 
           className={`sp-modal-tab-btn ${activeTab === 'list' ? 'active' : ''}`}
           onClick={() => setActiveTab('list')}
         >
-          🏆 1. Complete Merit List ({fullMeritList.length} Students)
+          <span className="sp-tab-label-full">🏆 1. Complete Merit List ({fullMeritList.length} Students)</span>
+          <span className="sp-tab-label-mobile">🏆 Merit List ({fullMeritList.length})</span>
         </button>
         <button 
           className={`sp-modal-tab-btn ${activeTab === 'scorecard' ? 'active' : ''}`}
           onClick={() => setActiveTab('scorecard')}
         >
-          📊 2. My Scorecard & Breakdown
+          <span className="sp-tab-label-full">📊 2. My Scorecard & Breakdown</span>
+          <span className="sp-tab-label-mobile">📊 My Scorecard</span>
         </button>
       </div>
 
@@ -85,7 +85,7 @@ export default function MeritListPage({ test, onBack, showToast }) {
       {activeTab === 'list' && (
         <div className="sp-merit-page-content">
           {/* Top 3 Podium Showcase */}
-          <div className="sp-modal-podium-mini" style={{ marginBottom: '22px', padding: '28px 20px' }}>
+          <div className="sp-modal-podium-mini sp-merit-podium">
             {top2 && (
               <div className="sp-mp-col r2">
                 <div className="sp-mp-avatar-wrap">
@@ -100,7 +100,7 @@ export default function MeritListPage({ test, onBack, showToast }) {
                 </div>
                 <strong className="sp-mp-name">{top2.name}</strong>
                 <span className="sp-mp-score">{top2.score}/{top2.total} ({top2.pct})</span>
-                <span style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>Roll: {top2.roll}</span>
+                <span className="sp-mp-roll-sub">Roll: {top2.roll}</span>
               </div>
             )}
 
@@ -119,7 +119,7 @@ export default function MeritListPage({ test, onBack, showToast }) {
                 </div>
                 <strong className="sp-mp-name r1-name">{top1.name}</strong>
                 <span className="sp-mp-score r1-score">{top1.score}/{top1.total} ({top1.pct})</span>
-                <span style={{ fontSize: '11.5px', color: '#7c3aed', fontWeight: 600, marginTop: '2px' }}>Batch Topper · {top1.roll}</span>
+                <span className="sp-mp-roll-sub sp-mp-topper-text">Batch Topper · {top1.roll}</span>
               </div>
             )}
 
@@ -137,13 +137,13 @@ export default function MeritListPage({ test, onBack, showToast }) {
                 </div>
                 <strong className="sp-mp-name">{top3.name}</strong>
                 <span className="sp-mp-score">{top3.score}/{top3.total} ({top3.pct})</span>
-                <span style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>Roll: {top3.roll}</span>
+                <span className="sp-mp-roll-sub">Roll: {top3.roll}</span>
               </div>
             )}
           </div>
 
           {/* User's Own Standing Summary Bar */}
-          <div className="sp-merit-user-summary-bar" style={{ marginBottom: '22px' }}>
+          <div className="sp-merit-user-summary-bar">
             <div className="sp-mus-item">
               <span className="sp-mus-label">Your Batch Rank</span>
               <strong className="sp-mus-val" style={{ color: '#0f172a' }}>#{test.rank}</strong>
@@ -163,42 +163,35 @@ export default function MeritListPage({ test, onBack, showToast }) {
           </div>
 
           {/* Full Merit List Table Card */}
-          <div className="sp-card" style={{ padding: '22px' }}>
+          <div className="sp-card sp-merit-table-card">
             {/* Table Top Controls */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
-              <div>
-                <h3 style={{ fontSize: '17px', fontWeight: 700, margin: '0 0 2px 0', color: '#0f172a' }}>
+            <div className="sp-merit-controls-row">
+              <div className="sp-merit-title-group">
+                <h3 className="sp-merit-table-heading">
                   All Students Position & Marks
                 </h3>
-                <p style={{ fontSize: '12.5px', color: '#64748b', margin: 0 }}>
+                <p className="sp-merit-table-sub">
                   Showing {filteredList.length} of {fullMeritList.length} students ranked in this test.
                 </p>
               </div>
 
               {/* Search Box */}
-              <div style={{ position: 'relative', minWidth: '240px' }}>
+              <div className="sp-merit-search-wrap">
                 <input 
                   type="text"
                   placeholder="Search student or roll ID..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px 8px 34px',
-                    borderRadius: '8px',
-                    border: '1px solid #cbd5e1',
-                    fontSize: '13px',
-                    outline: 'none'
-                  }}
+                  className="sp-merit-search-input"
                 />
                 <svg 
+                  className="sp-merit-search-icon"
                   width="15" 
                   height="15" 
                   viewBox="0 0 24 24" 
                   fill="none" 
                   stroke="#94a3b8" 
                   strokeWidth="2.2" 
-                  style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)' }}
                 >
                   <circle cx="11" cy="11" r="8"/>
                   <line x1="21" y1="21" x2="16.65" y2="16.65"/>
@@ -206,8 +199,13 @@ export default function MeritListPage({ test, onBack, showToast }) {
               </div>
             </div>
 
-            {/* Table (PERCENTILE COLUMN COMPLETELY REMOVED) */}
-            <div className="sp-table-scroll-wrap" style={{ border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden' }}>
+            {/* Swipe Table Horizontally Hint */}
+            <div className="sp-merit-swipe-hint">
+              <span>👉 Swipe table horizontally to view full marks & standings</span>
+            </div>
+
+            {/* Table */}
+            <div className="sp-table-scroll-wrap sp-merit-table-scroll">
               <table className="sp-merit-table">
                 <thead>
                   <tr>
@@ -216,7 +214,7 @@ export default function MeritListPage({ test, onBack, showToast }) {
                     <th>Roll ID</th>
                     <th>Marks Obtained</th>
                     <th>Percentage</th>
-                    <th>Standing</th>
+                    <th>Action</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -266,9 +264,22 @@ export default function MeritListPage({ test, onBack, showToast }) {
                         <strong className="sp-merit-pct-val">{st.pct}</strong>
                       </td>
                       <td>
-                        <span className={`sp-merit-standing-tag ${st.rank <= 3 ? 'tag-podium' : st.rank <= 5 ? 'tag-top5' : ''}`}>
-                          {st.standing || (st.rank <= 3 ? 'Top Performer' : st.rank <= 5 ? 'TOP 5' : 'Honorable Mention')}
-                        </span>
+                        <button 
+                          type="button"
+                          className="sp-merit-view-profile-btn"
+                          onClick={() => {
+                            if (showToast) {
+                              showToast(`Viewing profile of ${st.name} (${st.roll}) will be available soon!`);
+                            }
+                          }}
+                          title={`View ${st.name}'s Profile`}
+                        >
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                            <circle cx="12" cy="7" r="4" />
+                          </svg>
+                          <span>View Profile</span>
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -288,12 +299,12 @@ export default function MeritListPage({ test, onBack, showToast }) {
 
       {/* 4. TAB 2: MY SCORECARD & QUESTION BREAKDOWN */}
       {activeTab === 'scorecard' && (
-        <div className="sp-card" style={{ padding: '28px' }}>
-          <h3 style={{ fontSize: '18px', fontWeight: 700, margin: '0 0 16px 0', color: '#0f172a' }}>
+        <div className="sp-card sp-scorecard-card">
+          <h3 className="sp-scorecard-heading">
             Detailed Performance Scorecard - {test.name}
           </h3>
 
-          <div className="sp-scorecard-grid" style={{ marginBottom: '24px' }}>
+          <div className="sp-scorecard-grid">
             <div className="sp-score-stat-box">
               <span>Total Marks</span>
               <strong>{test.total}</strong>
@@ -313,16 +324,16 @@ export default function MeritListPage({ test, onBack, showToast }) {
           </div>
 
           <div className="sp-score-extra">
-            <p style={{ fontSize: '14.5px', marginBottom: '8px' }}>
-              <strong>Batch Position:</strong> {test.rank}
+            <p className="sp-score-extra-line">
+              <strong>Batch Position:</strong> #{test.rank}
             </p>
-            <p style={{ fontSize: '14.5px', marginBottom: '16px' }}>
+            <p className="sp-score-extra-line">
               <strong>Questions Breakdown:</strong> {test.correct} Correct, {test.incorrect} Incorrect
             </p>
             
-            <div className="sp-teacher-feedback-box" style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '16px' }}>
-              <strong style={{ fontSize: '13.5px', color: '#0f172a' }}>Faculty Remarks & Guidance:</strong>
-              <p style={{ margin: '6px 0 0 0', fontSize: '13.5px', color: '#334155', lineHeight: '1.5' }}>
+            <div className="sp-teacher-feedback-box">
+              <strong className="sp-tfb-title">Faculty Remarks & Guidance:</strong>
+              <p className="sp-tfb-desc">
                 {test.remarks}
               </p>
             </div>
