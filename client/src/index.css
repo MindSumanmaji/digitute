@@ -9273,8 +9273,8 @@ select:focus {
   .sp-tests-view .sp-title-header-bar {
     flex-direction: column !important;
     align-items: stretch !important;
-    gap: 14px !important;
-    margin-bottom: 20px !important;
+    gap: 12px !important;
+    margin-bottom: 12px !important;
   }
 
   .sp-test-mode-toggle-bar {
@@ -9285,6 +9285,7 @@ select:focus {
     padding: 4px !important;
     border-radius: 12px !important;
     box-sizing: border-box !important;
+    margin-bottom: 0 !important;
   }
 
   .sp-mode-toggle-btn {
@@ -9297,11 +9298,69 @@ select:focus {
     white-space: nowrap !important;
   }
 
-  /* Metric Cards 4-grid: 2 columns on tablet/mobile */
-  .sp-tests-view .sp-metrics-grid-4 {
+  /* Metric Cards 4-grid: 2 columns on tablet/mobile with improved box size & balanced height */
+  .sp-tests-view .sp-metrics-grid-4,
+  .sp-metrics-grid-4 {
     grid-template-columns: repeat(2, 1fr) !important;
     gap: 12px !important;
-    margin-bottom: 20px !important;
+    margin-bottom: 16px !important;
+  }
+
+  .sp-metrics-grid-4 .sp-metric-card {
+    padding: 16px 14px !important;
+    border-radius: 16px !important;
+    gap: 12px !important;
+    align-items: center !important;
+    min-width: 0 !important;
+    min-height: 84px !important;
+    box-sizing: border-box !important;
+  }
+
+  .sp-metrics-grid-4 .sp-metric-circle-icon {
+    width: 42px !important;
+    height: 42px !important;
+    min-width: 42px !important;
+  }
+
+  .sp-metrics-grid-4 .sp-metric-circle-icon svg {
+    width: 22px !important;
+    height: 22px !important;
+  }
+
+  .sp-metrics-grid-4 .sp-metric-info {
+    min-width: 0 !important;
+    overflow: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 2px !important;
+  }
+
+  .sp-metrics-grid-4 .sp-metric-label {
+    font-size: 11.5px !important;
+    font-weight: 600 !important;
+    line-height: 1.25 !important;
+    margin-bottom: 2px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  .sp-metrics-grid-4 .sp-metric-value {
+    font-size: 17.5px !important;
+    font-weight: 800 !important;
+    line-height: 1.2 !important;
+    margin-bottom: 2px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  .sp-metrics-grid-4 .sp-metric-sub {
+    font-size: 10px !important;
+    line-height: 1.25 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
   }
 
   /* Subject Performance Filter Strip */
@@ -9311,8 +9370,8 @@ select:focus {
     overflow-x: auto !important;
     -webkit-overflow-scrolling: touch !important;
     gap: 6px !important;
-    padding-bottom: 6px !important;
-    margin-bottom: 14px !important;
+    padding: 2px 2px 8px 2px !important;
+    margin-bottom: 12px !important;
     scrollbar-width: none !important;
   }
 
@@ -9323,32 +9382,52 @@ select:focus {
   .sp-perf-filter-pill {
     white-space: nowrap !important;
     flex-shrink: 0 !important;
-    padding: 6px 14px !important;
-    font-size: 12px !important;
+    padding: 6px 13px !important;
+    font-size: 11.5px !important;
     border-radius: 999px !important;
+    touch-action: manipulation !important;
   }
 
-  /* Mini Progression Summary Row */
+  /* Mini Progression Summary Row (2x2 grid on mobile) */
   .sp-perf-mini-summary-row {
     display: grid !important;
     grid-template-columns: repeat(2, 1fr) !important;
     gap: 8px !important;
-    padding: 10px 12px !important;
-    margin-bottom: 14px !important;
+    padding: 8px 10px !important;
+    margin-bottom: 12px !important;
   }
 
-  /* SVG Line Chart Horizontal Scroll */
+  .sp-perf-mini-summary-row .sp-pms-item {
+    padding: 4px 6px !important;
+  }
+
+  .sp-perf-mini-summary-row .sp-pms-item span {
+    font-size: 9px !important;
+  }
+
+  .sp-perf-mini-summary-row .sp-pms-item strong {
+    font-size: 12.5px !important;
+  }
+
+  /* SVG Line Chart Container */
   .sp-perf-chart-container {
     width: 100% !important;
+    position: relative !important;
     overflow-x: auto !important;
     -webkit-overflow-scrolling: touch !important;
-    padding: 4px 0 !important;
+    padding: 2px 0 0 0 !important;
   }
 
   .sp-responsive-chart-svg {
-    min-width: 540px !important;
+    width: 100% !important;
+    min-width: unset !important;
+    max-width: 100% !important;
     height: auto !important;
     display: block !important;
+  }
+
+  .sp-perf-tooltip-floating {
+    display: none !important;
   }
 
   /* Leaderboard Top 3 Podium */
@@ -9390,16 +9469,21 @@ select:focus {
   }
 
   .sp-results-dropdowns {
-    display: flex !important;
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
     gap: 8px !important;
     width: 100% !important;
+    box-sizing: border-box !important;
   }
 
   .sp-results-dropdowns .sp-select-pill {
-    flex: 1 !important;
-    width: auto !important;
+    width: 100% !important;
+    min-width: 0 !important;
     font-size: 12px !important;
     padding: 8px 10px !important;
+    box-sizing: border-box !important;
+    white-space: nowrap !important;
+    text-overflow: ellipsis !important;
   }
 
   .sp-past-results-card .sp-table-scroll-wrap {
@@ -9413,30 +9497,72 @@ select:focus {
   }
 
   /* Merit List Full Page Header */
+  /* Merit List Full Page Header & Elements */
+  .sp-merit-page .sp-analysis-back-btn,
+  .sp-merit-back-btn {
+    width: auto !important;
+    display: inline-flex !important;
+    align-self: flex-start !important;
+    padding: 7px 12px !important;
+    font-size: 12.5px !important;
+    margin-bottom: 10px !important;
+  }
+
+  .sp-merit-title {
+    font-size: 18px !important;
+    line-height: 1.25 !important;
+    margin-bottom: 4px !important;
+  }
+
+  .sp-merit-subtitle {
+    font-size: 11.5px !important;
+    line-height: 1.4 !important;
+  }
+
   .sp-merit-page-header {
     flex-direction: column !important;
     align-items: stretch !important;
-    gap: 14px !important;
-    margin-bottom: 16px !important;
+    gap: 12px !important;
+    margin-bottom: 14px !important;
   }
 
+  .sp-merit-header-left {
+    width: 100% !important;
+  }
+
+  .sp-merit-actions-wrap,
   .sp-merit-page-header > div:last-child {
     width: 100% !important;
   }
 
+  .sp-merit-download-btn,
   .sp-merit-page-header .sp-btn-secondary {
     width: 100% !important;
     justify-content: center !important;
+    padding: 9px 14px !important;
+    font-size: 12.5px !important;
   }
 
-  .sp-modal-tabs-row {
+  .sp-tab-label-full {
+    display: none !important;
+  }
+
+  .sp-tab-label-mobile {
+    display: inline !important;
+  }
+
+  .sp-modal-tabs-row,
+  .sp-merit-tabs-row {
     display: flex !important;
     width: 100% !important;
-    gap: 6px !important;
+    gap: 4px !important;
     background: #f1f5f9 !important;
-    padding: 4px !important;
+    padding: 3px !important;
     border-radius: 12px !important;
     box-sizing: border-box !important;
+    border-bottom: none !important;
+    margin-top: 10px !important;
+    margin-bottom: 16px !important;
   }
 
   .sp-modal-tab-btn {
@@ -9444,33 +9570,219 @@ select:focus {
     text-align: center !important;
     justify-content: center !important;
     padding: 8px 6px !important;
-    font-size: 11.5px !important;
-    border-radius: 8px !important;
+    font-size: 12px !important;
+    font-weight: 600 !important;
+    border-radius: 9px !important;
+    border: none !important;
+    margin-bottom: 0 !important;
     white-space: nowrap !important;
+    color: #64748b !important;
+  }
+
+  .sp-modal-tab-btn.active {
+    background: #ffffff !important;
+    color: #2563eb !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08) !important;
+    font-weight: 700 !important;
+    border-bottom: none !important;
   }
 
   .sp-merit-user-summary-bar {
     grid-template-columns: repeat(2, 1fr) !important;
-    gap: 10px !important;
-    padding: 12px !important;
+    gap: 10px 12px !important;
+    padding: 12px 14px !important;
+    margin-bottom: 16px !important;
+    border-radius: 14px !important;
+    background: #f8fafc !important;
   }
 
-  .sp-merit-page .sp-card {
-    padding: 16px 12px !important;
+  .sp-merit-user-summary-bar .sp-mus-item {
+    gap: 2px !important;
+  }
+
+  .sp-merit-user-summary-bar .sp-mus-label {
+    font-size: 10.5px !important;
+    letter-spacing: 0.3px !important;
+  }
+
+  .sp-merit-user-summary-bar .sp-mus-val {
+    font-size: 15px !important;
+  }
+
+  .sp-merit-user-summary-bar .sp-grade-badge {
+    align-self: flex-start !important;
+    width: auto !important;
+    display: inline-block !important;
+    padding: 3px 12px !important;
+    font-size: 12px !important;
+    font-weight: 700 !important;
+    border-radius: 8px !important;
+  }
+
+  .sp-merit-page .sp-card,
+  .sp-merit-table-card {
+    padding: 14px 12px !important;
+    border-radius: 14px !important;
+  }
+
+  .sp-merit-controls-row {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+    margin-bottom: 12px !important;
+  }
+
+  .sp-merit-title-group {
+    width: 100% !important;
+  }
+
+  .sp-merit-table-heading {
+    font-size: 15px !important;
+  }
+
+  .sp-merit-table-sub {
+    font-size: 11px !important;
+  }
+
+  .sp-merit-search-wrap {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .sp-merit-search-input {
+    width: 100% !important;
+    box-sizing: border-box !important;
+    padding: 8px 12px 8px 34px !important;
+    font-size: 13px !important;
+  }
+
+  .sp-merit-swipe-hint {
+    display: flex !important;
+    align-items: center !important;
+    font-size: 10.5px !important;
+    color: #64748b !important;
+    margin-bottom: 8px !important;
+    font-weight: 500 !important;
+  }
+
+  .sp-merit-table-scroll {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    border-radius: 10px !important;
   }
 
   .sp-merit-table {
-    min-width: 600px !important;
+    min-width: 520px !important;
+  }
+
+  .sp-merit-table th,
+  .sp-merit-table td {
+    padding: 9px 10px !important;
+    font-size: 12px !important;
+  }
+
+  .sp-position-pill {
+    font-size: 11.5px !important;
+  }
+
+  .sp-merit-avatar-img,
+  .sp-merit-fallback-avatar {
+    width: 28px !important;
+    height: 28px !important;
+    font-size: 11px !important;
+  }
+
+  .sp-merit-student-name {
+    font-size: 12.5px !important;
+  }
+
+  .sp-merit-score-val {
+    font-size: 13px !important;
+  }
+
+  .sp-merit-view-profile-btn {
+    padding: 4px 8px !important;
+    font-size: 11px !important;
+    gap: 4px !important;
+    border-radius: 6px !important;
+  }
+
+  .sp-merit-view-profile-btn svg {
+    width: 11px !important;
+    height: 11px !important;
+  }
+
+  .sp-scorecard-card {
+    padding: 16px 14px !important;
+    border-radius: 14px !important;
+  }
+
+  .sp-scorecard-heading {
+    font-size: 16px !important;
+    margin-bottom: 14px !important;
+  }
+
+  .sp-score-extra-line {
+    font-size: 13px !important;
+    margin-bottom: 8px !important;
+  }
+
+  .sp-teacher-feedback-box {
+    padding: 12px !important;
+    border-radius: 10px !important;
+  }
+
+  .sp-tfb-title {
+    font-size: 12.5px !important;
+  }
+
+  .sp-tfb-desc {
+    font-size: 12.5px !important;
   }
 }
 
 @media (max-width: 640px) {
   /* Upcoming Tests Rows */
   .sp-upcoming-tests-card,
-  .sp-performance-card,
   .sp-past-results-card {
     padding: 16px 14px !important;
     border-radius: 16px !important;
+  }
+
+  .sp-performance-card {
+    padding: 14px 12px !important;
+    border-radius: 14px !important;
+    box-sizing: border-box !important;
+    width: 100% !important;
+  }
+
+  .sp-perf-title-row {
+    display: flex !important;
+    align-items: flex-start !important;
+    justify-content: space-between !important;
+    gap: 8px !important;
+    margin-bottom: 10px !important;
+  }
+
+  .sp-perf-title {
+    font-size: 15px !important;
+    line-height: 1.3 !important;
+  }
+
+  .sp-perf-title-left {
+    flex: 1 !important;
+    min-width: 0 !important;
+  }
+
+  .sp-perf-title-left .sp-sub-card-text {
+    font-size: 11px !important;
+    line-height: 1.3 !important;
+  }
+
+  .sp-perf-title-row .sp-grade-badge {
+    font-size: 10.5px !important;
+    padding: 3px 8px !important;
+    flex-shrink: 0 !important;
   }
 
   .sp-upcoming-test-row {
@@ -9643,8 +9955,23 @@ select:focus {
   }
 
   .sp-modal-podium-mini {
-    padding: 16px 8px !important;
-    gap: 8px !important;
+    padding: 14px 6px 12px 6px !important;
+    gap: 4px !important;
+    justify-content: space-around !important;
+    border-radius: 16px !important;
+    margin-bottom: 16px !important;
+    background: #ffffff !important;
+    border: 1px solid #e2e8f0 !important;
+  }
+
+  .sp-mp-col {
+    flex: 1 1 0 !important;
+    min-width: 0 !important;
+    max-width: 33% !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    box-sizing: border-box !important;
   }
 
   .sp-mp-avatar-wrap {
@@ -9671,16 +9998,53 @@ select:focus {
     font-size: 22px !important;
   }
 
+  .sp-mp-crown {
+    font-size: 8.5px !important;
+    padding: 1.5px 5px !important;
+    top: -9px !important;
+  }
+
+  .sp-mp-badge {
+    width: 18px !important;
+    height: 18px !important;
+    font-size: 10px !important;
+  }
+
+  .sp-mp-badge.r1-badge {
+    width: 22px !important;
+    height: 22px !important;
+    font-size: 11px !important;
+  }
+
   .sp-mp-name {
     font-size: 11px !important;
-    max-width: 76px !important;
+    max-width: 100% !important;
+    width: 100% !important;
     overflow: hidden !important;
     text-overflow: ellipsis !important;
     white-space: nowrap !important;
+    margin-top: 5px !important;
+    text-align: center !important;
+  }
+
+  .sp-mp-name.r1-name {
+    font-size: 12px !important;
   }
 
   .sp-mp-score {
     font-size: 10px !important;
+    white-space: nowrap !important;
+  }
+
+  .sp-mp-roll-sub {
+    font-size: 9.5px !important;
+    color: #64748b !important;
+    margin-top: 1px !important;
+    max-width: 100% !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+    text-align: center !important;
   }
 
   .sp-mus-val {
@@ -9694,27 +10058,65 @@ select:focus {
 
 @media (max-width: 360px) {
   /* Ultra small screens (<= 360px) */
-  .sp-tests-view .sp-metrics-grid-4 {
-    grid-template-columns: 1fr !important;
+  .sp-tests-view .sp-metrics-grid-4,
+  .sp-metrics-grid-4 {
+    grid-template-columns: repeat(2, 1fr) !important;
     gap: 8px !important;
   }
 
   .sp-perf-mini-summary-row {
-    grid-template-columns: 1fr !important;
+    grid-template-columns: repeat(2, 1fr) !important;
     gap: 6px !important;
+    padding: 6px 8px !important;
+  }
+
+  .sp-perf-mini-summary-row .sp-pms-item span {
+    font-size: 8.5px !important;
+  }
+
+  .sp-perf-mini-summary-row .sp-pms-item strong {
+    font-size: 11.5px !important;
+  }
+
+  .sp-ppdc-grid {
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 4px !important;
+  }
+
+  .sp-ppdc-stat {
+    padding: 4px 5px !important;
+  }
+
+  .sp-ppdc-stat-label {
+    font-size: 8px !important;
+  }
+
+  .sp-ppdc-stat-val {
+    font-size: 11px !important;
   }
 
   .sp-merit-user-summary-bar {
-    grid-template-columns: 1fr !important;
-    gap: 8px !important;
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px 10px !important;
+    padding: 10px 12px !important;
   }
 
   .sp-results-dropdowns {
-    flex-direction: column !important;
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 6px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
   }
 
   .sp-results-dropdowns .sp-select-pill {
     width: 100% !important;
+    min-width: 0 !important;
+    font-size: 11px !important;
+    padding: 7px 6px !important;
+    box-sizing: border-box !important;
+    white-space: nowrap !important;
+    text-overflow: ellipsis !important;
   }
 }
 
@@ -10595,12 +10997,12 @@ select:focus {
    RECENT EXAM LEADERBOARD HERO CARD (MATCHING USER REFERENCE DESIGN)
    ========================================================================== */
 .sp-leaderboard-hero-card {
-  background: linear-gradient(135deg, #dbeafe 0%, #ede9fe 48%, #fce7f3 100%);
-  border-radius: 28px;
-  padding: 30px 32px 34px 32px;
-  border: 1px solid rgba(255, 255, 255, 0.85);
-  box-shadow: 0 10px 30px -5px rgba(99, 102, 241, 0.08), 0 2px 8px rgba(0, 0, 0, 0.02);
-  margin-bottom: 28px;
+  background: #ffffff;
+  border-radius: 20px;
+  padding: 26px 28px 28px 28px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.02);
+  margin-bottom: 24px;
   position: relative;
 }
 
@@ -10608,7 +11010,7 @@ select:focus {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 26px;
+  margin-bottom: 24px;
   flex-wrap: wrap;
   gap: 14px;
 }
@@ -10622,14 +11024,13 @@ select:focus {
 .sp-lb-trophy-icon {
   width: 44px;
   height: 44px;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.75);
-  backdrop-filter: blur(8px);
+  border-radius: 12px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
   display: grid;
   place-items: center;
   font-size: 22px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0 1px 3px rgba(37, 99, 235, 0.08);
   flex-shrink: 0;
 }
 
@@ -10651,11 +11052,11 @@ select:focus {
 .sp-lb-recent-pill {
   font-size: 11.5px;
   font-weight: 700;
-  color: #4338ca;
-  background: rgba(238, 242, 255, 0.9);
+  color: #1d4ed8;
+  background: #eff6ff;
   padding: 3px 10px;
   border-radius: 12px;
-  border: 1px solid rgba(199, 210, 254, 0.8);
+  border: 1px solid #bfdbfe;
 }
 
 .sp-lb-subtitle {
@@ -10752,11 +11153,11 @@ select:focus {
   width: 104px;
   height: 104px;
   border-radius: 50%;
-  border: 3.5px solid #6366f1;
+  border: 3.5px solid #2563eb;
   padding: 3px;
   display: grid;
   place-items: center;
-  box-shadow: 0 8px 24px rgba(99, 102, 241, 0.28);
+  box-shadow: 0 6px 20px rgba(37, 99, 235, 0.22);
   background: #ffffff;
 }
 
@@ -10782,12 +11183,12 @@ select:focus {
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  background: #6366f1;
+  background: #2563eb;
   color: #ffffff;
   display: grid;
   place-items: center;
   border: 2px solid #ffffff;
-  box-shadow: 0 2px 6px rgba(99, 102, 241, 0.35);
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.35);
   font-size: 11px;
   z-index: 2;
 }
@@ -10808,10 +11209,10 @@ select:focus {
   right: 2px;
   width: 28px;
   height: 28px;
-  background: #6366f1;
+  background: #2563eb;
   border: 2.5px solid #ffffff;
   font-size: 13px;
-  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.35);
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.35);
 }
 
 .sp-circle-rank-badge.badge-rank-2 {
@@ -10845,7 +11246,7 @@ select:focus {
 }
 
 /* --------------------------------------------------------------------------
-   WHITE ROUNDED PILL CARD ROWS FOR SUBSEQUENT RANKS (#4, #5, #6...)
+   ROUNDED PILL CARD ROWS FOR SUBSEQUENT RANKS (#4, #5, #6...)
    -------------------------------------------------------------------------- */
 .sp-rank-rows-stack {
   display: flex;
@@ -10857,26 +11258,28 @@ select:focus {
 }
 
 .sp-rank-row-card {
-  background: #ffffff;
-  border-radius: 24px;
-  padding: 12px 24px;
+  background: #f8fafc;
+  border-radius: 16px;
+  padding: 12px 20px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  box-shadow: 0 4px 16px -2px rgba(15, 23, 42, 0.05);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
   transition: transform 0.15s ease, box-shadow 0.15s ease;
-  border: 1px solid rgba(255, 255, 255, 0.9);
+  border: 1px solid #f1f5f9;
 }
 
 .sp-rank-row-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 22px -3px rgba(15, 23, 42, 0.08);
+  background: #ffffff;
+  border-color: #cbd5e1;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.05);
 }
 
 .sp-rank-row-card.is-me-row {
   border: 1.5px solid #93c5fd;
-  background: #f8faff;
-  box-shadow: 0 4px 16px -2px rgba(37, 99, 235, 0.08);
+  background: #eff6ff;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.06);
 }
 
 .sp-rrc-left {
@@ -10981,21 +11384,23 @@ select:focus {
 }
 
 .sp-rrc-view-all-btn {
-  background: rgba(255, 255, 255, 0.9);
-  border: 1px solid rgba(203, 213, 225, 0.8);
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
   border-radius: 20px;
-  padding: 8px 20px;
-  font-size: 12.5px;
+  padding: 9px 22px;
+  font-size: 13px;
   font-weight: 700;
-  color: #475569;
+  color: #2563eb;
   cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
   transition: all 0.15s ease;
 }
 
 .sp-rrc-view-all-btn:hover {
-  background: #ffffff;
-  color: #0f172a;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  background: #eff6ff;
+  border-color: #93c5fd;
+  color: #1d4ed8;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.1);
 }
 
 /* --------------------------------------------------------------------------
@@ -11004,6 +11409,201 @@ select:focus {
 .sp-merit-page {
   animation: spFadeIn 0.18s ease;
   padding-bottom: 40px;
+}
+
+.sp-merit-header-left {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.sp-merit-title {
+  font-size: 24px;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.02em;
+  margin: 0 0 6px 0;
+  line-height: 1.25;
+}
+
+.sp-merit-subtitle {
+  font-size: 13.5px;
+  color: #64748b;
+  margin: 0;
+  line-height: 1.45;
+}
+
+.sp-merit-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  color: #1e293b;
+  font-weight: 600;
+  border-radius: 10px;
+  cursor: pointer;
+  padding: 8px 14px;
+  font-size: 13.5px;
+  margin-bottom: 12px;
+  transition: all 0.18s ease;
+  width: auto;
+}
+
+.sp-merit-back-btn:hover {
+  background: #f8fafc;
+  border-color: #94a3b8;
+}
+
+.sp-merit-actions-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sp-merit-download-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 16px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  cursor: pointer;
+  color: #1e293b;
+  transition: all 0.18s ease;
+}
+
+.sp-merit-download-btn:hover {
+  background: #f8fafc;
+  border-color: #94a3b8;
+}
+
+.sp-tab-label-full {
+  display: inline;
+}
+
+.sp-tab-label-mobile {
+  display: none;
+}
+
+.sp-mp-roll-sub {
+  font-size: 11px;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+.sp-mp-topper-text {
+  font-size: 11.5px;
+  color: #7c3aed;
+  font-weight: 600;
+}
+
+.sp-merit-table-card {
+  padding: 22px;
+}
+
+.sp-merit-controls-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.sp-merit-title-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.sp-merit-table-heading {
+  font-size: 17px;
+  font-weight: 700;
+  margin: 0 0 2px 0;
+  color: #0f172a;
+}
+
+.sp-merit-table-sub {
+  font-size: 12.5px;
+  color: #64748b;
+  margin: 0;
+}
+
+.sp-merit-search-wrap {
+  position: relative;
+  min-width: 240px;
+}
+
+.sp-merit-search-input {
+  width: 100%;
+  padding: 8px 12px 8px 34px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  font-size: 13px;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.sp-merit-search-input:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.sp-merit-search-icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.sp-merit-swipe-hint {
+  display: none;
+}
+
+.sp-merit-table-scroll {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.sp-scorecard-card {
+  padding: 28px;
+}
+
+.sp-scorecard-heading {
+  font-size: 18px;
+  font-weight: 700;
+  margin: 0 0 16px 0;
+  color: #0f172a;
+}
+
+.sp-score-extra-line {
+  font-size: 14.5px;
+  margin-bottom: 10px;
+  color: #334155;
+}
+
+.sp-teacher-feedback-box {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.sp-tfb-title {
+  font-size: 13.5px;
+  color: #0f172a;
+}
+
+.sp-tfb-desc {
+  margin: 6px 0 0 0;
+  font-size: 13.5px;
+  color: #334155;
+  line-height: 1.5;
 }
 
 .sp-merit-page-header {
@@ -11218,17 +11818,50 @@ select:focus {
   color: #059669;
 }
 
+.sp-merit-view-profile-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 11px;
+  border-radius: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.16s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+.sp-merit-view-profile-btn:hover {
+  background: #eff6ff;
+  border-color: #93c5fd;
+  color: #1d4ed8;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.12);
+}
+
+.sp-merit-view-profile-btn:active {
+  transform: translateY(0);
+}
+
+.sp-merit-view-profile-btn svg {
+  flex-shrink: 0;
+}
+
 /* Mini Podium inside Merit List Popup */
 .sp-modal-podium-mini {
   display: flex;
   justify-content: center;
   align-items: flex-end;
   gap: 32px;
-  background: linear-gradient(135deg, #eff6ff 0%, #f5f3ff 50%, #fdf2f8 100%);
+  background: #ffffff;
   border-radius: 20px;
-  padding: 16px 20px 18px 20px;
-  margin-bottom: 20px;
-  border: 1px solid rgba(226, 232, 240, 0.9);
+  padding: 22px 20px 24px 20px;
+  margin-bottom: 22px;
+  border: 1px solid #e2e8f0;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.02);
 }
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import MeritListPage from './MeritListPage';
 
 export const toppersData = {
@@ -217,6 +217,20 @@ export default function TestsTab({
   const [perfChartSubject, setPerfChartSubject] = useState('All Subjects');
   const [hoveredPerfPoint, setHoveredPerfPoint] = useState(null);
   const [viewingMeritTest, setViewingMeritTest] = useState(null);
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return window.innerWidth <= 768;
+    }
+    return false;
+  });
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   if (viewingMeritTest) {
     return (
@@ -410,12 +424,12 @@ export default function TestsTab({
               const perfTests = currentPerfData.tests;
               const activePerfColor = currentPerfData.color;
 
-              const svgW = 860;
-              const svgH = 240;
-              const padL = 42;
-              const padR = 28;
-              const padT = 22;
-              const padB = 40;
+              const svgW = isMobile ? 360 : 860;
+              const svgH = isMobile ? 210 : 240;
+              const padL = isMobile ? 34 : 42;
+              const padR = isMobile ? 18 : 28;
+              const padT = isMobile ? 22 : 22;
+              const padB = isMobile ? 36 : 40;
               const pW = svgW - padL - padR;
               const pH = svgH - padT - padB;
 
@@ -439,12 +453,12 @@ export default function TestsTab({
 
               return (
                 <div className="sp-card sp-performance-card">
-                  <div className="sp-card-title-row" style={{ flexWrap: 'wrap', gap: '10px', marginBottom: '14px' }}>
-                    <div>
-                      <h4 style={{ margin: 0, fontSize: '16.5px', color: '#0f172a' }}>
+                  <div className="sp-card-title-row sp-perf-title-row">
+                    <div className="sp-perf-title-left">
+                      <h4 className="sp-perf-title">
                         Subject-wise Performance Trend
                       </h4>
-                      <p className="sp-sub-card-text" style={{ margin: '2px 0 0 0' }}>
+                      <p className="sp-sub-card-text">
                         Performance progression across center tests over time
                       </p>
                     </div>
@@ -515,10 +529,10 @@ export default function TestsTab({
                               strokeWidth="1"
                             />
                             <text
-                              x={padL - 8}
+                              x={padL - (isMobile ? 6 : 8)}
                               y={y + 3.5}
                               textAnchor="end"
-                              fontSize="10"
+                              fontSize={isMobile ? "9" : "10"}
                               fontWeight="600"
                               fill="#94a3b8"
                             >
@@ -542,11 +556,11 @@ export default function TestsTab({
                         x={svgW - padR}
                         y={getPtY(70) - 4}
                         textAnchor="end"
-                        fontSize="9.5"
+                        fontSize={isMobile ? "8.5" : "9.5"}
                         fontWeight="600"
                         fill="#94a3b8"
                       >
-                        70% Benchmark
+                        {isMobile ? '70% Goal' : '70% Benchmark'}
                       </text>
 
                       {/* Area Under Curve */}
@@ -557,7 +571,7 @@ export default function TestsTab({
                         d={perfPathD}
                         fill="none"
                         stroke={activePerfColor}
-                        strokeWidth="2.8"
+                        strokeWidth={isMobile ? "2.4" : "2.8"}
                         strokeLinecap="round"
                         strokeLinejoin="round"
                       />
@@ -567,37 +581,48 @@ export default function TestsTab({
                         const isHovered = hoveredPerfPoint?.id === pt.id;
                         return (
                           <g
-                            key={idx}
+                            key={pt.id || idx}
                             style={{ cursor: 'pointer' }}
-                            onMouseEnter={() => setHoveredPerfPoint(pt)}
-                            onMouseLeave={() => setHoveredPerfPoint(null)}
+                            onMouseEnter={() => !isMobile && setHoveredPerfPoint(pt)}
+                            onMouseLeave={() => !isMobile && setHoveredPerfPoint(null)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setHoveredPerfPoint(prev => (prev?.id === pt.id ? null : pt));
+                            }}
                           >
-                            {/* Outer hover halo */}
+                            {/* Transparent large touch hit target */}
+                            <circle
+                              cx={pt.x}
+                              cy={pt.y}
+                              r={isMobile ? 18 : 12}
+                              fill="transparent"
+                            />
+                            {/* Outer hover/tap halo */}
                             {isHovered && (
                               <circle
                                 cx={pt.x}
                                 cy={pt.y}
-                                r={10}
+                                r={isMobile ? 9 : 10}
                                 fill={activePerfColor}
-                                opacity="0.22"
+                                opacity="0.25"
                               />
                             )}
                             {/* White-filled point */}
                             <circle
                               cx={pt.x}
                               cy={pt.y}
-                              r={isHovered ? 6 : 4.5}
+                              r={isHovered ? (isMobile ? 5.5 : 6) : (isMobile ? 4 : 4.5)}
                               fill="#ffffff"
                               stroke={activePerfColor}
-                              strokeWidth="2.5"
+                              strokeWidth={isMobile ? "2.2" : "2.5"}
                               style={{ transition: 'all 0.15s ease' }}
                             />
                             {/* Score label above point */}
                             <text
                               x={pt.x}
-                              y={pt.y - 7}
+                              y={pt.y - (isMobile ? 6 : 7)}
                               textAnchor="middle"
-                              fontSize="10.5"
+                              fontSize={isMobile ? "9.5" : "10.5"}
                               fontWeight="700"
                               fill={isHovered ? activePerfColor : '#334155'}
                             >
@@ -606,9 +631,9 @@ export default function TestsTab({
                             {/* X-axis date label below */}
                             <text
                               x={pt.x}
-                              y={padT + pH + 16}
+                              y={padT + pH + (isMobile ? 14 : 16)}
                               textAnchor="middle"
-                              fontSize="10"
+                              fontSize={isMobile ? "9" : "10"}
                               fontWeight={isHovered ? '700' : '600'}
                               fill={isHovered ? '#0f172a' : '#64748b'}
                             >
@@ -619,8 +644,8 @@ export default function TestsTab({
                       })}
                     </svg>
 
-                    {/* Floating Tooltip */}
-                    {hoveredPerfPoint && (
+                    {/* Floating Tooltip (Desktop only) */}
+                    {!isMobile && hoveredPerfPoint && (
                       <div className="sp-perf-tooltip-floating">
                         <strong className="sp-ptt-title">{hoveredPerfPoint.testName}</strong>
                         <div className="sp-ptt-meta">
@@ -635,6 +660,61 @@ export default function TestsTab({
                       </div>
                     )}
                   </div>
+
+                  {/* Active Point Detail Card (Mobile & Touch Devices) */}
+                  {isMobile && hoveredPerfPoint && (
+                    <div className="sp-perf-point-detail-card">
+                      <div className="sp-ppdc-header">
+                        <div className="sp-ppdc-left">
+                          <span className="sp-ppdc-subject-pill" style={{ background: activePerfColor }}>
+                            {hoveredPerfPoint.subject}
+                          </span>
+                          <strong className="sp-ppdc-name">{hoveredPerfPoint.testName}</strong>
+                        </div>
+                        <button 
+                          type="button"
+                          className="sp-ppdc-close-btn" 
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setHoveredPerfPoint(null);
+                          }}
+                          aria-label="Close test details"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                      <div className="sp-ppdc-grid">
+                        <div className="sp-ppdc-stat">
+                          <span className="sp-ppdc-stat-label">Score</span>
+                          <strong className="sp-ppdc-stat-val" style={{ color: activePerfColor }}>
+                            {hoveredPerfPoint.score}%
+                          </strong>
+                        </div>
+                        <div className="sp-ppdc-stat">
+                          <span className="sp-ppdc-stat-label">Exam Date</span>
+                          <strong className="sp-ppdc-stat-val">{hoveredPerfPoint.date}</strong>
+                        </div>
+                        <div className="sp-ppdc-stat">
+                          <span className="sp-ppdc-stat-label">Center Rank</span>
+                          <strong className="sp-ppdc-stat-val">{hoveredPerfPoint.rank}</strong>
+                        </div>
+                      </div>
+                      {hoveredPerfPoint.remark && (
+                        <div className="sp-ppdc-remark">
+                          <span className="sp-ppdc-remark-icon">💡</span>
+                          <span><strong>Teacher Feedback:</strong> {hoveredPerfPoint.remark}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Tap Hint for Mobile when no point selected */}
+                  {isMobile && !hoveredPerfPoint && (
+                    <div className="sp-perf-tap-hint">
+                      <span className="sp-pth-icon">👆</span>
+                      <span>Tap any point on the graph to view scorecard & rank</span>
+                    </div>
+                  )}
                 </div>
               );
             })()}
@@ -648,7 +728,7 @@ export default function TestsTab({
       {isResultsView && (
         <div className="sp-subview-content">
           {/* 1. TOP: RECENT TEST LEADERBOARD */}
-          <div className="sp-leaderboard-hero-card" id="sp-topper-board">
+          <div className="sp-card sp-leaderboard-hero-card" id="sp-topper-board">
             {/* Header Strip */}
             <div className="sp-lb-header-row">
               <div className="sp-lb-title-group">
