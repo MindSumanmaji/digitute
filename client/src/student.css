@@ -3046,55 +3046,121 @@ select:focus {
 }
 
 .sp-profile-menu {
-  width: 220px;
-  padding: 8px;
+  width: 230px;
+  padding: 6px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  box-shadow: 0 12px 36px rgba(15, 23, 42, 0.12), 0 2px 6px rgba(15, 23, 42, 0.04);
+  top: calc(100% + 10px);
+  right: 0;
+  animation: spSlideUpModal 0.18s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .sp-profile-menu-head {
-  padding: 10px 12px 12px 12px;
+  padding: 10px 12px 10px 12px;
   border-bottom: 1px solid #f1f5f9;
   display: flex;
   flex-direction: column;
+  gap: 2px;
+  background: #f8fafc;
+  border-radius: 12px 12px 8px 8px;
+  margin-bottom: 6px;
 }
 
-.sp-profile-menu-head strong {
+.sp-pm-name-badge {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sp-pm-name-badge strong {
   font-size: 13.5px;
+  font-weight: 700;
   color: #0f172a;
 }
 
-.sp-profile-menu-head span {
-  font-size: 11px;
-  color: #64748b;
+.sp-pm-online-pill {
+  font-size: 9.5px;
+  font-weight: 700;
+  color: #15803d;
+  background: #dcfce7;
+  padding: 2px 7px;
+  border-radius: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
 }
 
-.sp-profile-menu button {
+.sp-pm-roll {
+  font-size: 11px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.sp-profile-menu-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sp-pm-item {
   width: 100%;
   text-align: left;
   padding: 9px 12px;
   background: transparent;
   border: none;
-  border-radius: 8px;
-  font-size: 13px;
+  border-radius: 10px;
+  font-size: 12.5px;
+  font-weight: 600;
   color: #334155;
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  transition: all 0.15s ease;
+  font-family: inherit;
 }
 
-.sp-profile-menu button:hover {
-  background: #f8fafc;
+.sp-pm-item:hover {
+  background: #f1f5f9;
   color: #0f172a;
+}
+
+.sp-pm-item-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  transition: transform 0.15s ease;
+}
+
+.sp-pm-item:hover .sp-pm-item-icon {
+  transform: scale(1.08);
+}
+
+.sp-pm-item-icon.blue { background: #eff6ff; color: #2563eb; }
+.sp-pm-item-icon.teal { background: #f0fdfa; color: #0d9488; }
+.sp-pm-item-icon.red { background: #fef2f2; color: #ef4444; }
+
+.sp-pm-item-text {
+  flex: 1;
 }
 
 .sp-menu-divider {
   height: 1px;
   background: #f1f5f9;
-  margin: 6px 0;
+  margin: 4px 6px;
 }
 
-.sp-menu-logout {
-  color: #ef4444 !important;
+.sp-pm-item.sp-menu-logout {
+  color: #ef4444;
+}
+
+.sp-pm-item.sp-menu-logout:hover {
+  background: #fef2f2;
+  color: #dc2626;
 }
 
 /* CONTENT BODY */
@@ -8133,8 +8199,10 @@ select:focus {
     top: 0 !important;
     bottom: 0 !important;
     left: 0 !important;
-    width: 285px !important;
-    max-width: 85vw !important;
+    width: 290px !important;
+    max-width: 86vw !important;
+    height: 100vh !important;
+    height: 100dvh !important; /* Mobile dynamic viewport */
     z-index: 1000 !important;
     transform: translateX(-105%) !important;
     transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1) !important;
@@ -8142,7 +8210,26 @@ select:focus {
     background: #ffffff !important;
     display: flex !important;
     flex-direction: column !important;
+    overflow: hidden !important; /* Contain inner scrolling */
+    box-sizing: border-box !important;
+  }
+
+  .sp-sidebar .sp-nav-menu {
+    flex: 1 1 auto !important;
     overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    min-height: 0 !important;
+    padding-bottom: 8px !important;
+  }
+
+  .sp-sidebar .sp-sidebar-bottom {
+    flex-shrink: 0 !important;
+    margin-top: auto !important;
+    padding: 10px 0 calc(14px + env(safe-area-inset-bottom, 0px)) 0 !important;
+    background: #ffffff !important;
+    border-top: 1px solid #f1f5f9 !important;
+    box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.03) !important;
+    z-index: 5 !important;
   }
 
   .sp-sidebar.mobile-open {
@@ -13978,3 +14065,1847 @@ select:focus {
   background: #f1f5f9;
   color: #0f172a;
 }
+
+/* ==========================================================================
+   PROFILE & SETTINGS PAGE + DIGITAL PROFILE CARD MODAL STYLES
+   ========================================================================== */
+
+.sp-profile-settings-page {
+  animation: spFadeIn 0.2s ease;
+  padding-bottom: 50px;
+  max-width: 680px;
+  margin: 0 auto;
+}
+
+/* 1. Top Header Nav */
+.sp-settings-top-nav {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding: 4px 0;
+}
+
+.sp-settings-back-btn {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  color: #1e293b;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  transition: all 0.15s ease;
+}
+
+.sp-settings-back-btn:hover {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  transform: translateX(-2px);
+}
+
+.sp-settings-header-title {
+  font-size: 22px;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+/* 2. Profile Hero Card matching screenshot */
+.sp-settings-hero-card {
+  background: linear-gradient(180deg, #edf5ff 0%, #f4f8fe 45%, #ffffff 100%);
+  border: 1px solid #e2e8f0;
+  border-radius: 28px;
+  padding: 30px 24px 26px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  box-shadow: 0 4px 20px rgba(37, 99, 235, 0.05);
+  margin-bottom: 24px;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Avatar container with camera badge and sparkle lines */
+.sp-sh-avatar-container {
+  position: relative;
+  margin-bottom: 14px;
+}
+
+.sp-sh-avatar-wrap {
+  position: relative;
+  width: 96px;
+  height: 96px;
+}
+
+.sp-sh-avatar-img {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 4px solid #ffffff;
+  box-shadow: 0 8px 24px rgba(37, 99, 235, 0.18);
+  display: block;
+}
+
+.sp-sh-avatar-badge {
+  position: absolute;
+  bottom: 0px;
+  right: 0px;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: #334155;
+  color: #ffffff;
+  border: 2.5px solid #ffffff;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  transition: all 0.15s ease;
+}
+
+.sp-sh-avatar-badge:hover {
+  background: #2563eb;
+  transform: scale(1.08);
+}
+
+.sp-sh-sparkles {
+  position: absolute;
+  top: 10px;
+  right: -24px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  transform: rotate(25deg);
+}
+
+.sp-sparkle-1 {
+  width: 12px;
+  height: 2.5px;
+  background: #3b82f6;
+  border-radius: 2px;
+}
+
+.sp-sparkle-2 {
+  width: 8px;
+  height: 2.5px;
+  background: #3b82f6;
+  border-radius: 2px;
+  margin-left: 3px;
+}
+
+/* Name & Handle */
+.sp-sh-info {
+  margin-bottom: 16px;
+}
+
+.sp-sh-name-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 3px;
+}
+
+.sp-sh-name {
+  font-size: 23px;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+.sp-sh-verified {
+  flex-shrink: 0;
+}
+
+.sp-sh-handle {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #64748b;
+  display: block;
+}
+
+/* Academic Details Pill Box */
+.sp-sh-details-box {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  padding: 12px 18px;
+  width: 100%;
+  max-width: 380px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+}
+
+.sp-sh-detail-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+  text-align: left;
+}
+
+.sp-sh-detail-icon {
+  font-size: 15px;
+  width: 20px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+/* View Profile Card Action Button */
+.sp-sh-view-card-btn {
+  background: #eff6ff;
+  border: 1.5px solid #bfdbfe;
+  color: #2563eb;
+  padding: 11px 22px;
+  border-radius: 14px;
+  font-size: 14px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  cursor: pointer;
+  box-shadow: 0 2px 10px rgba(37, 99, 235, 0.08);
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  width: 100%;
+  max-width: 380px;
+}
+
+.sp-sh-view-card-btn:hover {
+  background: #dbeafe;
+  border-color: #93c5fd;
+  color: #1d4ed8;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(37, 99, 235, 0.16);
+}
+
+.sp-sh-view-card-btn:active {
+  transform: translateY(0);
+}
+
+.sp-sh-vc-icon {
+  font-size: 17px;
+}
+
+.sp-sh-vc-arrow {
+  font-size: 16px;
+  font-weight: 800;
+  transition: transform 0.15s ease;
+}
+
+.sp-sh-view-card-btn:hover .sp-sh-vc-arrow {
+  transform: translateX(4px);
+}
+
+/* 3. Grouped Settings Sections */
+.sp-settings-group {
+  margin-bottom: 22px;
+}
+
+.sp-settings-group-title {
+  font-size: 13.5px;
+  font-weight: 800;
+  text-transform: capitalize;
+  color: #475569;
+  letter-spacing: -0.01em;
+  margin: 0 0 10px 6px;
+}
+
+.sp-settings-card-stack {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.02);
+}
+
+.sp-setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid #f1f5f9;
+  cursor: pointer;
+  transition: background 0.15s ease;
+  user-select: none;
+}
+
+.sp-setting-row:last-child {
+  border-bottom: none;
+}
+
+.sp-setting-row:hover:not(.no-hover) {
+  background: #f8fafc;
+}
+
+.sp-setting-row.no-hover {
+  cursor: default;
+}
+
+.sp-sr-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.sp-sr-icon-box {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.sp-sr-icon-box.green {
+  background: #ecfdf5;
+  color: #10b981;
+}
+
+.sp-sr-icon-box.red {
+  background: #fef2f2;
+  color: #ef4444;
+}
+
+.sp-sr-icon-box.blue {
+  background: #eff6ff;
+  color: #3b82f6;
+}
+
+.sp-sr-icon-box.cyan {
+  background: #f0fdfa;
+  color: #06b6d4;
+}
+
+.sp-sr-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.sp-sr-chevron {
+  font-size: 20px;
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+/* iOS Toggle Switch */
+.sp-ios-switch {
+  position: relative;
+  display: inline-block;
+  width: 48px;
+  height: 28px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.sp-ios-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.sp-ios-slider {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #cbd5e1;
+  transition: 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  border-radius: 34px;
+}
+
+.sp-ios-slider:before {
+  position: absolute;
+  content: "";
+  height: 22px;
+  width: 22px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  border-radius: 50%;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+}
+
+.sp-ios-switch input:checked + .sp-ios-slider {
+  background-color: #2563eb;
+}
+
+.sp-ios-switch input:checked + .sp-ios-slider:before {
+  transform: translateX(20px);
+}
+
+/* 4. Action Sub-Dialogs / Modals */
+.sp-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(4px);
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  animation: spFadeIn 0.15s ease;
+}
+
+.sp-dialog-box {
+  background: #ffffff;
+  border-radius: 22px;
+  padding: 24px;
+  width: 100%;
+  max-width: 420px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+  animation: spScaleIn 0.18s ease;
+}
+
+.sp-dialog-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 8px 0;
+}
+
+.sp-dialog-desc {
+  font-size: 13px;
+  color: #64748b;
+  margin: 0 0 16px 0;
+  line-height: 1.5;
+}
+
+.sp-dialog-input {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 12px;
+  font-size: 14px;
+  color: #0f172a;
+  outline: none;
+  box-sizing: border-box;
+  margin-bottom: 20px;
+  transition: border-color 0.15s ease;
+}
+
+.sp-dialog-input:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.sp-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.sp-dialog-cancel-btn {
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 16px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.sp-dialog-confirm-btn {
+  background: #2563eb;
+  border: none;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 8px 18px;
+  border-radius: 10px;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
+}
+
+.sp-dialog-photo-picker {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin-bottom: 20px;
+}
+
+.sp-dpp-current {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 3px solid #e2e8f0;
+}
+
+.sp-dpp-upload-btn {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #2563eb;
+  padding: 9px 16px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-block;
+}
+
+.sp-dialog-info-content {
+  font-size: 13.5px;
+  color: #334155;
+  line-height: 1.6;
+  margin-bottom: 20px;
+  background: #f8fafc;
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+}
+
+.sp-dialog-info-content p {
+  margin: 0 0 8px 0;
+}
+
+.sp-dialog-info-content p:last-child {
+  margin-bottom: 0;
+}
+
+/* ==========================================================================
+   5. DIGITAL PROFILE CARD MODAL (Exact twin of the right screenshot)
+   ========================================================================== */
+
+.sp-card-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(6px);
+  z-index: 1100;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 16px;
+  animation: spFadeIn 0.2s ease;
+}
+
+.sp-card-modal-container {
+  background: #ffffff;
+  border-radius: 32px;
+  width: 100%;
+  max-width: 440px;
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.22);
+  animation: spSlideUpModal 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+}
+
+@keyframes spSlideUpModal {
+  from {
+    opacity: 0;
+    transform: translateY(24px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.sp-card-modal-header {
+  padding: 16px 20px 8px 20px;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.sp-card-modal-drag-handle {
+  width: 44px;
+  height: 4.5px;
+  background: #cbd5e1;
+  border-radius: 3px;
+  margin: 0 auto 10px auto;
+}
+
+.sp-card-modal-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sp-card-modal-title {
+  font-size: 20px;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+.sp-card-modal-close-btn {
+  background: #f1f5f9;
+  border: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: #475569;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.sp-card-modal-close-btn:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.sp-card-modal-body {
+  padding: 8px 20px 24px 20px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  flex: 1;
+}
+
+/* Card Hero Section (Clean profile section without outer boxed card) */
+.sp-pcard-hero-banner {
+  background: transparent;
+  border-radius: 0;
+  padding: 8px 6px 16px 6px;
+  position: relative;
+  overflow: visible;
+  margin-bottom: 12px;
+  border: none;
+}
+
+.sp-pcard-hero-top {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  margin-bottom: 4px;
+}
+
+.sp-pcard-edit-btn {
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.sp-pcard-edit-btn:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+  transform: scale(1.05);
+}
+
+.sp-pcard-dots-btn {
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: #334155;
+  font-size: 16px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.sp-pcard-avatar-wrap {
+  width: 96px;
+  height: 96px;
+  margin: 0 auto 12px auto;
+  position: relative;
+}
+
+.sp-pcard-avatar-img {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 4px solid #ffffff;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.06);
+  display: block;
+}
+
+.sp-pcard-online-dot {
+  position: absolute;
+  bottom: 6px;
+  right: 6px;
+  width: 14px;
+  height: 14px;
+  background: #10b981;
+  border: 2.5px solid #ffffff;
+  border-radius: 50%;
+}
+
+.sp-pcard-identity {
+  text-align: center;
+}
+
+.sp-pcard-name-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+
+.sp-pcard-name {
+  font-size: 21px;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+
+.sp-pcard-handle {
+  font-size: 13px;
+  font-weight: 600;
+  color: #64748b;
+  display: block;
+  margin-bottom: 8px;
+}
+
+.sp-pcard-quote {
+  font-size: 13px;
+  font-style: italic;
+  color: #475569;
+  margin: 0;
+  line-height: 1.45;
+  padding: 0 10px;
+}
+
+/* Academic Chips Grid */
+.sp-pcard-chips-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.sp-pcard-chips-grid.single-chip {
+  grid-template-columns: 1fr;
+}
+
+.sp-pcard-chip {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+}
+
+.sp-chip-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.sp-chip-icon.blue { background: #eff6ff; }
+.sp-chip-icon.purple { background: #f5f3ff; }
+.sp-chip-icon.teal { background: #f0fdfa; }
+
+.sp-chip-text {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sp-chip-text strong {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sp-chip-text span {
+  font-size: 10px;
+  color: #64748b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 3 Metrics Row (Attendance, Avg Score, Rank) */
+.sp-pcard-metrics-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.sp-pcard-metric-card {
+  border-radius: 18px;
+  padding: 12px 10px 10px 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  border: 1px solid transparent;
+}
+
+.sp-pcard-metric-card.green {
+  background: #f0fdf4;
+  border-color: #dcfce7;
+}
+
+.sp-pcard-metric-card.blue {
+  background: #eff6ff;
+  border-color: #dbeafe;
+}
+
+.sp-pcard-metric-card.purple {
+  background: #faf5ff;
+  border-color: #f3e8ff;
+}
+
+.sp-pm-icon-wrap {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  margin-bottom: 6px;
+}
+
+.sp-pm-icon-wrap.green { background: #dcfce7; color: #15803d; }
+.sp-pm-icon-wrap.blue { background: #dbeafe; color: #1d4ed8; }
+.sp-pm-icon-wrap.purple { background: #f3e8ff; color: #7e22ce; }
+
+.sp-pm-val {
+  font-size: 17px;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.02em;
+}
+
+.sp-pm-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #475569;
+  margin-top: 1px;
+}
+
+.sp-pm-sub {
+  font-size: 9.5px;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+.sp-pm-trend {
+  font-size: 9.5px;
+  font-weight: 700;
+  color: #15803d;
+  margin-top: 2px;
+}
+
+/* Subjects Strength Section */
+.sp-pcard-section {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 20px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+}
+
+.sp-pcard-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.sp-pcard-section-title {
+  font-size: 14.5px;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0;
+}
+
+.sp-pcard-link-btn {
+  background: none;
+  border: none;
+  color: #2563eb;
+  font-size: 12px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.sp-pcard-link-btn:hover {
+  text-decoration: underline;
+}
+
+.sp-pcard-subjects-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.sp-pcard-subject-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sp-pcard-sub-icon-wrap {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.sp-pcard-sub-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #1e293b;
+  width: 90px;
+  flex-shrink: 0;
+}
+
+.sp-pcard-sub-bar-track {
+  flex: 1;
+  height: 7px;
+  background: #f1f5f9;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.sp-pcard-sub-bar-fill {
+  height: 100%;
+  border-radius: 10px;
+  transition: width 1s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: width;
+}
+
+.sp-pcard-sub-pct {
+  font-size: 12px;
+  font-weight: 700;
+  color: #0f172a;
+  width: 34px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+/* Bottom Grid (Tests Taken & Best Score) */
+.sp-pcard-bottom-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.sp-pcard-summary-card {
+  border-radius: 16px;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid transparent;
+}
+
+.sp-pcard-summary-card.purple {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}
+
+.sp-pcard-summary-card.blue {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+}
+
+.sp-psc-icon-box {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.sp-psc-icon-box.purple {
+  background: #f3e8ff;
+}
+
+.sp-psc-icon-box.blue {
+  background: #e0f2fe;
+}
+
+.sp-psc-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.sp-psc-label {
+  font-size: 10.5px;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.sp-psc-val {
+  font-size: 16px;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.01em;
+  margin: 1px 0;
+}
+
+.sp-psc-sub {
+  font-size: 10px;
+  color: #64748b;
+}
+
+/* Quote Inline Editing Area */
+.sp-pcard-quote-edit-box {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  animation: spFadeIn 0.2s ease;
+}
+
+.sp-pcard-quote-input {
+  width: 100%;
+  font-family: inherit;
+  font-size: 13px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: 1.5px solid #3b82f6;
+  outline: none;
+  background: #ffffff;
+  color: #0f172a;
+  resize: vertical;
+  min-height: 60px;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+.sp-pcard-quote-edit-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.sp-pcard-quote-save-btn {
+  background: #2563eb;
+  color: #ffffff;
+  border: none;
+  border-radius: 10px;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.sp-pcard-quote-save-btn:hover {
+  background: #1d4ed8;
+}
+
+.sp-pcard-quote-cancel-btn {
+  background: #f1f5f9;
+  color: #475569;
+  border: none;
+  border-radius: 10px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.sp-pcard-quote-cancel-btn:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+/* Edit Mode Indicator Bar */
+.sp-pcard-edit-mode-bar {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 14px;
+  padding: 8px 14px;
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  animation: spFadeIn 0.2s ease;
+}
+
+.sp-pcard-edit-mode-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #1d4ed8;
+}
+
+.sp-pcard-edit-mode-tag {
+  background: #2563eb;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 6px;
+  letter-spacing: 0.5px;
+}
+
+.sp-pcard-edit-mode-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Floating Red Cross Badge to Remove Box */
+.sp-pcard-remove-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #ef4444;
+  color: #ffffff;
+  border: 2px solid #ffffff;
+  box-shadow: 0 2px 6px rgba(239, 68, 68, 0.4);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  z-index: 5;
+  transition: all 0.15s ease;
+  animation: spPopIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.sp-pcard-remove-badge:hover {
+  background: #dc2626;
+  transform: scale(1.15);
+}
+
+@keyframes spPopIn {
+  from {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Relative positioning for removable card containers */
+.sp-pcard-removable-wrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.sp-pcard-removable-row {
+  position: relative;
+}
+
+/* Add Card Dropdown Trigger & Floating Menu */
+.sp-pcard-add-section-wrap {
+  margin-top: 14px;
+  position: relative;
+}
+
+.sp-pcard-add-btn-trigger {
+  width: 100%;
+  background: #f8fafc;
+  border: 1.5px dashed #cbd5e1;
+  border-radius: 16px;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #2563eb;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.sp-pcard-add-btn-trigger:hover {
+  background: #eff6ff;
+  border-color: #93c5fd;
+  color: #1d4ed8;
+}
+
+.sp-pcard-add-dropdown-menu {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.15);
+  padding: 8px;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 220px;
+  overflow-y: auto;
+  animation: spSlideUpModal 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.sp-pcard-add-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 12px;
+  border-radius: 12px;
+  border: none;
+  background: transparent;
+  width: 100%;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  font-family: inherit;
+}
+
+.sp-pcard-add-item:hover {
+  background: #f1f5f9;
+}
+
+.sp-pcard-add-item-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.sp-pcard-add-item-left span.sp-pcard-item-tag {
+  font-size: 10px;
+  font-weight: 600;
+  color: #64748b;
+  background: #f1f5f9;
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+
+.sp-pcard-add-item-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: #eff6ff;
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.sp-pcard-add-item-plus {
+  font-size: 12px;
+  font-weight: 800;
+  color: #2563eb;
+  background: #dbeafe;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+}
+
+/* Modal Bottom Sticky Save Changes Bar */
+.sp-pcard-modal-footer-save {
+  padding: 12px 20px;
+  background: #ffffff;
+  border-top: 1px solid #f1f5f9;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  animation: spSlideUpModal 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.sp-pcard-save-main-btn {
+  flex: 1;
+  background: #2563eb;
+  color: #ffffff;
+  border: none;
+  border-radius: 14px;
+  padding: 11px 18px;
+  font-size: 13.5px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.25);
+  transition: all 0.2s ease;
+}
+
+.sp-pcard-save-main-btn:hover {
+  background: #1d4ed8;
+  transform: translateY(-1px);
+}
+
+.sp-pcard-cancel-main-btn {
+  background: #f1f5f9;
+  color: #475569;
+  border: none;
+  border-radius: 14px;
+  padding: 11px 16px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.sp-pcard-cancel-main-btn:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+/* Responsive adjustments for Profile & Settings & Profile Card Modal */
+@media (max-width: 640px) {
+  .sp-profile-settings-page {
+    padding-bottom: 70px;
+  }
+  .sp-settings-hero-card {
+    padding: 20px 14px 18px 14px;
+    border-radius: 22px;
+  }
+  .sp-sh-avatar-wrap,
+  .sp-sh-avatar-img {
+    width: 80px;
+    height: 80px;
+  }
+  .sp-sh-name {
+    font-size: 19px;
+  }
+  .sp-sh-view-card-btn {
+    font-size: 13px;
+    padding: 9px 16px;
+  }
+
+  /* Profile Card Modal Backdrop & Container */
+  .sp-card-modal-backdrop {
+    padding: 10px;
+    align-items: flex-end; /* Mobile bottom sheet style */
+  }
+
+  .sp-card-modal-container {
+    max-width: 100%;
+    width: 100%;
+    max-height: 88vh;
+    border-radius: 26px 26px 18px 18px;
+  }
+
+  .sp-card-modal-header {
+    padding: 12px 16px 6px 16px;
+  }
+
+  .sp-card-modal-body {
+    padding: 6px 14px 20px 14px;
+  }
+
+  /* Hero Banner & Avatar */
+  .sp-pcard-hero-banner {
+    padding: 4px 4px 12px 4px;
+    margin-bottom: 10px;
+  }
+
+  .sp-pcard-avatar-wrap,
+  .sp-pcard-avatar-img {
+    width: 82px;
+    height: 82px;
+  }
+
+  .sp-pcard-name {
+    font-size: 19px;
+  }
+
+  .sp-pcard-handle {
+    font-size: 12px;
+    margin-bottom: 6px;
+  }
+
+  .sp-pcard-quote {
+    font-size: 12px;
+    line-height: 1.4;
+    padding: 0 4px;
+  }
+
+  /* Academic Chips Grid */
+  .sp-pcard-chips-grid {
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
+  .sp-pcard-chip {
+    padding: 7px 8px;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .sp-chip-icon {
+    width: 28px;
+    height: 28px;
+    font-size: 13px;
+    flex-shrink: 0;
+  }
+
+  .sp-chip-text {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .sp-chip-text strong {
+    font-size: 11px;
+    line-height: 1.3;
+  }
+
+  .sp-chip-text span {
+    font-size: 9.5px;
+  }
+
+  /* 3 Metrics Row */
+  .sp-pcard-metrics-row {
+    gap: 6px;
+    margin-bottom: 14px;
+  }
+
+  .sp-pcard-metric-card {
+    padding: 9px 5px 8px 5px;
+    border-radius: 14px;
+    min-width: 0;
+  }
+
+  .sp-pm-icon-wrap {
+    width: 28px;
+    height: 28px;
+    margin-bottom: 4px;
+  }
+
+  .sp-pm-icon-wrap svg {
+    width: 15px;
+    height: 15px;
+  }
+
+  .sp-pm-val {
+    font-size: 15px;
+    line-height: 1.2;
+  }
+
+  .sp-pm-label {
+    font-size: 10px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .sp-pm-sub,
+  .sp-pm-trend {
+    font-size: 9px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Subjects Strength */
+  .sp-pcard-section {
+    padding: 12px 12px;
+    border-radius: 16px;
+    margin-bottom: 12px;
+  }
+
+  .sp-pcard-section-title {
+    font-size: 13.5px;
+  }
+
+  .sp-pcard-sub-name {
+    width: 75px;
+    font-size: 11.5px;
+  }
+
+  .sp-pcard-sub-pct {
+    font-size: 11px;
+    width: 30px;
+  }
+
+  /* Bottom Tests Cards */
+  .sp-pcard-bottom-grid {
+    gap: 8px;
+  }
+
+  .sp-pcard-summary-card {
+    padding: 10px 10px;
+    gap: 8px;
+    border-radius: 14px;
+    min-width: 0;
+  }
+
+  .sp-psc-icon-box {
+    width: 32px;
+    height: 32px;
+    font-size: 15px;
+  }
+
+  .sp-psc-label {
+    font-size: 10px;
+  }
+
+  .sp-psc-val {
+    font-size: 14.5px;
+  }
+
+  .sp-psc-sub {
+    font-size: 9px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Save Changes Footer Bar */
+  .sp-pcard-modal-footer-save {
+    padding: 10px 14px;
+    gap: 8px;
+  }
+
+  .sp-pcard-save-main-btn {
+    padding: 10px 14px;
+    font-size: 12.5px;
+  }
+
+  .sp-pcard-cancel-main-btn {
+    padding: 10px 12px;
+    font-size: 12px;
+  }
+}
+
+/* Extra small mobile screens (<= 380px) */
+@media (max-width: 380px) {
+  .sp-pcard-chips-grid {
+    grid-template-columns: 1fr;
+  }
+  .sp-pcard-sub-name {
+    width: 65px;
+    font-size: 11px;
+  }
+  .sp-pm-val {
+    font-size: 13.5px;
+  }
+}
+
+/* ==========================================================================
+   STUDENT FULL PROFILE PAGE (Refined Rita Smith layout with custom details)
+   ========================================================================== */
+.sp-student-full-profile-page {
+  background: #ffffff;
+  min-height: calc(100vh - 120px);
+  border-radius: 28px;
+  overflow: hidden;
+  box-shadow: 0 4px 24px rgba(15, 23, 42, 0.05);
+  border: 1px solid #e2e8f0;
+  max-width: 520px;
+  margin: 0 auto;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+@media (max-width: 640px) {
+  .sp-student-full-profile-page {
+    border-radius: 0;
+    border: none;
+    box-shadow: none;
+    min-height: 100vh;
+    margin: -14px -12px 0 -12px;
+  }
+}
+
+/* Light Sky Blue Header Banner */
+.sp-sfp-banner {
+  height: 165px;
+  background: #bae6fd;
+  background: linear-gradient(135deg, #7dd3fc 0%, #bae6fd 50%, #e0f2fe 100%);
+  position: relative;
+  flex-shrink: 0;
+  padding: 16px;
+  overflow: hidden;
+}
+
+.sp-sfp-banner-mesh {
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.4) 1.2px, transparent 1.2px);
+  background-size: 16px 16px;
+  opacity: 0.7;
+}
+
+.sp-sfp-back-btn {
+  position: relative;
+  z-index: 2;
+  background: rgba(255, 255, 255, 0.95);
+  border: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: #0369a1;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(3, 105, 161, 0.12);
+  transition: all 0.15s ease;
+}
+
+.sp-sfp-back-btn:hover {
+  background: #ffffff;
+  color: #0284c7;
+  transform: translateX(-2px);
+}
+
+.sp-sfp-body-container {
+  padding: 0 24px 32px 24px;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  flex: 1;
+}
+
+/* Avatar positioned halfway over the banner seam */
+.sp-sfp-avatar-wrap {
+  width: 114px;
+  height: 114px;
+  margin: -57px auto 14px auto;
+  position: relative;
+  z-index: 2;
+}
+
+.sp-sfp-avatar-bg-glow {
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #38bdf8, #7dd3fc);
+  opacity: 0.3;
+  filter: blur(6px);
+}
+
+.sp-sfp-avatar-img {
+  width: 114px;
+  height: 114px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 4px solid #ffffff;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+  display: block;
+  position: relative;
+  z-index: 1;
+}
+
+/* Info header */
+.sp-sfp-info-header {
+  text-align: center;
+  margin-bottom: 18px;
+}
+
+.sp-sfp-name {
+  font-size: 24px;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.02em;
+  margin: 0 0 16px 0;
+}
+
+.sp-sfp-meta-list {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  max-width: 400px;
+  margin: 0 auto;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 18px;
+  padding: 12px 18px;
+}
+
+.sp-sfp-meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13.5px;
+}
+
+.sp-sfp-meta-label {
+  color: #64748b;
+  font-weight: 600;
+  width: 80px;
+  text-align: left;
+}
+
+.sp-sfp-meta-val {
+  color: #0f172a;
+  font-weight: 700;
+  text-align: right;
+  flex: 1;
+  word-break: break-word;
+}
+
+/* View Profile Card Button inside StudentProfilePage */
+.sp-sfp-card-btn-wrap {
+  margin-top: 14px;
+  display: flex;
+  justify-content: center;
+}
+
+.sp-sfp-view-card-btn {
+  background: #eff6ff;
+  border: 1.5px solid #bfdbfe;
+  color: #2563eb;
+  padding: 10px 20px;
+  border-radius: 14px;
+  font-size: 13.5px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.08);
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  width: 100%;
+  max-width: 400px;
+}
+
+.sp-sfp-view-card-btn:hover {
+  background: #dbeafe;
+  border-color: #93c5fd;
+  color: #1d4ed8;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(37, 99, 235, 0.15);
+}
+
+.sp-sfp-view-card-btn:active {
+  transform: translateY(0);
+}
+
+.sp-sfp-vc-icon {
+  font-size: 16px;
+}
+
+.sp-sfp-vc-arrow {
+  font-size: 15px;
+  font-weight: 800;
+  transition: transform 0.15s ease;
+}
+
+.sp-sfp-view-card-btn:hover .sp-sfp-vc-arrow {
+  transform: translateX(4px);
+}
+
+/* Divider */
+.sp-sfp-divider {
+  height: 1px;
+  background: #f1f5f9;
+  width: 100%;
+  margin: 6px 0 10px 0;
+}
+
+/* Action Menu rows */
+.sp-sfp-menu-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-width: 440px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.sp-sfp-menu-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 13px 10px;
+  border-bottom: 1px solid #f8fafc;
+}
+
+.sp-sfp-menu-row:last-child {
+  border-bottom: none;
+}
+
+.sp-sfp-menu-row.clickable {
+  cursor: pointer;
+  border-radius: 14px;
+  transition: all 0.15s ease;
+}
+
+.sp-sfp-menu-row.clickable:hover {
+  background: #f8fafc;
+}
+
+.sp-sfp-menu-row.clickable:active {
+  background: #f1f5f9;
+}
+
+.sp-sfp-row-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.sp-sfp-row-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.sp-sfp-row-icon.cyan { background: #f0fdfa; color: #0d9488; }
+.sp-sfp-row-icon.blue { background: #eff6ff; color: #2563eb; }
+.sp-sfp-row-icon.purple { background: #faf5ff; color: #8b5cf6; }
+.sp-sfp-row-icon.red { background: #fef2f2; color: #ef4444; }
+
+.sp-sfp-row-label {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.sp-sfp-row-arrow {
+  font-size: 20px;
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+.sp-sfp-menu-row.logout .sp-sfp-row-label {
+  color: #ef4444;
+}

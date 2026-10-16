@@ -70,10 +70,10 @@ export default function Sidebar({
         <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
       </svg>
     ),
-    profile: (
+    settings: (
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="8" r="5"/>
-        <path d="M20 21a8 8 0 0 0-16 0"/>
+        <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
+        <circle cx="12" cy="12" r="3"/>
       </svg>
     ),
     logout: (
@@ -206,15 +206,15 @@ export default function Sidebar({
       {/* Bottom Sidebar */}
       <div className="sp-sidebar-bottom">
         <button 
-          className={`sp-nav-item ${activeTab === 'profile' ? 'active' : ''}`}
+          className={`sp-nav-item ${activeTab === 'settings' ? 'active' : ''}`}
           onClick={() => {
-            setActiveTab('profile');
+            setActiveTab('settings');
             if (setMobileSidebarOpen) setMobileSidebarOpen(false);
           }}
         >
-          {activeTab === 'profile' && <div className="sp-nav-indicator" />}
-          <span className="sp-nav-icon">{icons.profile}</span>
-          <span className="sp-nav-label">Profile & Settings</span>
+          {activeTab === 'settings' && <div className="sp-nav-indicator" />}
+          <span className="sp-nav-icon">{icons.settings}</span>
+          <span className="sp-nav-label">Settings</span>
         </button>
         
         <button 
