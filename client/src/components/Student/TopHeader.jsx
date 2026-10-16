@@ -10,6 +10,7 @@ export default function TopHeader({
   onBackToLanding,
   mobileSidebarOpen,
   setMobileSidebarOpen,
+  onOpenMobileProfile,
 }) {
   return (
     <header className="sp-top-header">
@@ -61,7 +62,13 @@ export default function TopHeader({
         <div className="sp-profile-wrapper">
           <div 
             className="sp-profile-chip" 
-            onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
+            onClick={() => {
+              if (window.innerWidth <= 768) {
+                setActiveTab('profile');
+              } else {
+                setProfileDropdownOpen(!profileDropdownOpen);
+              }
+            }}
           >
             <img 
               src="/student-avatar.jpg" 
@@ -81,22 +88,53 @@ export default function TopHeader({
           {profileDropdownOpen && (
             <div className="sp-popover-menu sp-profile-menu">
               <div className="sp-profile-menu-head">
-                <strong>Suman Maji</strong>
-                <span>Roll: 12-SCI-042</span>
+                <div className="sp-pm-name-badge">
+                  <strong>Suman Maji</strong>
+                  <span className="sp-pm-online-pill">Active</span>
+                </div>
+                <span className="sp-pm-roll">Roll: 12-SCI-042</span>
               </div>
-              <button onClick={() => { setActiveTab('profile'); setProfileDropdownOpen(false); }}>
-                👤 View Full Profile
-              </button>
-              <button onClick={() => { setActiveTab('classes'); setProfileDropdownOpen(false); }}>
-                📅 Class Schedule & Attendance
-              </button>
-              <button onClick={() => { setActiveTab('fees'); setProfileDropdownOpen(false); }}>
-                💳 Fee Ledger & Receipts
-              </button>
-              <div className="sp-menu-divider" />
-              <button className="sp-menu-logout" onClick={onBackToLanding}>
-                🚪 Logout to Website
-              </button>
+              <div className="sp-profile-menu-body">
+                <button 
+                  className="sp-pm-item"
+                  onClick={() => { setActiveTab('profile'); setProfileDropdownOpen(false); }}
+                >
+                  <span className="sp-pm-item-icon blue">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                      <circle cx="12" cy="7" r="4"/>
+                    </svg>
+                  </span>
+                  <span className="sp-pm-item-text">View Full Profile</span>
+                </button>
+                <button 
+                  className="sp-pm-item"
+                  onClick={() => { setActiveTab('profile'); setProfileDropdownOpen(false); }}
+                >
+                  <span className="sp-pm-item-icon teal">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="10"/>
+                      <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+                      <line x1="12" y1="17" x2="12.01" y2="17"/>
+                    </svg>
+                  </span>
+                  <span className="sp-pm-item-text">Help & Support</span>
+                </button>
+                <div className="sp-menu-divider" />
+                <button 
+                  className="sp-pm-item sp-menu-logout" 
+                  onClick={onBackToLanding}
+                >
+                  <span className="sp-pm-item-icon red">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                      <polyline points="16 17 21 12 16 7"/>
+                      <line x1="21" y1="12" x2="9" y2="12"/>
+                    </svg>
+                  </span>
+                  <span className="sp-pm-item-text">Logout</span>
+                </button>
+              </div>
             </div>
           )}
         </div>

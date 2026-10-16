@@ -10,10 +10,11 @@ import FeesTab from './components/Student/FeesTab';
 import DoubtCornerTab from './components/Student/DoubtCornerTab';
 import AnnouncementsTab from './components/Student/AnnouncementsTab';
 import ProfileTab from './components/Student/ProfileTab';
+import StudentProfilePage from './components/Student/StudentProfilePage';
 import PaymentModal from './components/Student/PaymentModal';
 
 export default function StudentPanel({ onBackToLanding }) {
-  // Navigation active tab: 'dashboard' | 'classes' | 'materials' | 'assignments' | 'tests' | 'results' | 'performance' | 'fees' | 'doubts' | 'announcements' | 'profile'
+  // Navigation active tab: 'dashboard' | 'classes' | 'materials' | 'assignments' | 'tests' | 'results' | 'performance' | 'fees' | 'doubts' | 'announcements' | 'settings' | 'profile'
   const [activeTab, setActiveTab] = useState('dashboard');
   const [testsMenuOpen, setTestsMenuOpen] = useState(true);
   const [testSubTab, setTestSubTab] = useState('performance'); // 'performance' | 'results'
@@ -49,14 +50,7 @@ export default function StudentPanel({ onBackToLanding }) {
         </div>
       )}
 
-      {/* Floating Switcher to return to Landing Page */}
-      <button
-        className="sp-floating-switch-btn"
-        onClick={onBackToLanding}
-        title="Return to DigiTute Institute Home Website"
-      >
-        <span>🌐</span> DigiTute Website ↗
-      </button>
+
 
       {/* Backdrop for mobile drawer */}
       {mobileSidebarOpen && (
@@ -91,6 +85,7 @@ export default function StudentPanel({ onBackToLanding }) {
           onBackToLanding={onBackToLanding}
           mobileSidebarOpen={mobileSidebarOpen}
           setMobileSidebarOpen={setMobileSidebarOpen}
+          onOpenMobileProfile={() => setMobileProfileOpen(true)}
         />
 
         {/* TAB CONTENTS */}
@@ -138,7 +133,15 @@ export default function StudentPanel({ onBackToLanding }) {
           )}
 
           {activeTab === 'profile' && (
-            <ProfileTab showToast={showToast} />
+            <StudentProfilePage 
+              onBack={() => setActiveTab('dashboard')}
+              onOpenSettings={() => setActiveTab('settings')}
+              onLogout={onBackToLanding}
+            />
+          )}
+
+          {activeTab === 'settings' && (
+            <ProfileTab showToast={showToast} onBack={() => setActiveTab('dashboard')} />
           )}
         </main>
       </div>

@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { toppersData } from './TestsTab';
+import StudentProfileCardModal from './StudentProfileCardModal';
 
 export default function MeritListPage({ test, onBack, showToast }) {
   const [activeTab, setActiveTab] = useState('list'); // 'list' | 'scorecard'
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedStudentForCard, setSelectedStudentForCard] = useState(null);
 
   if (!test) return null;
 
@@ -268,9 +270,27 @@ export default function MeritListPage({ test, onBack, showToast }) {
                           type="button"
                           className="sp-merit-view-profile-btn"
                           onClick={() => {
-                            if (showToast) {
-                              showToast(`Viewing profile of ${st.name} (${st.roll}) will be available soon!`);
-                            }
+                            setSelectedStudentForCard({
+                              name: st.name.replace(' (You)', ''),
+                              handle: '@' + st.name.toLowerCase().replace(/[^a-z0-9]/g, ''),
+                              roll: st.roll,
+                              photo: st.photo || '/student-avatar.jpg',
+                              badge: st.rank === 1 ? 'Gold' : st.rank <= 3 ? 'Silver' : 'Bronze',
+                              rank: `#${st.rank} of ${fullMeritList.length}`,
+                              rankSub: 'Rank (Batch)',
+                              rankTrend: st.rank <= 3 ? 'Topper Group' : 'Consistent',
+                              attendancePct: 88 + (st.rank % 7),
+                              avgScorePct: st.pct ? parseInt(st.pct) : 80,
+                              className: 'Class XII',
+                              stream: 'Science',
+                              batch: 'Batch A (Offline)',
+                              session: '2026 (July - Dec)',
+                              quote: st.rank === 1 ? '"Excellence is not an act, but a habit."' : '"Consistent study today, bigger opportunities tomorrow."',
+                              testsTaken: 12,
+                              totalTests: 20,
+                              bestScore: `${st.score}/${st.total}`,
+                              bestScoreTest: test.name
+                            });
                           }}
                           title={`View ${st.name}'s Profile`}
                         >
@@ -340,6 +360,14 @@ export default function MeritListPage({ test, onBack, showToast }) {
           </div>
         </div>
       )}
+
+      {/* Profile Card Modal for Viewed Student */}
+      <StudentProfileCardModal 
+        isOpen={Boolean(selectedStudentForCard)}
+        onClose={() => setSelectedStudentForCard(null)}
+        studentData={selectedStudentForCard}
+        showToast={showToast}
+      />
     </div>
   );
 }
