@@ -6,10 +6,31 @@ export function Header({
   onToggleSidebar,
   onNotificationClick,
   onProfileClick,
-  onTabChange
+  onTabChange,
+  user
 }) {
   const getStoredTeacher = () => {
+    if (user && user.full_name) {
+      return {
+        name: user.full_name,
+        username: user.email ? `@${user.email.split('@')[0]}` : '@sudipta',
+        avatarUrl: user.avatar_url || '',
+        role: user.specialization ? `${user.specialization} Faculty` : 'Faculty of DigiTute'
+      };
+    }
     try {
+      const userStr = localStorage.getItem('digitute_user');
+      if (userStr) {
+        const u = JSON.parse(userStr);
+        if (u.role === 'TEACHER' || u.full_name) {
+          return {
+            name: u.full_name || 'Sudipta Sir',
+            username: u.email ? `@${u.email.split('@')[0]}` : '@sudipta',
+            avatarUrl: u.avatar_url || '',
+            role: u.specialization ? `${u.specialization} Faculty` : 'Faculty of DigiTute'
+          };
+        }
+      }
       const saved = localStorage.getItem('digitute_teacher_profile');
       if (saved) {
         const parsed = JSON.parse(saved);
@@ -31,7 +52,11 @@ export function Header({
 
   const [teacher, setTeacher] = useState(getStoredTeacher);
 
-  // Sync teacher info when profile is updated in Settings
+  // Sync teacher info when user prop changes or profile is updated in Settings
+  useEffect(() => {
+    setTeacher(getStoredTeacher());
+  }, [user]);
+
   useEffect(() => {
     const handleProfileUpdate = () => {
       setTeacher(getStoredTeacher());
@@ -42,7 +67,7 @@ export function Header({
       window.removeEventListener('digitute-profile-updated', handleProfileUpdate);
       window.removeEventListener('storage', handleProfileUpdate);
     };
-  }, []);
+  }, [user]);
 
   const getPageTitle = (page) => {
     switch (page) {
@@ -169,7 +194,7 @@ export function Header({
             {/* Desktop Teacher Tag */}
             <div className="dt-header-teacher-meta">
               <span className="dt-header-teacher-name">{teacher.name}</span>
-              <span className="dt-header-teacher-status">Faculty of DigiTute</span>
+              <span className="dt-header-teacher-status">{teacher.role || 'Faculty of DigiTute'}</span>
             </div>
           </div>
         </div>

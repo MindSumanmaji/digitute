@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Sidebar from './components/Student/Sidebar';
 import TopHeader from './components/Student/TopHeader';
 import DashboardTab from './components/Student/DashboardTab';
@@ -12,12 +12,48 @@ import AnnouncementsTab from './components/Student/AnnouncementsTab';
 import ProfileTab from './components/Student/ProfileTab';
 import StudentProfilePage from './components/Student/StudentProfilePage';
 import PaymentModal from './components/Student/PaymentModal';
+import { apiRequest } from './api';
 
 export default function StudentPanel({ onBackToLanding }) {
   // Navigation active tab: 'dashboard' | 'classes' | 'materials' | 'assignments' | 'tests' | 'results' | 'performance' | 'fees' | 'doubts' | 'announcements' | 'settings' | 'profile'
   const [activeTab, setActiveTab] = useState('dashboard');
   const [testsMenuOpen, setTestsMenuOpen] = useState(true);
   const [testSubTab, setTestSubTab] = useState('performance'); // 'performance' | 'results'
+
+  // Current logged in student user
+  const [currentUser, setCurrentUser] = useState(() => {
+    try {
+      const stored = localStorage.getItem('digitute_user');
+      return stored ? JSON.parse(stored) : null;
+    } catch (e) {
+      return null;
+    }
+  });
+
+  // Auth Guard & live profile fetch
+  useEffect(() => {
+    const token = localStorage.getItem('digitute_token');
+    const refreshToken = localStorage.getItem('digitute_refresh_token');
+    if (!token && !refreshToken) {
+      if (onBackToLanding) onBackToLanding();
+      return;
+    }
+
+    let isMounted = true;
+    apiRequest('/api/student/my-profile')
+      .then((profile) => {
+        if (isMounted && profile) {
+          setCurrentUser((prev) => ({ ...prev, ...profile }));
+        }
+      })
+      .catch((err) => {
+        console.warn('Student profile fetch error:', err.message);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [onBackToLanding]);
 
   // Header popovers & feedback
   const [notificationOpen, setNotificationOpen] = useState(false);
@@ -40,6 +76,15 @@ export default function StudentPanel({ onBackToLanding }) {
     setPayModalOpen(false);
     showToast('Payment of ₹600 received successfully! Receipt generated.');
   };
+
+  const studentProfileData = currentUser ? {
+    name: currentUser.full_name || 'Suman Maji',
+    batch: (Array.isArray(currentUser.batches) ? currentUser.batches[0]?.name : currentUser.batches?.name) || currentUser.batch || 'Class XII - Science (Batch A)',
+    session: '2026 (July - Dec)',
+    phone: currentUser.phone || '+91 98301 11222',
+    email: currentUser.email || 'suman.maji@digitute.app',
+    photo: currentUser.photo || '/student-avatar.jpg'
+  } : undefined;
 
   return (
     <div className="sp-layout-root">
@@ -85,13 +130,13 @@ export default function StudentPanel({ onBackToLanding }) {
           onBackToLanding={onBackToLanding}
           mobileSidebarOpen={mobileSidebarOpen}
           setMobileSidebarOpen={setMobileSidebarOpen}
-          onOpenMobileProfile={() => setMobileProfileOpen(true)}
+          user={currentUser}
         />
 
         {/* TAB CONTENTS */}
         <main className="sp-content-body">
           {activeTab === 'dashboard' && (
-            <DashboardTab setActiveTab={setActiveTab} />
+            <DashboardTab setActiveTab={setActiveTab} user={currentUser} />
           )}
 
           {activeTab === 'classes' && (
@@ -134,6 +179,7 @@ export default function StudentPanel({ onBackToLanding }) {
 
           {activeTab === 'profile' && (
             <StudentProfilePage 
+              studentProfile={studentProfileData}
               onBack={() => setActiveTab('dashboard')}
               onOpenSettings={() => setActiveTab('settings')}
               onLogout={onBackToLanding}
@@ -141,7 +187,7 @@ export default function StudentPanel({ onBackToLanding }) {
           )}
 
           {activeTab === 'settings' && (
-            <ProfileTab showToast={showToast} onBack={() => setActiveTab('dashboard')} />
+            <ProfileTab showToast={showToast} onBack={() => setActiveTab('dashboard')} user={currentUser} />
           )}
         </main>
       </div>

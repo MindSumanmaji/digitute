@@ -3,17 +3,33 @@ import { BrowserRouter as Router } from 'react-router-dom';
 import StudentPanel from './StudentPanel';
 import TeacherPanel from './TeacherPanel';
 import AdminPanel from './AdminPanel';
+import { apiRequest, setAuthSession, clearAuthSession, validateOrRefreshSession } from './api';
 
 export default function App() {
   const [currentView, setCurrentView] = useState(() => {
     if (typeof window !== 'undefined') {
       const hash = window.location.hash;
       if (hash === '#landing') return 'landing';
-      if (hash === '#student') return 'student';
-      if (hash === '#teacher') return 'teacher';
-      if (hash === '#admin') return 'admin';
-      const saved = localStorage.getItem('digitute_active_view');
-      if (saved) return saved;
+
+      const token = localStorage.getItem('digitute_token');
+      const refreshToken = localStorage.getItem('digitute_refresh_token');
+      const userStr = localStorage.getItem('digitute_user');
+      let role = null;
+      try {
+        if (userStr) role = JSON.parse(userStr)?.role;
+      } catch (e) {}
+
+      // If user has a token or refresh token, respect their role & active view
+      if (token || refreshToken) {
+        if (hash === '#admin' && role === 'ADMIN') return 'admin';
+        if (hash === '#teacher' && role === 'TEACHER') return 'teacher';
+        if (hash === '#student' && role === 'STUDENT') return 'student';
+
+        const saved = localStorage.getItem('digitute_active_view');
+        if (saved === 'admin' && role === 'ADMIN') return 'admin';
+        if (saved === 'teacher' && role === 'TEACHER') return 'teacher';
+        if (saved === 'student' && role === 'STUDENT') return 'student';
+      }
     }
     return 'landing'; // Default to landing page
   });
@@ -21,8 +37,106 @@ export default function App() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [enquiryModalOpen, setEnquiryModalOpen] = useState(false);
   const [loginModalOpen, setLoginModalOpen] = useState(false);
-  const [roleNotice, setRoleNotice] = useState(null);
   const [enquirySubmitted, setEnquirySubmitted] = useState(false);
+
+  // Real Auth Modal states
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [loginLoading, setLoginLoading] = useState(false);
+  const [loginError, setLoginError] = useState(null);
+  const [loginSuccessUser, setLoginSuccessUser] = useState(null);
+
+  const resetLoginForm = () => {
+    setLoginEmail('');
+    setLoginPassword('');
+    setShowPassword(false);
+    setLoginError(null);
+    setLoginSuccessUser(null);
+  };
+
+  const openLoginModal = () => {
+    resetLoginForm();
+    setLoginModalOpen(true);
+  };
+
+  const closeLoginModal = () => {
+    setLoginModalOpen(false);
+    resetLoginForm();
+  };
+
+  const handleLogoutToLanding = () => {
+    clearAuthSession(false);
+    resetLoginForm();
+    setLoginModalOpen(false);
+    setCurrentView('landing');
+    localStorage.setItem('digitute_active_view', 'landing');
+  };
+
+  // Proactive Session Lifecycle (Mobile / SPA Standard)
+  useEffect(() => {
+    // Check and validate/refresh the session in background
+    validateOrRefreshSession().catch(() => {});
+
+    // Listen for auth expired events from apiRequest
+    const handleAuthExpired = () => {
+      const token = localStorage.getItem('digitute_token');
+      const refreshToken = localStorage.getItem('digitute_refresh_token');
+      if (!token && !refreshToken) {
+        resetLoginForm();
+        setLoginModalOpen(false);
+        setCurrentView('landing');
+        return;
+      }
+      resetLoginForm();
+      setCurrentView('landing');
+      setLoginError('Your session has expired. Please sign in again.');
+      setLoginModalOpen(true);
+    };
+
+    window.addEventListener('digitute:auth-expired', handleAuthExpired);
+    return () => window.removeEventListener('digitute:auth-expired', handleAuthExpired);
+  }, []);
+
+  const handleLoginSubmit = async (e) => {
+    e.preventDefault();
+    setLoginError(null);
+    setLoginLoading(true);
+
+    try {
+      const data = await apiRequest('/api/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({
+          email: loginEmail.trim().toLowerCase(),
+          password: loginPassword,
+        }),
+      });
+
+      // Persist access token, refresh token, and user profile
+      setAuthSession({
+        access_token: data.access_token,
+        refresh_token: data.refresh_token,
+        user: data.user,
+      });
+
+      const role = (data.user?.role || 'STUDENT').toUpperCase();
+      let targetView = 'student';
+      if (role === 'ADMIN') targetView = 'admin';
+      else if (role === 'TEACHER') targetView = 'teacher';
+
+      setLoginSuccessUser(data.user);
+      localStorage.setItem('digitute_active_view', targetView);
+
+      setTimeout(() => {
+        closeLoginModal();
+        setCurrentView(targetView);
+      }, 500);
+    } catch (err) {
+      setLoginError(err.message || 'Login failed. Please verify credentials.');
+    } finally {
+      setLoginLoading(false);
+    }
+  };
 
   const handleEnquirySubmit = (e) => {
     e.preventDefault();
@@ -34,7 +148,7 @@ export default function App() {
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
         setEnquiryModalOpen(false);
-        setLoginModalOpen(false);
+        closeLoginModal();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -45,10 +159,7 @@ export default function App() {
   if (currentView === 'student') {
     return (
       <StudentPanel 
-        onBackToLanding={() => {
-          setCurrentView('landing');
-          localStorage.setItem('digitute_active_view', 'landing');
-        }} 
+        onBackToLanding={handleLogoutToLanding} 
       />
     );
   }
@@ -58,10 +169,7 @@ export default function App() {
     return (
       <Router>
         <TeacherPanel 
-          onBackToLanding={() => {
-            setCurrentView('landing');
-            localStorage.setItem('digitute_active_view', 'landing');
-          }} 
+          onBackToLanding={handleLogoutToLanding} 
         />
       </Router>
     );
@@ -71,10 +179,7 @@ export default function App() {
   if (currentView === 'admin') {
     return (
       <AdminPanel 
-        onBackToLanding={() => {
-          setCurrentView('landing');
-          localStorage.setItem('digitute_active_view', 'landing');
-        }} 
+        onBackToLanding={handleLogoutToLanding} 
       />
     );
   }
@@ -114,10 +219,7 @@ export default function App() {
                 <button 
                   type="button"
                   className="button button-primary" 
-                  onClick={() => {
-                    setRoleNotice(null);
-                    setLoginModalOpen(true);
-                  }}
+                  onClick={openLoginModal}
                   style={{ cursor: 'pointer' }}
                 >
                   Enter into the class <span>→</span>
@@ -675,7 +777,7 @@ export default function App() {
         </div>
       </div>
 
-      {/* Unified Portal Role Gateway Modal */}
+      {/* Real Campus Authentication Modal */}
       <div 
         className={`modal-backdrop ${loginModalOpen ? 'open' : ''}`}
         role="dialog"
@@ -683,133 +785,106 @@ export default function App() {
         aria-labelledby="login-modal-title"
         onClick={(e) => {
           if (e.target.classList.contains('modal-backdrop')) {
-            setLoginModalOpen(false);
-            setRoleNotice(null);
+            closeLoginModal();
           }
         }}
       >
         <div className="modal portal-login-modal">
-          <div className="modal-top">
-            <span className="eyebrow">DIGITUTE CAMPUS GATEWAY</span>
+          <div className="auth-modal-header">
+            <div className="auth-brand-block">
+              <span className="brand-mark auth-brand-mark">D</span>
+              <div className="auth-brand-info">
+                <h2 id="login-modal-title">Sign in to DigiTute</h2>
+                <p className="auth-header-subtitle">Welcome back! Please enter your details.</p>
+              </div>
+            </div>
             <button 
               className="close" 
               aria-label="Close dialog" 
-              onClick={() => {
-                setLoginModalOpen(false);
-                setRoleNotice(null);
-              }}
+              onClick={closeLoginModal}
             >
               ×
             </button>
           </div>
 
-          <h2 id="login-modal-title">Enter Classroom Workspace</h2>
-          <p>Select your portal role to continue to the respective dashboard:</p>
+          <form className="portal-auth-form" onSubmit={handleLoginSubmit} autoComplete="off">
+            {loginError && (
+              <div className="portal-auth-error" role="alert">
+                <span className="error-icon">⚠️</span>
+                <span>{loginError}</span>
+              </div>
+            )}
 
-          {/* 3 Default Role Buttons: Admin, Teacher, Student */}
-          <div className="portal-role-list">
-            {/* Student Role Button */}
-            <button
-              type="button"
-              className="portal-role-card role-student"
-              onClick={() => {
-                setRoleNotice(null);
-                setLoginModalOpen(false);
-                setCurrentView('student');
-                localStorage.setItem('digitute_active_view', 'student');
-              }}
-            >
-              <div className="portal-role-icon-box icon-student">
-                <span>🎓</span>
+            {loginSuccessUser && (
+              <div className="portal-auth-success" role="status">
+                <span>✓</span>
+                <span>Welcome back, {loginSuccessUser.full_name || 'User'}! Redirecting...</span>
               </div>
-              <div className="portal-role-info">
-                <div className="portal-role-title-row">
-                  <h4 className="portal-role-name">Student Portal</h4>
-                  <span className="portal-role-status-badge badge-active">Active</span>
-                </div>
-                <p className="portal-role-desc">
-                  Track attendance, syllabus, study materials, tests & pay fees
-                </p>
-              </div>
-              <span className="portal-role-arrow">→</span>
-            </button>
+            )}
 
-            {/* Teacher Role Button */}
-            <button
-              type="button"
-              className="portal-role-card role-teacher"
-              onClick={() => {
-                setRoleNotice(null);
-                setLoginModalOpen(false);
-                setCurrentView('teacher');
-                localStorage.setItem('digitute_active_view', 'teacher');
-              }}
-            >
-              <div className="portal-role-icon-box icon-teacher">
-                <span>👨‍🏫</span>
+            <div className="auth-field-group">
+              <label htmlFor="auth-email">
+                Institute Email
+              </label>
+              <div className="auth-input-wrapper">
+                <input
+                  id="auth-email"
+                  type="email"
+                  required
+                  autoFocus
+                  autoComplete="off"
+                  placeholder="Enter your registered email"
+                  value={loginEmail}
+                  onChange={(e) => setLoginEmail(e.target.value)}
+                  disabled={loginLoading}
+                />
               </div>
-              <div className="portal-role-info">
-                <div className="portal-role-title-row">
-                  <h4 className="portal-role-name">Teacher Portal</h4>
-                  <span className="portal-role-status-badge badge-active">Active</span>
-                </div>
-                <p className="portal-role-desc">
-                  Manage class batches, roll call, DPPs & answer student doubts
-                </p>
-              </div>
-              <span className="portal-role-arrow">→</span>
-            </button>
-
-            {/* Admin Role Button */}
-            <button
-              type="button"
-              className="portal-role-card role-admin"
-              onClick={() => {
-                setRoleNotice(null);
-                setLoginModalOpen(false);
-                setCurrentView('admin');
-                localStorage.setItem('digitute_active_view', 'admin');
-              }}
-            >
-              <div className="portal-role-icon-box icon-admin">
-                <span>🛡️</span>
-              </div>
-              <div className="portal-role-info">
-                <div className="portal-role-title-row">
-                  <h4 className="portal-role-name">Admin Portal</h4>
-                  <span className="portal-role-status-badge badge-active">Active</span>
-                </div>
-                <p className="portal-role-desc">
-                  Institute-wide admissions, staff allocation & financial ledger
-                </p>
-              </div>
-              <span className="portal-role-arrow">→</span>
-            </button>
-          </div>
-
-          {/* Role Notice banner if Teacher or Admin is clicked */}
-          {roleNotice && (
-            <div className="portal-role-notice-banner">
-              <span className="notice-icon">ℹ️</span>
-              <div className="notice-text">
-                <strong>{roleNotice.role} Portal:</strong> {roleNotice.message}
-              </div>
-              <button 
-                type="button" 
-                className="notice-dismiss-btn"
-                onClick={() => setRoleNotice(null)}
-                title="Dismiss"
-              >
-                ✕
-              </button>
             </div>
-          )}
 
-          <div className="portal-modal-footer">
-            <span className="portal-security-badge">
-              🔒 256-Bit SSL Encrypted Campus Gateway
-            </span>
-          </div>
+            <div className="auth-field-group">
+              <div className="auth-label-row">
+                <label htmlFor="auth-password">
+                  Password
+                </label>
+              </div>
+              <div className="auth-input-wrapper">
+                <input
+                  id="auth-password"
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  autoComplete="new-password"
+                  placeholder="Enter your password"
+                  value={loginPassword}
+                  onChange={(e) => setLoginPassword(e.target.value)}
+                  disabled={loginLoading}
+                />
+                <button
+                  type="button"
+                  className="auth-password-toggle"
+                  onClick={() => setShowPassword(!showPassword)}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  tabIndex={-1}
+                >
+                  {showPassword ? '👁️' : '👁️‍🗨️'}
+                </button>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              className="portal-auth-submit-btn"
+              disabled={loginLoading}
+            >
+              {loginLoading ? (
+                <>
+                  <span className="auth-spinner"></span>
+                  <span>Signing in...</span>
+                </>
+              ) : (
+                <span>Sign In</span>
+              )}
+            </button>
+          </form>
         </div>
       </div>
     </div>

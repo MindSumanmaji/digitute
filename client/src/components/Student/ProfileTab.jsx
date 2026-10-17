@@ -1,27 +1,40 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import StudentProfileCardModal from './StudentProfileCardModal';
 
-export default function ProfileTab({ showToast, onBack }) {
+export default function ProfileTab({ showToast, onBack, user }) {
   // Modal state for Profile Card
   const [profileCardOpen, setProfileCardOpen] = useState(false);
 
   // Profile data
-  const [studentProfile, setStudentProfile] = useState({
-    name: 'Suman Maji',
-    handle: '@sumanmaji',
-    batch: 'Class XII - Science (Batch A)',
+  const [studentProfile, setStudentProfile] = useState(() => ({
+    name: user?.full_name || 'Suman Maji',
+    handle: user?.full_name ? `@${user.full_name.toLowerCase().replace(/\s+/g, '')}` : '@sumanmaji',
+    batch: (Array.isArray(user?.batches) ? user.batches[0]?.name : user?.batches?.name) || user?.batch || 'Class XII - Science (Batch A)',
     institute: 'DigiTute Institute',
     session: '2026 (July - Dec)',
     photo: '/student-avatar.jpg',
-    email: 'suman.maji@digitute.app',
-    phone: '+91 98301 11222',
+    email: user?.email || 'suman.maji@digitute.app',
+    phone: user?.phone || '+91 98301 11222',
     roll: '12-SCI-042',
     guardian: 'Alok Maji (+91 98301 99887)',
     campus: 'DigiTute Shyambazar Campus',
     pushEnabled: true,
     attendanceAlerts: true,
     testAlerts: true
-  });
+  }));
+
+  useEffect(() => {
+    if (user) {
+      setStudentProfile(prev => ({
+        ...prev,
+        name: user.full_name || prev.name,
+        handle: user.full_name ? `@${user.full_name.toLowerCase().replace(/\s+/g, '')}` : prev.handle,
+        batch: (Array.isArray(user?.batches) ? user.batches[0]?.name : user?.batches?.name) || user?.batch || prev.batch,
+        email: user.email || prev.email,
+        phone: user.phone || prev.phone,
+      }));
+    }
+  }, [user]);
 
   // Modal sub-dialogs for actions
   const [activeModal, setActiveModal] = useState(null); // 'picture' | 'email' | 'password' | 'about' | 'privacy' | 'terms' | 'support'

@@ -1,24 +1,25 @@
 import React, { useState } from 'react';
-import { Users, Plus, MessageSquare, Search, CheckCircle2, Phone, Mail, MapPin } from 'lucide-react';
+import { Users, Plus, MessageSquare, Search, CheckCircle2, Phone, Mail, MapPin, Edit3 } from 'lucide-react';
 
-export default function StudentsView({ students, onNewAdmission }) {
+export default function StudentsView({ students = [], onNewAdmission, onEditStudent }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedBatch, setSelectedBatch] = useState('All');
 
-  const batches = ['All', ...new Set(students.map(s => s.batch))];
+  const batches = ['All', ...new Set((students || []).map(s => s.batches?.name).filter(Boolean))];
 
-  const filteredStudents = students.filter(s => {
+  const filteredStudents = (students || []).filter(s => {
     const term = searchTerm.toLowerCase();
+    const stName = s.full_name || '';
+    const stBatch = s.batches?.name || 'Unassigned';
     const matchSearch =
-      (s.name && s.name.toLowerCase().includes(term)) ||
-      (s.studentId && s.studentId.toLowerCase().includes(term)) ||
-      (s.rollNo && s.rollNo.toLowerCase().includes(term)) ||
+      stName.toLowerCase().includes(term) ||
       (s.email && s.email.toLowerCase().includes(term)) ||
       (s.address && s.address.toLowerCase().includes(term)) ||
-      (s.guardianName && s.guardianName.toLowerCase().includes(term)) ||
-      (s.phone && s.phone.includes(term));
+      (s.guardian_name && s.guardian_name.toLowerCase().includes(term)) ||
+      (s.phone && s.phone.includes(term)) ||
+      (s.guardian_phone && s.guardian_phone.includes(term));
 
-    const matchBatch = selectedBatch === 'All' || s.batch === selectedBatch;
+    const matchBatch = selectedBatch === 'All' || stBatch === selectedBatch;
 
     return matchSearch && matchBatch;
   });
@@ -39,7 +40,7 @@ export default function StudentsView({ students, onNewAdmission }) {
             <Search size={15} />
             <input
               type="text"
-              placeholder="Search by student name, roll no, guardian, phone or email..."
+              placeholder="Search by student name, guardian, phone or email..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
@@ -64,85 +65,115 @@ export default function StudentsView({ students, onNewAdmission }) {
           <table className="data-table">
             <thead>
               <tr>
-                <th>Student Name & ID</th>
+                <th>Student Name</th>
                 <th>Enrolled Batch</th>
                 <th>Student Contact</th>
                 <th>Guardian Contact & WhatsApp</th>
                 <th>Residential Address</th>
-                <th style={{ textAlign: 'right' }}>Status</th>
+                <th>Status</th>
+                <th style={{ textAlign: 'right' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {filteredStudents.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="empty-table">No students found matching your search and filter criteria.</td>
+                  <td colSpan={7} className="empty-table">No students found matching your search and filter criteria.</td>
                 </tr>
               ) : (
-                filteredStudents.map((student) => (
-                  <tr key={student.id}>
-                    <td>
-                      <div className="student-cell">
-                        <div className={`student-avatar ${student.avatarTone || 'lavender'}`}>
-                          {student.name.split(' ').map(n => n[0]).join('')}
-                        </div>
-                        <div>
-                          <strong>{student.name}</strong>
-                          <small>ID: {student.studentId || student.rollNo || student.id}</small>
-                        </div>
-                      </div>
-                    </td>
+                filteredStudents.map((student) => {
+                  const displayName = student.full_name || 'Enrolled Student';
+                  const initials = displayName.split(' ').filter(Boolean).map(n => n[0]).join('').slice(0, 2).toUpperCase() || 'ST';
+                  const gName = student.guardian_name || '—';
+                  const gPhone = student.guardian_phone || student.phone || '';
 
-                    <td>
-                      <span className="batch-name">{student.batch}</span>
-                    </td>
-
-                    <td>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14.5, fontWeight: 600 }}>
-                          <Phone size={13} style={{ color: 'var(--text-3)' }} />
-                          <span>{student.phone}</span>
+                  return (
+                    <tr key={student.id}>
+                      <td>
+                        <div className="student-cell">
+                          <div className="student-avatar lavender">
+                            {initials}
+                          </div>
+                          <div>
+                            <strong>{displayName}</strong>
+                            <small>{student.email}</small>
+                          </div>
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13.5, color: 'var(--text-3)' }}>
-                          <Mail size={13} />
-                          <span>{student.email}</span>
+                      </td>
+
+                      <td>
+                        <span className="batch-name">{student.batches?.name || 'Unassigned'}</span>
+                      </td>
+
+                      <td>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14.5, fontWeight: 600 }}>
+                            <Phone size={13} style={{ color: 'var(--text-3)' }} />
+                            <span>{student.phone}</span>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13.5, color: 'var(--text-3)' }}>
+                            <Mail size={13} />
+                            <span>{student.email}</span>
+                          </div>
                         </div>
-                      </div>
-                    </td>
+                      </td>
 
-                    <td>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        <span style={{ fontSize: 14.5, fontWeight: 600 }}>{student.guardianName || 'Guardian'}</span>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                          <span style={{ fontSize: 13.5, color: 'var(--text-3)' }}>{student.guardianPhone || student.phone}</span>
-                          {(student.guardianWhatsapp || student.guardianPhone || student.phone) && (
-                            <a
-                              href={`https://wa.me/${(student.guardianWhatsapp || student.guardianPhone || student.phone).replace(/[^0-9]/g, '')}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="whatsapp-btn"
-                              title="Chat on WhatsApp"
-                            >
-                              <MessageSquare size={13} /> WhatsApp
-                            </a>
-                          )}
+                      <td>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          <span style={{ fontSize: 14.5, fontWeight: 600 }}>{gName}</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                            <span style={{ fontSize: 13.5, color: 'var(--text-3)' }}>{gPhone || '—'}</span>
+                            {gPhone && (
+                              <a
+                                href={`https://wa.me/${gPhone.replace(/[^0-9]/g, '')}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="whatsapp-btn"
+                                title="Chat on WhatsApp"
+                              >
+                                <MessageSquare size={13} /> WhatsApp
+                              </a>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    </td>
+                      </td>
 
-                    <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, color: 'var(--text-2)' }}>
-                        <MapPin size={14} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
-                        <span>{student.address || 'Kolkata, West Bengal'}</span>
-                      </div>
-                    </td>
+                      <td>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, color: 'var(--text-2)' }}>
+                          <MapPin size={14} style={{ color: 'var(--text-3)', flexShrink: 0 }} />
+                          <span>{student.address || '—'}</span>
+                        </div>
+                      </td>
 
-                    <td style={{ textAlign: 'right' }}>
-                      <span className="status-badge paid">
-                        <CheckCircle2 size={13} /> Active
-                      </span>
-                    </td>
-                  </tr>
-                ))
+                      <td>
+                        <span className={`status-badge ${student.is_active ? 'paid' : 'pending'}`}>
+                          <CheckCircle2 size={13} /> {student.is_active ? 'Active' : 'Inactive'}
+                        </span>
+                      </td>
+
+                      <td style={{ textAlign: 'right' }}>
+                        <button
+                          type="button"
+                          className="button-secondary"
+                          style={{
+                            padding: '4px 10px',
+                            fontSize: '12.5px',
+                            fontWeight: 600,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '5px',
+                            borderRadius: '8px',
+                            cursor: 'pointer'
+                          }}
+                          title="Edit Student"
+                          onClick={() => onEditStudent && onEditStudent(student)}
+                        >
+                          <Edit3 size={13} />
+                          <span>Edit</span>
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
