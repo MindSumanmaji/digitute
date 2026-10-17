@@ -35,18 +35,18 @@ export function Header({
       if (saved) {
         const parsed = JSON.parse(saved);
         return {
-          name: parsed.name || 'Sudipta Sir',
+          name: parsed.name || 'Sudipta Mondal',
           username: parsed.username || '@sudipta',
-          avatarUrl: parsed.avatarUrl || '',
-          role: parsed.role || 'Faculty of DigiTute'
+          avatarUrl: parsed.avatarUrl || '/teacher-sudipta.png',
+          role: parsed.role || 'Teacher'
         };
       }
     } catch { /* ignore */ }
     return {
-      name: 'Sudipta Sir',
+      name: 'Sudipta Mondal',
       username: '@sudipta',
-      avatarUrl: '',
-      role: 'Faculty of DigiTute'
+      avatarUrl: '/teacher-sudipta.png',
+      role: 'Teacher'
     };
   };
 
@@ -82,7 +82,7 @@ export function Header({
       case 'notice':
         return 'Notice Board';
       case 'profile':
-        return 'Profile';
+        return 'My Profile';
       case 'settings':
         return 'Settings';
       default:
@@ -90,7 +90,7 @@ export function Header({
     }
   };
 
-  // Direct Profile Page navigation - no dropdowns!
+  // Direct Profile Page navigation
   const handleOpenProfile = () => {
     if (onProfileClick) {
       onProfileClick();
@@ -104,9 +104,9 @@ export function Header({
   return (
     <header className="dt-header" role="banner">
       <div className="dt-header-container">
-        {/* Left: Mobile = DigiTute Logo & Name | PC = Active Page Title */}
+        {/* Left: Mobile Hamburger (3 dashes) | PC Active Page Title */}
         <div className="dt-header-left-group">
-          {/* Mobile Hamburger Toggle (3 dashes) */}
+          {/* Mobile-only Hamburger toggle button */}
           <button
             type="button"
             className="dt-header-hamburger-btn"
@@ -134,6 +134,7 @@ export function Header({
           <h1 className="dt-header-page-title">{getPageTitle(activePage)}</h1>
         </div>
 
+        {/* Right: Notification Bell & Profile Avatar */}
         <div className="dt-header-actions">
           {/* Notifications Button */}
           <button
@@ -157,7 +158,7 @@ export function Header({
             {hasNotifications && <span className="dt-header-badge-dot" aria-label="New notifications" />}
           </button>
 
-          {/* Direct Profile Button & Desktop Teacher Meta (No dropdown popup) */}
+          {/* Profile Button with Teacher Photo */}
           <div
             className={`dt-header-profile-wrapper ${isProfileActive ? 'active' : ''}`}
             onClick={handleOpenProfile}
@@ -174,27 +175,21 @@ export function Header({
               title="Teacher Profile"
               tabIndex={-1}
             >
-              {teacher.avatarUrl ? (
-                <img src={teacher.avatarUrl} alt={teacher.name} className="dt-header-avatar-img" />
-              ) : (
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="#1E293B"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                  <circle cx="12" cy="7" r="4" />
-                </svg>
-              )}
+              <img
+                src="/teacher-sudipta.png"
+                alt="Teacher Profile"
+                className="dt-header-avatar-img"
+                onError={(e) => {
+                  e.target.onerror = null;
+                  e.target.src = '/student-avatar.jpg';
+                }}
+              />
             </button>
 
             {/* Desktop Teacher Tag */}
             <div className="dt-header-teacher-meta">
               <span className="dt-header-teacher-name">{teacher.name}</span>
-              <span className="dt-header-teacher-status">{teacher.role || 'Faculty of DigiTute'}</span>
+              <span className="dt-header-teacher-status">{teacher.role || 'Teacher'}</span>
             </div>
           </div>
         </div>
