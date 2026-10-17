@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
-export function Settings({ onNavigate: _onNavigate, onBackToLanding, user }) {
+export function Settings({ onNavigate, onBackToLanding, user }) {
   // ── Teacher Profile Data ──
   const getInitialTeacherProfile = () => {
     if (user && user.full_name) {
@@ -27,14 +27,20 @@ export function Settings({ onNavigate: _onNavigate, onBackToLanding, user }) {
         }
       }
       const saved = localStorage.getItem('digitute_teacher_profile');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        // Reset avatarUrl to teacher-sudipta.png as requested by user
+        parsed.avatarUrl = '/teacher-sudipta.png';
+        localStorage.setItem('digitute_teacher_profile', JSON.stringify(parsed));
+        return parsed;
+      }
     } catch { /* ignore */ }
     return {
-      name: 'Sudipta Sir',
+      name: 'Sudipta Mondal',
       username: '@sudipta',
-      phone: '+91 98765 43210',
-      email: 'sudipta.teacher@digitute.edu',
-      avatarUrl: ''
+      phone: '9734417711',
+      email: 'Sudipta@digi.com',
+      avatarUrl: '/teacher-sudipta.png'
     };
   };
 
@@ -53,10 +59,21 @@ export function Settings({ onNavigate: _onNavigate, onBackToLanding, user }) {
     }
   }, [user]);
 
-  // ── Preferences State ──
-  const [themeDark, setThemeDark] = useState(() => {
-    return localStorage.getItem('digitute_theme') === 'dark';
-  });
+  // Ensure /teacher-sudipta.png is synced on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('digitute_teacher_profile');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.avatarUrl !== '/teacher-sudipta.png') {
+          parsed.avatarUrl = '/teacher-sudipta.png';
+          localStorage.setItem('digitute_teacher_profile', JSON.stringify(parsed));
+          setTeacherProfile(parsed);
+          window.dispatchEvent(new Event('digitute-profile-updated'));
+        }
+      }
+    } catch { /* ignore */ }
+  }, []);
 
   const [pushEnabled, setPushEnabled] = useState(() => {
     const saved = localStorage.getItem('digitute_push_notifications');
@@ -64,7 +81,7 @@ export function Settings({ onNavigate: _onNavigate, onBackToLanding, user }) {
   });
 
   // ── Modals State ──
-  // null | 'changePhoto' | 'changeUsername' | 'changePassword' | 'contactAdmin' | 'about' | 'terms' | 'logoutConfirm'
+  // null | 'changePhoto' | 'changeUsername' | 'changePassword' | 'privacy' | 'terms' | 'logoutConfirm'
   const [activeModal, setActiveModal] = useState(null);
 
   // ── Toast Notification ──
@@ -83,23 +100,6 @@ export function Settings({ onNavigate: _onNavigate, onBackToLanding, user }) {
     } catch { /* ignore */ }
   };
 
-  const handleToggleTheme = () => {
-    const nextVal = !themeDark;
-    setThemeDark(nextVal);
-    const mode = nextVal ? 'dark' : 'light';
-    try {
-      localStorage.setItem('digitute_theme', mode);
-      if (nextVal) {
-        document.documentElement.classList.add('dark-theme');
-        document.documentElement.setAttribute('data-theme', 'dark');
-      } else {
-        document.documentElement.classList.remove('dark-theme');
-        document.documentElement.setAttribute('data-theme', 'light');
-      }
-    } catch { /* ignore */ }
-    showToast(`App theme set to ${nextVal ? 'Dark mode' : 'Light mode'}`);
-  };
-
   const handleTogglePush = () => {
     const nextVal = !pushEnabled;
     setPushEnabled(nextVal);
@@ -113,8 +113,13 @@ export function Settings({ onNavigate: _onNavigate, onBackToLanding, user }) {
     <div className="dt-refined-settings-page">
       <div className="dt-refined-settings-container">
 
+        {/* ── Top Header (No back button) ── */}
+        <div className="dt-settings-top-bar">
+          <h1 className="dt-settings-header-title">Settings</h1>
+        </div>
+
         {/* ════════════════════════════════════════════════════════════════════
-           1. ACCOUNT (Left-aligned Heading, includes Change Password)
+           1. ACCOUNT (Change Photo, Username, Password)
            ════════════════════════════════════════════════════════════════════ */}
         <div className="dt-settings-group">
           <span className="dt-settings-group-label">ACCOUNT</span>
@@ -164,7 +169,7 @@ export function Settings({ onNavigate: _onNavigate, onBackToLanding, user }) {
                 </svg>
               </div>
 
-              {/* Change Password (Moved inside Account per instruction 2) */}
+              {/* Change Password */}
               <div
                 className="dt-refined-menu-item"
                 onClick={() => setActiveModal('changePassword')}
@@ -190,43 +195,12 @@ export function Settings({ onNavigate: _onNavigate, onBackToLanding, user }) {
         </div>
 
         {/* ════════════════════════════════════════════════════════════════════
-           2. PREFERENCES (Left-aligned Heading, Styled like 2nd Image)
+           2. PREFERENCES (Push Notifications Only, Theme removed)
            ════════════════════════════════════════════════════════════════════ */}
         <div className="dt-settings-group">
           <span className="dt-settings-group-label">PREFERENCES</span>
           <div className="dt-refined-card">
             <div className="dt-refined-menu-list">
-              {/* App Theme */}
-              <div className="dt-refined-menu-item no-pointer" onClick={handleToggleTheme}>
-                <div className="dt-menu-item-left">
-                  <div className="dt-menu-icon-box teal">
-                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <circle cx="12" cy="12" r="5" />
-                      <line x1="12" y1="1" x2="12" y2="3" />
-                      <line x1="12" y1="21" x2="12" y2="23" />
-                      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
-                      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
-                      <line x1="1" y1="12" x2="3" y2="12" />
-                      <line x1="21" y1="12" x2="23" y2="12" />
-                      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
-                      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
-                    </svg>
-                  </div>
-                  <div className="dt-menu-text-wrap">
-                    <span className="dt-menu-item-text">Theme</span>
-                    <span className="dt-menu-item-sub">{themeDark ? 'Dark mode' : 'Light mode'}</span>
-                  </div>
-                </div>
-                <label className="dt-refined-toggle" onClick={(e) => e.stopPropagation()} aria-label="Toggle App Theme">
-                  <input
-                    type="checkbox"
-                    checked={themeDark}
-                    onChange={handleToggleTheme}
-                  />
-                  <span className="dt-refined-slider" />
-                </label>
-              </div>
-
               {/* Push Notification */}
               <div className="dt-refined-menu-item no-pointer" onClick={handleTogglePush}>
                 <div className="dt-menu-item-left">
@@ -254,60 +228,27 @@ export function Settings({ onNavigate: _onNavigate, onBackToLanding, user }) {
         </div>
 
         {/* ════════════════════════════════════════════════════════════════════
-           3. HELP & SUPPORT (FAQ removed per instruction 3)
+           3. LEGAL & POLICIES (Privacy Policy + Terms and Conditions)
            ════════════════════════════════════════════════════════════════════ */}
         <div className="dt-settings-group">
-          <span className="dt-settings-group-label">HELP &amp; SUPPORT</span>
+          <span className="dt-settings-group-label">LEGAL &amp; POLICIES</span>
           <div className="dt-refined-card">
             <div className="dt-refined-menu-list">
-              {/* Contact Institute Admin */}
+              {/* Privacy Policy */}
               <div
                 className="dt-refined-menu-item"
-                onClick={() => setActiveModal('contactAdmin')}
+                onClick={() => setActiveModal('privacy')}
                 role="button"
                 tabIndex={0}
-                onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && setActiveModal('contactAdmin')}
-              >
-                <div className="dt-menu-item-left">
-                  <div className="dt-menu-icon-box amber">
-                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
-                    </svg>
-                  </div>
-                  <span className="dt-menu-item-text">Contact Institute Admin</span>
-                </div>
-                <svg className="dt-menu-arrow" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="9 18 15 12 9 6" />
-                </svg>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* ════════════════════════════════════════════════════════════════════
-           4. APP INFORMATION (Left-aligned Heading)
-           ════════════════════════════════════════════════════════════════════ */}
-        <div className="dt-settings-group">
-          <span className="dt-settings-group-label">APP INFORMATION</span>
-          <div className="dt-refined-card">
-            <div className="dt-refined-menu-list">
-              {/* About DigiTute */}
-              <div
-                className="dt-refined-menu-item"
-                onClick={() => setActiveModal('about')}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && setActiveModal('about')}
+                onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && setActiveModal('privacy')}
               >
                 <div className="dt-menu-item-left">
                   <div className="dt-menu-icon-box blue">
                     <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <circle cx="12" cy="12" r="10" />
-                      <line x1="12" y1="16" x2="12" y2="12" />
-                      <line x1="12" y1="8" x2="12.01" y2="8" />
+                      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
                     </svg>
                   </div>
-                  <span className="dt-menu-item-text">About DigiTute</span>
+                  <span className="dt-menu-item-text">Privacy Policy</span>
                 </div>
                 <svg className="dt-menu-arrow" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                   <polyline points="9 18 15 12 9 6" />
@@ -342,44 +283,23 @@ export function Settings({ onNavigate: _onNavigate, onBackToLanding, user }) {
           </div>
         </div>
 
-        {/* ════════════════════════════════════════════════════════════════════
-           BOTTOM: LOG OUT BUTTON
-           ════════════════════════════════════════════════════════════════════ */}
-        <button
-          type="button"
-          className="dt-refined-logout-btn"
-          onClick={() => setActiveModal('logoutConfirm')}
-          aria-label="Log Out from Teacher Portal"
-        >
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-            <polyline points="16 17 21 12 16 7" />
-            <line x1="21" y1="12" x2="9" y2="12" />
-          </svg>
-          <span>Log Out</span>
-        </button>
+
 
       </div>
 
-      {/* ════════════════════════════════════════════════════════════════════
-         MODALS
-         ════════════════════════════════════════════════════════════════════ */}
-
-      {/* 1. Change Profile Picture Modal */}
+      {/* ── MODALS ── */}
       {activeModal === 'changePhoto' && (
         <ChangePhotoModal
           currentAvatar={teacherProfile.avatarUrl}
-          teacherName={teacherProfile.name}
           onClose={() => setActiveModal(null)}
-          onSave={(newUrl) => {
-            updateProfile({ avatarUrl: newUrl });
+          onSave={(url) => {
+            updateProfile({ avatarUrl: url });
             setActiveModal(null);
-            showToast('Profile picture updated');
+            showToast('Profile photo updated');
           }}
         />
       )}
 
-      {/* 2. Change Username Modal */}
       {activeModal === 'changeUsername' && (
         <ChangeUsernameModal
           currentUsername={teacherProfile.username}
@@ -387,12 +307,11 @@ export function Settings({ onNavigate: _onNavigate, onBackToLanding, user }) {
           onSave={(newUsername) => {
             updateProfile({ username: newUsername });
             setActiveModal(null);
-            showToast('Username updated successfully');
+            showToast('Username updated');
           }}
         />
       )}
 
-      {/* 3. Change Password Modal */}
       {activeModal === 'changePassword' && (
         <ChangePasswordModal
           onClose={() => setActiveModal(null)}
@@ -403,46 +322,20 @@ export function Settings({ onNavigate: _onNavigate, onBackToLanding, user }) {
         />
       )}
 
-      {/* 4. Contact Admin Modal */}
-      {activeModal === 'contactAdmin' && (
-        <ContactAdminModal onClose={() => setActiveModal(null)} />
+      {activeModal === 'privacy' && (
+        <PrivacyPolicyModal onClose={() => setActiveModal(null)} />
       )}
 
-      {/* 5. About DigiTute Modal */}
-      {activeModal === 'about' && (
-        <AboutModal onClose={() => setActiveModal(null)} />
-      )}
-
-      {/* 6. Terms and Conditions Modal */}
       {activeModal === 'terms' && (
         <TermsModal onClose={() => setActiveModal(null)} />
       )}
 
-      {/* 7. Logout Confirmation Dialog */}
-      {activeModal === 'logoutConfirm' && (
-        <LogoutDialog
-          onClose={() => setActiveModal(null)}
-          onConfirm={() => {
-            setActiveModal(null);
-            try {
-              localStorage.removeItem('digitute_active_view');
-            } catch { /* ignore */ }
-            if (onBackToLanding) {
-              onBackToLanding();
-            } else {
-              window.location.hash = '#landing';
-              window.location.reload();
-            }
-          }}
-        />
-      )}
+      
 
-      {/* Toast Notification */}
+
+      {/* Toast Feedback */}
       {toast && (
-        <div className="dt-refined-toast" role="status">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#38BDF8" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="20 6 9 17 4 12" />
-          </svg>
+        <div className="dt-toast-notification">
           <span>{toast}</span>
         </div>
       )}
@@ -450,80 +343,482 @@ export function Settings({ onNavigate: _onNavigate, onBackToLanding, user }) {
   );
 }
 
-// ── Sub-components for Modals ──
+function ChangePhotoModal({ currentAvatar, onClose, onSave }) {
+  const [step, setStep] = useState('select'); // 'select' | 'crop' | 'preview'
+  const [rawImage, setRawImage] = useState(null);
+  const [croppedDataUrl, setCroppedDataUrl] = useState(null);
+  const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
+  const [baseScale, setBaseScale] = useState(1);
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
 
-function ChangePhotoModal({ currentAvatar, teacherName, onClose, onSave }) {
-  const [photoUrl, setPhotoUrl] = useState(currentAvatar || '');
+  const fileInputRef = useRef(null);
+  const containerRef = useRef(null);
+  const imgRef = useRef(null);
+  const dragStart = useRef({ x: 0, y: 0, pan: { x: 0, y: 0 } });
+  const touchState = useRef({ startX: 0, startY: 0, initialPan: { x: 0, y: 0 }, initialDist: 0, initialZoom: 1 });
 
-  const handleSubmit = (e) => {
+  // Fixed container dimensions & crop circle diameter
+  const C_WIDTH = 320;
+  const C_HEIGHT = 320;
+  const C_DIAMETER = 246; // circle diameter inside container
+
+  const clampPan = (px, py, curZoom, curBaseScale = baseScale, curImgSize = imageSize) => {
+    if (!curImgSize.width || !curImgSize.height) return { x: 0, y: 0 };
+    const curScale = curBaseScale * curZoom;
+    const dw = curImgSize.width * curScale;
+    const dh = curImgSize.height * curScale;
+    const maxPx = Math.max(0, (dw - C_DIAMETER) / 2);
+    const maxPy = Math.max(0, (dh - C_DIAMETER) / 2);
+    return {
+      x: Math.max(-maxPx, Math.min(maxPx, px)),
+      y: Math.max(-maxPy, Math.min(maxPy, py))
+    };
+  };
+
+  const handleFileChange = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      setRawImage(ev.target.result);
+      setStep('crop');
+      setZoom(1);
+      setPan({ x: 0, y: 0 });
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  };
+
+  const handleImageLoaded = (e) => {
+    const img = e.target;
+    const nw = img.naturalWidth;
+    const nh = img.naturalHeight;
+    setImageSize({ width: nw, height: nh });
+    const bScale = Math.max(C_DIAMETER / nw, C_DIAMETER / nh);
+    setBaseScale(bScale);
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+  };
+
+  // Immediate check for cached image dimensions
+  useEffect(() => {
+    if (imgRef.current && imgRef.current.complete && imgRef.current.naturalWidth && !imageSize.width) {
+      const nw = imgRef.current.naturalWidth;
+      const nh = imgRef.current.naturalHeight;
+      setImageSize({ width: nw, height: nh });
+      const bScale = Math.max(C_DIAMETER / nw, C_DIAMETER / nh);
+      setBaseScale(bScale);
+      setZoom(1);
+      setPan({ x: 0, y: 0 });
+    }
+  }, [rawImage, step, imageSize.width]);
+
+  // Zoom handlers
+  const handleZoomChange = (newZoom) => {
+    const clampedZoom = Math.max(1, Math.min(3, Number(newZoom)));
+    setZoom(clampedZoom);
+    setPan(prev => clampPan(prev.x, prev.y, clampedZoom));
+  };
+
+  const handleZoomDelta = (delta) => {
+    handleZoomChange(+(zoom + delta).toFixed(2));
+  };
+
+  // Mouse drag handlers
+  const handleMouseDown = (e) => {
     e.preventDefault();
-    onSave(photoUrl.trim());
+    setIsDragging(true);
+    dragStart.current = {
+      x: e.clientX,
+      y: e.clientY,
+      pan: { ...pan }
+    };
   };
 
-  const handleClear = () => {
-    onSave('');
+  useEffect(() => {
+    if (!isDragging) return;
+    const onMouseMove = (e) => {
+      const dx = e.clientX - dragStart.current.x;
+      const dy = e.clientY - dragStart.current.y;
+      const next = clampPan(dragStart.current.pan.x + dx, dragStart.current.pan.y + dy, zoom);
+      setPan(next);
+    };
+    const onMouseUp = () => {
+      setIsDragging(false);
+    };
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+  }, [isDragging, zoom, baseScale, imageSize]);
+
+  // Touch drag and pinch handlers
+  const handleTouchStart = (e) => {
+    if (e.touches.length === 1) {
+      touchState.current.startX = e.touches[0].clientX;
+      touchState.current.startY = e.touches[0].clientY;
+      touchState.current.initialPan = { ...pan };
+      touchState.current.initialDist = 0;
+    } else if (e.touches.length === 2) {
+      const dist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      touchState.current.initialDist = dist;
+      touchState.current.initialZoom = zoom;
+    }
   };
 
-  return (
-    <div className="dt-modal-overlay" onClick={onClose}>
-      <div className="dt-modal-sheet" onClick={(e) => e.stopPropagation()}>
-        <div className="dt-modal-header">
-          <h3 className="dt-modal-title">Change Profile Picture</h3>
-          <button type="button" className="dt-modal-close-btn" onClick={onClose} aria-label="Close">✕</button>
-        </div>
-        <form onSubmit={handleSubmit} className="dt-modal-form">
-          <div className="dt-photo-preview-box">
-            {photoUrl ? (
-              <img src={photoUrl} alt="Preview" className="dt-photo-preview-img" />
-            ) : (
-              <div className="dt-photo-preview-placeholder">
-                {teacherName ? teacherName.slice(0, 2).toUpperCase() : 'SS'}
-              </div>
-            )}
+  const handleTouchMove = (e) => {
+    if (e.touches.length === 1 && touchState.current.initialDist === 0) {
+      const dx = e.touches[0].clientX - touchState.current.startX;
+      const dy = e.touches[0].clientY - touchState.current.startY;
+      const next = clampPan(touchState.current.initialPan.x + dx, touchState.current.initialPan.y + dy, zoom);
+      setPan(next);
+    } else if (e.touches.length === 2 && touchState.current.initialDist > 0) {
+      const curDist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+      const factor = curDist / touchState.current.initialDist;
+      const nz = Math.max(1, Math.min(3, +(touchState.current.initialZoom * factor).toFixed(2)));
+      setZoom(nz);
+      setPan(p => clampPan(p.x, p.y, nz));
+    }
+  };
+
+  const handleTouchEnd = () => {
+    touchState.current.initialDist = 0;
+  };
+
+  // Wheel zoom handler with passive: false
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || step !== 'crop') return;
+    const onWheel = (e) => {
+      e.preventDefault();
+      const delta = e.deltaY < 0 ? 0.1 : -0.1;
+      setZoom(prev => {
+        const nz = Math.max(1, Math.min(3, +(prev + delta).toFixed(2)));
+        setPan(p => clampPan(p.x, p.y, nz));
+        return nz;
+      });
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [step, baseScale, imageSize]);
+
+  // Crop & generate preview
+  const handleCropAndPreview = () => {
+    const img = imgRef.current;
+    if (!img || !imageSize.width || !imageSize.height) return;
+
+    const curScale = baseScale * zoom;
+    const dw = imageSize.width * curScale;
+    const dh = imageSize.height * curScale;
+
+    const clamped = clampPan(pan.x, pan.y, zoom);
+
+    // Calculate source rect
+    const sxInDisplayed = (dw - C_DIAMETER) / 2 - clamped.x;
+    const syInDisplayed = (dh - C_DIAMETER) / 2 - clamped.y;
+
+    const sourceX = sxInDisplayed / curScale;
+    const sourceY = syInDisplayed / curScale;
+    const sourceSize = C_DIAMETER / curScale;
+
+    const canvas = document.createElement('canvas');
+    const outputSize = 512;
+    canvas.width = outputSize;
+    canvas.height = outputSize;
+    const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+
+    ctx.drawImage(
+      img,
+      Math.max(0, sourceX),
+      Math.max(0, sourceY),
+      Math.min(imageSize.width - sourceX, sourceSize),
+      Math.min(imageSize.height - sourceY, sourceSize),
+      0,
+      0,
+      outputSize,
+      outputSize
+    );
+
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
+    setCroppedDataUrl(dataUrl);
+    setStep('preview');
+  };
+
+  // Upload cropped image
+  const handleUpload = () => {
+    if (croppedDataUrl) {
+      onSave(croppedDataUrl);
+    }
+  };
+
+  // Calculations for displayed image in crop box
+  const curScale = baseScale * zoom;
+  const dw = imageSize.width ? imageSize.width * curScale : 0;
+  const dh = imageSize.height ? imageSize.height * curScale : 0;
+  const imgLeft = (C_WIDTH - dw) / 2 + pan.x;
+  const imgTop = (C_HEIGHT - dh) / 2 + pan.y;
+
+  // Step 1: Crop Screen (Matching Sample Image 1)
+  if (step === 'crop') {
+    return (
+      <div className="dt-crop-overlay-backdrop" onClick={onClose}>
+        <div className="dt-crop-modal-card" onClick={(e) => e.stopPropagation()}>
+          {/* Header with back arrow */}
+          <div className="dt-crop-header">
+            <button
+              type="button"
+              className="dt-crop-icon-btn"
+              onClick={() => setStep('select')}
+              aria-label="Back"
+            >
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#1E293B" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="19" y1="12" x2="5" y2="12" />
+                <polyline points="12 19 5 12 12 5" />
+              </svg>
+            </button>
+            <h2 className="dt-crop-title">Crop Photo</h2>
+            <div style={{ width: 42 }} />
           </div>
-          <div className="dt-form-group">
-            <label className="dt-form-label">Image URL</label>
+
+          <p className="dt-crop-subtitle">Drag to reposition • Pinch to zoom</p>
+
+          {/* Viewport container */}
+          <div
+            className="dt-crop-viewport"
+            ref={containerRef}
+            onMouseDown={handleMouseDown}
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+            style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
+          >
+            {rawImage && (
+              <img
+                ref={imgRef}
+                src={rawImage}
+                alt="Source"
+                className="dt-crop-image"
+                onLoad={handleImageLoaded}
+                draggable={false}
+                style={{
+                  width: dw ? `${dw}px` : 'auto',
+                  height: dh ? `${dh}px` : 'auto',
+                  left: `${imgLeft}px`,
+                  top: `${imgTop}px`
+                }}
+              />
+            )}
+
+            {/* Circular crop guide & shadow mask overlay */}
+            <div className="dt-crop-circle-guide" />
+          </div>
+
+          {/* Zoom slider row */}
+          <div className="dt-crop-zoom-row">
+            <button
+              type="button"
+              className="dt-crop-zoom-btn"
+              onClick={() => handleZoomDelta(-0.15)}
+              aria-label="Zoom out"
+            >
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#64748B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="8" />
+                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                <line x1="8" y1="11" x2="14" y2="11" />
+              </svg>
+            </button>
+
             <input
-              type="url"
-              className="dt-form-input"
-              value={photoUrl}
-              onChange={(e) => setPhotoUrl(e.target.value)}
-              placeholder="https://example.com/avatar.jpg"
-              autoFocus
+              type="range"
+              min="1"
+              max="3"
+              step="0.01"
+              value={zoom}
+              onChange={(e) => handleZoomChange(e.target.value)}
+              className="dt-crop-zoom-slider"
+              aria-label="Zoom control"
             />
-            <span className="dt-form-help">Enter a public direct image link (HTTPS).</span>
+
+            <button
+              type="button"
+              className="dt-crop-zoom-btn"
+              onClick={() => handleZoomDelta(0.15)}
+              aria-label="Zoom in"
+            >
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#64748B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="8" />
+                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                <line x1="11" y1="8" x2="11" y2="14" />
+                <line x1="8" y1="11" x2="14" y2="11" />
+              </svg>
+            </button>
           </div>
-          <div className="dt-modal-actions">
-            {currentAvatar && (
-              <button type="button" className="dt-btn dt-btn-destructive dt-btn-sm" onClick={handleClear}>
-                Remove Photo
-              </button>
-            )}
-            <button type="button" className="dt-btn dt-btn-secondary" onClick={onClose}>Cancel</button>
-            <button type="submit" className="dt-btn dt-btn-primary">Save Picture</button>
+
+          {/* Crop & Preview button */}
+          <button
+            type="button"
+            className="dt-crop-preview-action-btn"
+            onClick={handleCropAndPreview}
+          >
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M6 2v14a2 2 0 0 0 2 2h14" />
+              <path d="M18 22V8a2 2 0 0 0-2-2H2" />
+            </svg>
+            Crop & Preview
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Step 2: Preview Screen (Matching Sample Image 2)
+  if (step === 'preview') {
+    return (
+      <div className="dt-crop-overlay-backdrop" onClick={onClose}>
+        <div className="dt-crop-modal-card" onClick={(e) => e.stopPropagation()}>
+          {/* Header */}
+          <h2 className="dt-preview-title">Preview</h2>
+
+          {/* Cropped circular avatar */}
+          <div className="dt-preview-avatar-wrap">
+            <img
+              src={croppedDataUrl}
+              alt="Cropped profile preview"
+              className="dt-preview-avatar-img"
+            />
           </div>
-        </form>
+
+          <p className="dt-preview-subtitle">This is how your photo will look</p>
+
+          {/* Action buttons row */}
+          <div className="dt-preview-btn-row">
+            <button
+              type="button"
+              className="dt-preview-recrop-btn"
+              onClick={() => setStep('crop')}
+            >
+              Re-crop
+            </button>
+
+            <button
+              type="button"
+              className="dt-preview-upload-btn"
+              onClick={handleUpload}
+            >
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="17 8 12 3 7 8" />
+                <line x1="12" y1="3" x2="12" y2="15" />
+              </svg>
+              Upload
+            </button>
+          </div>
+
+          {/* Cancel link button */}
+          <button
+            type="button"
+            className="dt-preview-cancel-btn"
+            onClick={onClose}
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Step 0: Initial select screen
+  return (
+    <div className="dt-crop-overlay-backdrop" onClick={onClose}>
+      <div className="dt-crop-modal-card" onClick={(e) => e.stopPropagation()}>
+        {/* Header */}
+        <div className="dt-crop-header" style={{ marginBottom: 12 }}>
+          <div style={{ width: 32 }} />
+          <h2 className="dt-crop-title" style={{ fontSize: 19 }}>Change Profile Picture</h2>
+          <button
+            type="button"
+            className="dt-modal-close-btn"
+            onClick={onClose}
+            aria-label="Close"
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Current Avatar in Center */}
+        <div className="dt-preview-avatar-wrap" style={{ width: 160, height: 160, margin: '12px auto 12px' }}>
+          {currentAvatar ? (
+            <img src={currentAvatar} alt="Current profile" className="dt-preview-avatar-img" />
+          ) : (
+            <div className="dt-photo-current-placeholder">
+              <svg viewBox="0 0 24 24" width="44" height="44" fill="none" stroke="#CBD5E1" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                <circle cx="12" cy="7" r="4" />
+              </svg>
+            </div>
+          )}
+        </div>
+
+        <p className="dt-preview-subtitle" style={{ margin: '0 0 22px' }}>Current Profile Photo</p>
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="dt-photo-file-input"
+          onChange={handleFileChange}
+        />
+
+        <button
+          type="button"
+          className="dt-photo-upload-btn"
+          onClick={() => fileInputRef.current && fileInputRef.current.click()}
+          style={{ marginBottom: 12 }}
+        >
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+            <polyline points="17 8 12 3 7 8" />
+            <line x1="12" y1="3" x2="12" y2="15" />
+          </svg>
+          Upload Photo
+        </button>
+
+        <button
+          type="button"
+          className="dt-preview-cancel-btn"
+          onClick={onClose}
+        >
+          Cancel
+        </button>
       </div>
     </div>
   );
 }
 
 function ChangeUsernameModal({ currentUsername, onClose, onSave }) {
-  const [username, setUsername] = useState(currentUsername ? currentUsername.replace(/^@/, '') : '');
+  const [uname, setUname] = useState('');
   const [error, setError] = useState('');
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    const clean = username.trim().toLowerCase();
-    if (!clean) {
+    if (!uname.trim()) {
       setError('Username cannot be empty');
       return;
     }
-    if (!/^[a-z0-9_.-]+$/.test(clean)) {
-      setError('Only letters, numbers, dot, underscore, hyphen are allowed');
-      return;
-    }
-    onSave(`@${clean}`);
+    const clean = uname.startsWith('@') ? uname : `@${uname.trim()}`;
+    onSave(clean);
   };
 
   return (
@@ -534,32 +829,25 @@ function ChangeUsernameModal({ currentUsername, onClose, onSave }) {
           <button type="button" className="dt-modal-close-btn" onClick={onClose} aria-label="Close">✕</button>
         </div>
         <form onSubmit={handleSubmit} className="dt-modal-form">
+          {error && <div className="dt-form-alert error">{error}</div>}
           <div className="dt-form-group">
-            <label className="dt-form-label">New Username</label>
-            <div className="dt-username-input-wrap">
-              <span className="dt-username-prefix">@</span>
-              <input
-                type="text"
-                className="dt-form-input dt-username-input"
-                value={username}
-                onChange={(e) => {
-                  setUsername(e.target.value);
-                  setError('');
-                }}
-                placeholder="sudipta"
-                autoFocus
-                required
-              />
-            </div>
-            {error ? (
-              <span className="dt-form-error">{error}</span>
-            ) : (
-              <span className="dt-form-help">Unique handle for your teacher account.</span>
-            )}
+            <label className="dt-form-label">Username Handle</label>
+            <input
+              type="text"
+              className="dt-form-input"
+              value={uname}
+              onChange={(e) => {
+                setUname(e.target.value);
+                setError('');
+              }}
+              placeholder="Enter new username"
+              autoFocus
+              required
+            />
           </div>
           <div className="dt-modal-actions">
             <button type="button" className="dt-btn dt-btn-secondary" onClick={onClose}>Cancel</button>
-            <button type="submit" className="dt-btn dt-btn-primary">Update Username</button>
+            <button type="submit" className="dt-btn dt-btn-primary">Save Username</button>
           </div>
         </form>
       </div>
@@ -568,7 +856,6 @@ function ChangeUsernameModal({ currentUsername, onClose, onSave }) {
 }
 
 function ChangePasswordModal({ onClose, onSuccess }) {
-  const [currentPass, setCurrentPass] = useState('');
   const [newPass, setNewPass] = useState('');
   const [confirmPass, setConfirmPass] = useState('');
   const [error, setError] = useState('');
@@ -576,16 +863,12 @@ function ChangePasswordModal({ onClose, onSuccess }) {
   const handleSubmit = (e) => {
     e.preventDefault();
     setError('');
-    if (!currentPass) {
-      setError('Please enter your current password');
-      return;
-    }
     if (newPass.length < 6) {
       setError('New password must be at least 6 characters');
       return;
     }
     if (newPass !== confirmPass) {
-      setError('New passwords do not match');
+      setError('Passwords do not match');
       return;
     }
     onSuccess();
@@ -601,25 +884,14 @@ function ChangePasswordModal({ onClose, onSuccess }) {
         <form onSubmit={handleSubmit} className="dt-modal-form">
           {error && <div className="dt-form-alert error">{error}</div>}
           <div className="dt-form-group">
-            <label className="dt-form-label">Current Password</label>
-            <input
-              type="password"
-              className="dt-form-input"
-              value={currentPass}
-              onChange={(e) => setCurrentPass(e.target.value)}
-              placeholder="••••••••"
-              autoFocus
-              required
-            />
-          </div>
-          <div className="dt-form-group">
             <label className="dt-form-label">New Password</label>
             <input
               type="password"
               className="dt-form-input"
               value={newPass}
-              onChange={(e) => setNewPass(e.target.value)}
+              onChange={(e) => { setNewPass(e.target.value); setError(''); }}
               placeholder="At least 6 characters"
+              autoFocus
               required
             />
           </div>
@@ -629,7 +901,7 @@ function ChangePasswordModal({ onClose, onSuccess }) {
               type="password"
               className="dt-form-input"
               value={confirmPass}
-              onChange={(e) => setConfirmPass(e.target.value)}
+              onChange={(e) => { setConfirmPass(e.target.value); setError(''); }}
               placeholder="Re-enter new password"
               required
             />
@@ -644,69 +916,30 @@ function ChangePasswordModal({ onClose, onSuccess }) {
   );
 }
 
-function ContactAdminModal({ onClose }) {
+function PrivacyPolicyModal({ onClose }) {
   return (
     <div className="dt-modal-overlay" onClick={onClose}>
       <div className="dt-modal-sheet" onClick={(e) => e.stopPropagation()}>
         <div className="dt-modal-header">
-          <h3 className="dt-modal-title">Contact Institute Admin</h3>
+          <h3 className="dt-modal-title">Privacy Policy</h3>
           <button type="button" className="dt-modal-close-btn" onClick={onClose} aria-label="Close">✕</button>
         </div>
-        <div className="dt-modal-body">
-          <p className="dt-modal-desc">
-            Reach out to your institute administration for account privileges, batch allocations, or technical escalation.
-          </p>
-          <div className="dt-contact-row">
-            <div>
-              <span className="dt-contact-type">Admin Desk Phone</span>
-              <strong className="dt-contact-value">+91 98300 12345</strong>
-            </div>
-            <a href="tel:+919830012345" className="dt-btn dt-btn-secondary dt-btn-sm">Call</a>
-          </div>
-          <div className="dt-contact-row">
-            <div>
-              <span className="dt-contact-type">Admin Email</span>
-              <strong className="dt-contact-value">admin@digitute.edu</strong>
-            </div>
-            <a href="mailto:admin@digitute.edu" className="dt-btn dt-btn-secondary dt-btn-sm">Email</a>
-          </div>
-          <div className="dt-contact-row">
-            <div>
-              <span className="dt-contact-type">Support Hours</span>
-              <strong className="dt-contact-value">Mon - Sat (9:00 AM - 7:00 PM)</strong>
-            </div>
-          </div>
-        </div>
-        <div className="dt-modal-actions">
-          <button type="button" className="dt-btn dt-btn-primary" onClick={onClose}>Done</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function AboutModal({ onClose }) {
-  return (
-    <div className="dt-modal-overlay" onClick={onClose}>
-      <div className="dt-modal-sheet" onClick={(e) => e.stopPropagation()}>
-        <div className="dt-modal-header">
-          <h3 className="dt-modal-title">About DigiTute</h3>
-          <button type="button" className="dt-modal-close-btn" onClick={onClose} aria-label="Close">✕</button>
-        </div>
-        <div className="dt-modal-body dt-about-content">
-          <div className="dt-about-badge">DigiTute Education Operating System</div>
+        <div className="dt-modal-body dt-terms-text">
+          <h4>1. Faculty Data &amp; Account Protection</h4>
           <p>
-            DigiTute is an integrated modern education management ecosystem connecting classroom operations, faculty workflows, attendance, and student academic progress.
+            DigiTute is committed to safeguarding faculty and teacher data. Personal contact details, account credentials, and communication logs are encrypted and never shared with third parties.
           </p>
+          <h4>2. Student Academic Privacy</h4>
           <p>
-            <strong>Version:</strong> v2.4.0 (Build 2026.10)
+            Faculty evaluation records, student attendance marks, and internal assessment grades remain proprietary to your institution and are protected under strict educational confidentiality standards.
           </p>
+          <h4>3. Security Compliance</h4>
           <p>
-            <strong>Architecture:</strong> Offline-first connected workspace for high-efficiency teaching.
+            All network communication, test results, and DPP management activities utilize secure token-based verification protocols to prevent unauthorized access.
           </p>
         </div>
         <div className="dt-modal-actions">
-          <button type="button" className="dt-btn dt-btn-primary" onClick={onClose}>Close</button>
+          <button type="button" className="dt-btn dt-btn-primary" onClick={onClose}>I Understand</button>
         </div>
       </div>
     </div>

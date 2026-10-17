@@ -1,15 +1,47 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 
 export function Profile({ onNavigate, onBackToLanding, user }) {
-  // ── 1. Teacher Profile Data (loaded from real local storage / account) ──
-  const getInitialProfile = () => {
+  // Modal states: null | 'helpSupport' | 'about' | 'logoutConfirm'
+  const [activeModal, setActiveModal] = useState(null);
+
+  const getStoredAvatar = () => {
+    try {
+      const userStr = localStorage.getItem('digitute_user');
+      if (userStr) {
+        const u = JSON.parse(userStr);
+        if (u.avatar_url) return u.avatar_url;
+      }
+      const saved = localStorage.getItem('digitute_teacher_profile');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.avatarUrl) return parsed.avatarUrl;
+      }
+    } catch { /* ignore */ }
+    return '/teacher-sudipta.png';
+  };
+
+  const [avatar, setAvatar] = useState(getStoredAvatar);
+
+  useEffect(() => {
+    const handleUpdate = () => {
+      setAvatar(getStoredAvatar());
+    };
+    window.addEventListener('digitute-profile-updated', handleUpdate);
+    window.addEventListener('storage', handleUpdate);
+    return () => {
+      window.removeEventListener('digitute-profile-updated', handleUpdate);
+      window.removeEventListener('storage', handleUpdate);
+    };
+  }, []);
+
+  const getInitialTeacher = () => {
     if (user && user.full_name) {
       return {
         name: user.full_name,
-        username: user.email ? `@${user.email.split('@')[0]}` : '@sudipta',
-        phone: user.phone || '+91 98765 43210',
-        email: user.email || 'sudipta.teacher@digitute.edu',
-        avatarUrl: user.avatar_url || ''
+        role: user.role === 'TEACHER' ? 'Teacher' : (user.specialization || 'Teacher'),
+        phone: user.phone || '9734417711',
+        email: user.email || 'Sudipta@digi.com',
+        qualification: user.specialization || 'M.Sc. (Computer Science), B.Ed.'
       };
     }
     try {
@@ -18,283 +50,349 @@ export function Profile({ onNavigate, onBackToLanding, user }) {
         const u = JSON.parse(userStr);
         if (u.role === 'TEACHER' || u.full_name) {
           return {
-            name: u.full_name || 'Sudipta Sir',
-            username: u.email ? `@${u.email.split('@')[0]}` : '@sudipta',
-            phone: u.phone || '+91 98765 43210',
-            email: u.email || 'sudipta.teacher@digitute.edu',
-            avatarUrl: u.avatar_url || ''
+            name: u.full_name || 'Sudipta Mondal',
+            role: 'Teacher',
+            phone: u.phone || '9734417711',
+            email: u.email || 'Sudipta@digi.com',
+            qualification: u.specialization || 'M.Sc. (Computer Science), B.Ed.'
           };
         }
       }
       const saved = localStorage.getItem('digitute_teacher_profile');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const p = JSON.parse(saved);
+        return {
+          name: p.name || 'Sudipta Mondal',
+          role: p.role || 'Teacher',
+          phone: p.phone || '9734417711',
+          email: p.email || 'Sudipta@digi.com',
+          qualification: p.qualification || 'M.Sc. (Computer Science), B.Ed.'
+        };
+      }
     } catch { /* ignore */ }
     return {
-      name: 'Sudipta Sir',
-      username: '@sudipta',
-      phone: '+91 98765 43210',
-      email: 'sudipta.teacher@digitute.edu',
-      avatarUrl: ''
+      name: 'Sudipta Mondal',
+      role: 'Teacher',
+      phone: '9734417711',
+      email: 'Sudipta@digi.com',
+      qualification: 'M.Sc. (Computer Science), B.Ed.'
     };
   };
 
-  const [profile, setProfile] = useState(getInitialProfile);
+  const [teacherInfo, setTeacherInfo] = useState(getInitialTeacher);
 
-  // Sync state if user prop changes
   useEffect(() => {
     if (user) {
-      setProfile(prev => ({
-        ...prev,
-        name: user.full_name || prev.name,
-        username: user.email ? `@${user.email.split('@')[0]}` : prev.username,
-        phone: user.phone || prev.phone,
-        email: user.email || prev.email,
-        avatarUrl: user.avatar_url || prev.avatarUrl
-      }));
+      setTeacherInfo(getInitialTeacher());
     }
   }, [user]);
 
-  // ── 2. Dark Mode Toggle (Visual state only, per requirement: "আপাতত এটি কাজ করার প্রয়োজন নেই") ──
-  const [darkMode, setDarkMode] = useState(() => {
-    try {
-      return localStorage.getItem('digitute_theme') === 'dark';
-    } catch {
-      return false;
-    }
-  });
-
-  // ── 3. Modals State ──
-  const [logoutModalOpen, setLogoutModalOpen] = useState(false);
-
-  // Toast
-  const [toast, setToast] = useState(null);
-  const showToast = (msg) => {
-    setToast(msg);
-    setTimeout(() => setToast(null), 3000);
+  const teacherData = {
+    ...teacherInfo,
+    avatar: avatar
   };
 
-  // Sync state if localStorage changes elsewhere
-  useEffect(() => {
-    const handleStorageUpdate = () => {
-      try {
-        const saved = localStorage.getItem('digitute_teacher_profile');
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          setProfile(parsed);
-        }
-      } catch { /* ignore */ }
-    };
-    window.addEventListener('digitute-profile-updated', handleStorageUpdate);
-    window.addEventListener('storage', handleStorageUpdate);
-    return () => {
-      window.removeEventListener('digitute-profile-updated', handleStorageUpdate);
-      window.removeEventListener('storage', handleStorageUpdate);
-    };
-  }, []);
-
-  // Handle Dark Mode Toggle
-  const handleToggleDarkMode = (e) => {
-    e.stopPropagation();
-    const nextVal = !darkMode;
-    setDarkMode(nextVal);
-    try {
-      localStorage.setItem('digitute_theme', nextVal ? 'dark' : 'light');
-    } catch { /* ignore */ }
-    showToast(nextVal ? 'Dark mode enabled (Preview)' : 'Light mode enabled');
-  };
-
-  // Direct Settings navigation (Opens the full Settings page)
-  const handleOpenSettings = () => {
-    if (onNavigate) {
-      onNavigate('settings');
-    }
-  };
-
-  // Logout action (Requirement 5: "Logout বাটনটি সম্পূর্ণ কার্যকর হতে হবে। ক্লিক করলে ইউজারের অ্যাকাউন্ট থেকে লগআউট হবে এবং Login Page-এ ফিরে যাবে।")
-  const handleConfirmLogout = () => {
-    setLogoutModalOpen(false);
-    try {
-      localStorage.removeItem('digitute_active_view');
-    } catch { /* ignore */ }
+  const handleLogout = () => {
+    setActiveModal(null);
     if (onBackToLanding) {
       onBackToLanding();
     } else {
+      localStorage.removeItem('digitute_active_view');
       window.location.hash = '#landing';
       window.location.reload();
     }
   };
 
-  // Initials for avatar fallback
-  const initials = profile.name
-    ? profile.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
-    : 'SS';
-
   return (
-    <div className="dt-profile-page-wrapper">
-      {/* ── Main Profile Card matching Reference Image ── */}
-      <div className="dt-profile-card">
-        {/* 1. Top Soft Lavender/Purple Banner */}
-        <div className="dt-profile-banner" aria-hidden="true" />
+    <div className="dt-profile-page">
+      <div className="dt-profile-container">
 
-        {/* 2. Round Profile Avatar overlapping Banner */}
-        <div className="dt-profile-avatar-wrapper">
-          <div className="dt-profile-avatar-circle">
-            {profile.avatarUrl ? (
-              <img
-                src={profile.avatarUrl}
-                alt={profile.name}
-                className="dt-profile-avatar-img"
-              />
-            ) : (
-              <span className="dt-profile-avatar-initials">{initials}</span>
-            )}
-          </div>
-        </div>
 
-        {/* 3. Teacher Full Name */}
-        <h2 className="dt-profile-name">{profile.name}</h2>
 
-        {/* 4. Phone and Mail Info Rows (clean minimal style matching image) */}
-        <div className="dt-profile-contacts-box">
-          <div className="dt-profile-contact-row">
-            <span className="dt-profile-contact-label">Phone</span>
-            <span className="dt-profile-contact-val">{profile.phone || '+91 98765 43210'}</span>
+        {/* ── Hero Card with Wavy Background & Avatar ── */}
+        <div className="dt-profile-hero-card">
+          {/* Subtle wavy gradient banner */}
+          <div className="dt-profile-wave-banner" aria-hidden="true">
+            <svg viewBox="0 0 500 120" preserveAspectRatio="none" className="dt-profile-wave-svg">
+              <path d="M0,25 C150,70 320,10 500,45 L500,0 L0,0 Z" fill="#DCEFFE" opacity="0.8" />
+              <path d="M0,45 C180,85 300,25 500,60 L500,0 L0,0 Z" fill="#EFF6FF" opacity="0.95" />
+            </svg>
           </div>
 
-          <div className="dt-profile-contact-row">
-            <span className="dt-profile-contact-label">Mail</span>
-            <span className="dt-profile-contact-val">{profile.email || 'sudipta.teacher@digitute.edu'}</span>
+          {/* Avatar Container */}
+          <div className="dt-profile-avatar-box">
+            <img
+              src={teacherData.avatar}
+              alt={teacherData.name}
+              className="dt-profile-avatar-img"
+              onError={(e) => {
+                e.target.onerror = null;
+                e.target.src = '/student-avatar.jpg';
+              }}
+            />
           </div>
-        </div>
 
-        {/* 5. Clean Divider Line */}
-        <div className="dt-profile-divider" />
+          {/* Name & Role Badge */}
+          <h2 className="dt-profile-user-name">{teacherData.name}</h2>
+          <div className="dt-profile-role-pill">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#6D28D9" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M22 10v6M2 10l10-5 10 5-10 5z" />
+              <path d="M6 12v5c3 3 9 3 12 0v-5" />
+            </svg>
+            <span>{teacherData.role}</span>
+          </div>
 
-        {/* 6. Action / Settings Menu Items */}
-        <div className="dt-profile-menu-list">
-          {/* Item 1: Dark Mode */}
-          <div className="dt-profile-menu-item no-pointer" onClick={handleToggleDarkMode}>
-            <div className="dt-profile-item-left">
-              <span className="dt-profile-item-icon" aria-hidden="true">
-                {/* Crescent Moon Icon */}
-                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+          {/* ── Teacher Info Card ── */}
+          <div className="dt-profile-details-card">
+            {/* Phone */}
+            <div className="dt-profile-detail-row">
+              <div className="dt-profile-icon-square icon-blue">
+                <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="#0284C7" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
                 </svg>
-              </span>
-              <span className="dt-profile-item-label">Dark mode</span>
+              </div>
+              <div className="dt-profile-detail-text">
+                <span className="dt-profile-detail-label">Phone</span>
+                <span className="dt-profile-detail-value">{teacherData.phone}</span>
+              </div>
             </div>
 
-            <label className="dt-profile-toggle" onClick={(e) => e.stopPropagation()}>
-              <input
-                type="checkbox"
-                checked={darkMode}
-                onChange={handleToggleDarkMode}
-                aria-label="Toggle Dark Mode"
-              />
-              <span className="dt-profile-slider" />
-            </label>
-          </div>
+            <div className="dt-profile-divider-line" />
 
-          {/* Item 2: Settings (Directly navigates to the Settings page) */}
+            {/* Email */}
+            <div className="dt-profile-detail-row">
+              <div className="dt-profile-icon-square icon-purple">
+                <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="#9333EA" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="2" y="4" width="20" height="16" rx="2" />
+                  <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
+                </svg>
+              </div>
+              <div className="dt-profile-detail-text">
+                <span className="dt-profile-detail-label">Email</span>
+                <span className="dt-profile-detail-value">{teacherData.email}</span>
+              </div>
+            </div>
+
+            <div className="dt-profile-divider-line" />
+
+            {/* Qualification */}
+            <div className="dt-profile-detail-row">
+              <div className="dt-profile-icon-square icon-green">
+                <svg viewBox="0 0 24 24" width="19" height="19" fill="none" stroke="#16A34A" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M22 10v6M2 10l10-5 10 5-10 5z" />
+                  <path d="M6 12v5c3 3 9 3 12 0v-5" />
+                </svg>
+              </div>
+              <div className="dt-profile-detail-text">
+                <span className="dt-profile-detail-label">Qualification</span>
+                <span className="dt-profile-detail-value">{teacherData.qualification}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Actions Card (Settings, Help & Support, About DigiTute) ── */}
+        <div className="dt-profile-nav-card">
+          {/* Settings */}
           <div
-            className="dt-profile-menu-item"
-            onClick={handleOpenSettings}
+            className="dt-profile-nav-row"
+            onClick={() => onNavigate && onNavigate('settings')}
             role="button"
             tabIndex={0}
-            onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && handleOpenSettings()}
+            onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onNavigate && onNavigate('settings')}
           >
-            <div className="dt-profile-item-left">
-              <span className="dt-profile-item-icon" aria-hidden="true">
-                {/* Sliders / Adjustment Tune Icon matching Reference */}
-                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="4" y1="21" x2="4" y2="14" />
-                  <line x1="4" y1="10" x2="4" y2="3" />
-                  <line x1="12" y1="21" x2="12" y2="12" />
-                  <line x1="12" y1="8" x2="12" y2="3" />
-                  <line x1="20" y1="21" x2="20" y2="16" />
-                  <line x1="20" y1="12" x2="20" y2="3" />
-                  <line x1="1" y1="14" x2="7" y2="14" />
-                  <line x1="9" y1="8" x2="15" y2="8" />
-                  <line x1="17" y1="16" x2="23" y2="16" />
+            <div className="dt-profile-nav-left">
+              <div className="dt-profile-icon-square icon-blue">
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#0284C7" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 0 0 -1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 0 0 -2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 0 0 -2.573 -1.066c-1.543 .94-3.31-.826-2.37-2.37a1.724 1.724 0 0 0 -1.065 -2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 0 0 1.066 -2.573c-.94-1.543 .826-3.31 2.37-2.37c1 .608 2.296 .07 2.572-1.065z" />
+                  <circle cx="12" cy="12" r="3" />
                 </svg>
-              </span>
-              <span className="dt-profile-item-label">Settings</span>
+              </div>
+              <span className="dt-profile-nav-title">Settings</span>
             </div>
+            <svg className="dt-profile-chevron" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#64748B" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+          </div>
 
-            <span className="dt-profile-chevron" aria-hidden="true">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="9 18 15 12 9 6" />
+          <div className="dt-profile-divider-line" />
+
+          {/* Help & Support */}
+          <div
+            className="dt-profile-nav-row"
+            onClick={() => setActiveModal('helpSupport')}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && setActiveModal('helpSupport')}
+          >
+            <div className="dt-profile-nav-left">
+              <div className="dt-profile-icon-square icon-green">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#16A34A" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10" />
+                  <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+                  <line x1="12" y1="17" x2="12.01" y2="17" />
+                </svg>
+              </div>
+              <span className="dt-profile-nav-title">Help &amp; Support</span>
+            </div>
+            <svg className="dt-profile-chevron" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#64748B" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+          </div>
+
+          <div className="dt-profile-divider-line" />
+
+          {/* About DigiTute */}
+          <div
+            className="dt-profile-nav-row"
+            onClick={() => setActiveModal('about')}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && setActiveModal('about')}
+          >
+            <div className="dt-profile-nav-left">
+              <div className="dt-profile-icon-square icon-orange">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#EA580C" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="16" x2="12" y2="12" />
+                  <line x1="12" y1="8" x2="12.01" y2="8" />
+                </svg>
+              </div>
+              <span className="dt-profile-nav-title">About DigiTute</span>
+            </div>
+            <svg className="dt-profile-chevron" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#64748B" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+          </div>
+        </div>
+
+        {/* ── Centered Logout Button at Bottom ── */}
+        <div className="dt-profile-logout-wrap">
+          <button
+            type="button"
+            className="dt-profile-logout-btn"
+            onClick={() => setActiveModal('logoutConfirm')}
+            aria-label="Log out from Teacher Portal"
+          >
+            <div className="dt-profile-logout-icon-box">
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#EF4444" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M10 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4" />
+                <line x1="9" y1="12" x2="20" y2="12" />
+                <polyline points="15 7 20 12 15 17" />
               </svg>
-            </span>
-          </div>
-
-          {/* Item 3: Log out */}
-          <div
-            className="dt-profile-menu-item dt-profile-logout-item"
-            onClick={() => setLogoutModalOpen(true)}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && setLogoutModalOpen(true)}
-          >
-            <div className="dt-profile-item-left">
-              <span className="dt-profile-item-icon logout" aria-hidden="true">
-                {/* Logout Bracket with Right Arrow Icon matching Reference */}
-                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                  <polyline points="16 17 21 12 16 7" />
-                  <line x1="21" y1="12" x2="9" y2="12" />
-                </svg>
-              </span>
-              <span className="dt-profile-item-label">Log out</span>
             </div>
-          </div>
+            <span className="dt-profile-logout-text">Log out</span>
+          </button>
         </div>
+
       </div>
 
-      {/* ── Logout Confirmation Dialog ── */}
-      {logoutModalOpen && (
-        <div className="dt-modal-overlay" onClick={() => setLogoutModalOpen(false)}>
-          <div className="dt-modal-sheet dt-modal-sheet-dialog" onClick={(e) => e.stopPropagation()}>
-            <div className="dt-dialog-icon red">
-              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#DC2626" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                <polyline points="16 17 21 12 16 7" />
-                <line x1="21" y1="12" x2="9" y2="12" />
-              </svg>
+      {/* ── Modals ── */}
+      {activeModal === 'helpSupport' && (
+        <HelpSupportModal onClose={() => setActiveModal(null)} />
+      )}
+      {activeModal === 'about' && (
+        <AboutModal onClose={() => setActiveModal(null)} />
+      )}
+      {activeModal === 'logoutConfirm' && (
+        <LogoutDialog
+          onClose={() => setActiveModal(null)}
+          onConfirm={handleLogout}
+        />
+      )}
+    </div>
+  );
+}
+
+function HelpSupportModal({ onClose }) {
+  return (
+    <div className="dt-modal-overlay" onClick={onClose}>
+      <div className="dt-modal-sheet" onClick={(e) => e.stopPropagation()}>
+        <div className="dt-modal-header">
+          <h3 className="dt-modal-title">Help &amp; Support</h3>
+          <button type="button" className="dt-modal-close-btn" onClick={onClose} aria-label="Close">✕</button>
+        </div>
+        <div className="dt-modal-body">
+          <p className="dt-modal-desc">
+            For technical assistance, batch adjustments, or account help, contact the DigiTute Administration team:
+          </p>
+          <div className="dt-contact-row">
+            <div>
+              <span className="dt-contact-type">Admin Desk Phone</span>
+              <strong className="dt-contact-value">+91 97344 17711</strong>
             </div>
-            <div className="dt-dialog-content">
-              <h3 className="dt-dialog-title">Log Out</h3>
-              <p className="dt-dialog-message">Are you sure you want to log out of your DigiTute teacher account?</p>
+            <a href="tel:+919734417711" className="dt-btn dt-btn-secondary dt-btn-sm">Call</a>
+          </div>
+          <div className="dt-contact-row">
+            <div>
+              <span className="dt-contact-type">Admin Email</span>
+              <strong className="dt-contact-value">support@digitute.com</strong>
             </div>
-            <div className="dt-dialog-actions">
-              <button
-                type="button"
-                className="dt-btn dt-btn-secondary"
-                onClick={() => setLogoutModalOpen(false)}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="dt-btn dt-btn-destructive"
-                onClick={handleConfirmLogout}
-              >
-                Log Out
-              </button>
+            <a href="mailto:support@digitute.com" className="dt-btn dt-btn-secondary dt-btn-sm">Email</a>
+          </div>
+          <div className="dt-contact-row">
+            <div>
+              <span className="dt-contact-type">Support Window</span>
+              <strong className="dt-contact-value">Monday – Saturday (9:00 AM – 7:00 PM)</strong>
             </div>
           </div>
         </div>
-      )}
-
-      {/* ── Toast Notification ── */}
-      {toast && (
-        <div className="dt-refined-toast" role="status">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#38BDF8" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="20 6 9 17 4 12" />
-          </svg>
-          <span>{toast}</span>
+        <div className="dt-modal-actions">
+          <button type="button" className="dt-btn dt-btn-primary" onClick={onClose}>Done</button>
         </div>
-      )}
+      </div>
+    </div>
+  );
+}
+
+function AboutModal({ onClose }) {
+  return (
+    <div className="dt-modal-overlay" onClick={onClose}>
+      <div className="dt-modal-sheet" onClick={(e) => e.stopPropagation()}>
+        <div className="dt-modal-header">
+          <h3 className="dt-modal-title">About DigiTute</h3>
+          <button type="button" className="dt-modal-close-btn" onClick={onClose} aria-label="Close">✕</button>
+        </div>
+        <div className="dt-modal-body dt-about-content">
+          <div className="dt-about-badge">DigiTute Education Operating System</div>
+          <p>
+            DigiTute is an integrated modern education management ecosystem connecting classroom operations, faculty workflows, attendance, and student academic progress.
+          </p>
+          <p>
+            <strong>Version:</strong> v2.4.0 (Build 2026.10)
+          </p>
+          <p>
+            <strong>Portal:</strong> Faculty &amp; Teacher Portal
+          </p>
+        </div>
+        <div className="dt-modal-actions">
+          <button type="button" className="dt-btn dt-btn-primary" onClick={onClose}>Close</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LogoutDialog({ onClose, onConfirm }) {
+  return (
+    <div className="dt-modal-overlay" onClick={onClose}>
+      <div className="dt-modal-sheet dt-modal-sheet-dialog" onClick={(e) => e.stopPropagation()}>
+        <div className="dt-dialog-icon red">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#DC2626" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+            <polyline points="16 17 21 12 16 7" />
+            <line x1="21" y1="12" x2="9" y2="12" />
+          </svg>
+        </div>
+        <div className="dt-dialog-content">
+          <h3 className="dt-dialog-title">Log Out</h3>
+          <p className="dt-dialog-message">Are you sure you want to log out of your DigiTute teacher account?</p>
+        </div>
+        <div className="dt-dialog-actions">
+          <button type="button" className="dt-btn dt-btn-secondary" onClick={onClose}>Cancel</button>
+          <button type="button" className="dt-btn dt-btn-destructive" onClick={onConfirm}>Log Out</button>
+        </div>
+      </div>
     </div>
   );
 }
