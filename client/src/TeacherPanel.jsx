@@ -9,6 +9,7 @@ import StudyMaterial from './components/Teacher/StudyMaterial';
 import Finance from './components/Teacher/Finance';
 import Notice from './components/Teacher/Notice';
 import Settings from './components/Teacher/Settings';
+import Profile from './components/Teacher/Profile';
 
 const tabToRoute = {
   dashboard: '/',
@@ -17,6 +18,7 @@ const tabToRoute = {
   finance: '/finance',
   notice: '/notice',
   settings: '/settings',
+  profile: '/profile',
 };
 
 const routeToTab = {
@@ -26,6 +28,7 @@ const routeToTab = {
   '/finance': 'finance',
   '/notice': 'notice',
   '/settings': 'settings',
+  '/profile': 'profile',
 };
 
 export function TeacherPanel({ onBackToLanding }) {
@@ -62,9 +65,8 @@ export function TeacherPanel({ onBackToLanding }) {
           onHomeClick={() => handleTabChange('dashboard')} 
           onLogoClick={() => handleTabChange('dashboard')}
           onNotificationClick={() => handleTabChange('settings')}
-          onProfileClick={() => handleTabChange('settings')}
+          onProfileClick={() => handleTabChange('profile')}
           onTabChange={handleTabChange}
-          onLogout={onBackToLanding}
         />
 
         {/* Page Content */}
@@ -75,6 +77,7 @@ export function TeacherPanel({ onBackToLanding }) {
             <Route path="/study-material" element={<StudyMaterial onNavigate={handleTabChange} />} />
             <Route path="/finance" element={<Finance onNavigate={handleTabChange} />} />
             <Route path="/notice" element={<Notice onNavigate={handleTabChange} />} />
+            <Route path="/profile" element={<Profile onNavigate={handleTabChange} onBackToLanding={onBackToLanding} />} />
             <Route path="/settings" element={<Settings onNavigate={handleTabChange} onBackToLanding={onBackToLanding} />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

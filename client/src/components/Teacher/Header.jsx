@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 
 export function Header({
   activePage = 'dashboard',
@@ -6,25 +6,43 @@ export function Header({
   onToggleSidebar,
   onNotificationClick,
   onProfileClick,
-  onLogout
+  onTabChange
 }) {
-  const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
-  const dropdownRef = useRef(null);
-
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    function handleClickOutside(event) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setProfileDropdownOpen(false);
+  const getStoredTeacher = () => {
+    try {
+      const saved = localStorage.getItem('digitute_teacher_profile');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return {
+          name: parsed.name || 'Sudipta Sir',
+          username: parsed.username || '@sudipta',
+          avatarUrl: parsed.avatarUrl || '',
+          role: parsed.role || 'Faculty of DigiTute'
+        };
       }
-    }
-    if (profileDropdownOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
+    } catch { /* ignore */ }
+    return {
+      name: 'Sudipta Sir',
+      username: '@sudipta',
+      avatarUrl: '',
+      role: 'Faculty of DigiTute'
     };
-  }, [profileDropdownOpen]);
+  };
+
+  const [teacher, setTeacher] = useState(getStoredTeacher);
+
+  // Sync teacher info when profile is updated in Settings
+  useEffect(() => {
+    const handleProfileUpdate = () => {
+      setTeacher(getStoredTeacher());
+    };
+    window.addEventListener('digitute-profile-updated', handleProfileUpdate);
+    window.addEventListener('storage', handleProfileUpdate);
+    return () => {
+      window.removeEventListener('digitute-profile-updated', handleProfileUpdate);
+      window.removeEventListener('storage', handleProfileUpdate);
+    };
+  }, []);
 
   const getPageTitle = (page) => {
     switch (page) {
@@ -38,6 +56,8 @@ export function Header({
         return 'Finance';
       case 'notice':
         return 'Notice Board';
+      case 'profile':
+        return 'Profile';
       case 'settings':
         return 'Settings';
       default:
@@ -45,16 +65,16 @@ export function Header({
     }
   };
 
-  const handleLogoutClick = () => {
-    setProfileDropdownOpen(false);
-    if (onLogout) {
-      onLogout();
-    } else {
-      localStorage.removeItem('digitute_active_view');
-      window.location.hash = '#landing';
-      window.location.reload();
+  // Direct Profile Page navigation - no dropdowns!
+  const handleOpenProfile = () => {
+    if (onProfileClick) {
+      onProfileClick();
+    } else if (onTabChange) {
+      onTabChange('profile');
     }
   };
+
+  const isProfileActive = activePage === 'profile';
 
   return (
     <header className="dt-header" role="banner">
@@ -112,74 +132,45 @@ export function Header({
             {hasNotifications && <span className="dt-header-badge-dot" aria-label="New notifications" />}
           </button>
 
-          {/* Profile Dropdown Container */}
-          <div className="dt-header-profile-wrapper" ref={dropdownRef}>
+          {/* Direct Profile Button & Desktop Teacher Meta (No dropdown popup) */}
+          <div
+            className={`dt-header-profile-wrapper ${isProfileActive ? 'active' : ''}`}
+            onClick={handleOpenProfile}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && handleOpenProfile()}
+            aria-label="Open Profile Page"
+            title="Open Profile Page"
+          >
             <button
               type="button"
-              className={`dt-header-icon-btn profile-btn ${profileDropdownOpen ? 'is-open' : ''}`}
-              onClick={() => setProfileDropdownOpen(prev => !prev)}
-              aria-label="Teacher Profile Menu"
-              aria-expanded={profileDropdownOpen}
+              className={`dt-header-icon-btn profile-btn ${isProfileActive ? 'active' : ''}`}
+              aria-label="Teacher Profile"
               title="Teacher Profile"
+              tabIndex={-1}
             >
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="#1E293B"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                <circle cx="12" cy="7" r="4" />
-              </svg>
+              {teacher.avatarUrl ? (
+                <img src={teacher.avatarUrl} alt={teacher.name} className="dt-header-avatar-img" />
+              ) : (
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="#1E293B"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                  <circle cx="12" cy="7" r="4" />
+                </svg>
+              )}
             </button>
 
             {/* Desktop Teacher Tag */}
-            <div 
-              className="dt-header-teacher-meta" 
-              onClick={() => setProfileDropdownOpen(prev => !prev)}
-              role="button"
-              tabIndex={0}
-              style={{ cursor: 'pointer' }}
-            >
-              <span className="dt-header-teacher-name">Sudipta Sir</span>
+            <div className="dt-header-teacher-meta">
+              <span className="dt-header-teacher-name">{teacher.name}</span>
               <span className="dt-header-teacher-status">Faculty of DigiTute</span>
             </div>
-
-            {/* Profile Dropdown Menu */}
-            {profileDropdownOpen && (
-              <div className="dt-header-dropdown-menu" role="menu">
-                <div className="dt-header-dropdown-header">
-                  <div className="dt-dropdown-avatar">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2">
-                      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                      <circle cx="12" cy="7" r="4" />
-                    </svg>
-                  </div>
-                  <div className="dt-dropdown-user-info">
-                    <strong className="dt-dropdown-user-name">Sudipta Sir</strong>
-                    <span className="dt-dropdown-user-role">Faculty of DigiTute</span>
-                  </div>
-                </div>
-
-                <div className="dt-dropdown-divider" />
-
-                <button
-                  type="button"
-                  className="dt-dropdown-item logout-item"
-                  onClick={handleLogoutClick}
-                  role="menuitem"
-                >
-                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#EF4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                    <polyline points="16 17 21 12 16 7" />
-                    <line x1="21" y1="12" x2="9" y2="12" />
-                  </svg>
-                  <span>Log Out</span>
-                </button>
-              </div>
-            )}
           </div>
         </div>
       </div>
