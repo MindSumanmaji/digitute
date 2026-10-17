@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Activity, AlertCircle, ArrowDownRight, ArrowUpRight, Bell, BookOpen,
   CalendarDays, Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight,
@@ -8,13 +8,10 @@ import {
   Sparkles, Sun, Users, Wallet, X, Megaphone, Building2, UserRoundPlus,
   BookMarked, CalendarCheck, ChartNoAxesCombined, ClipboardList, PanelLeftClose,
   PanelLeftOpen, ReceiptText, TrendingUp, UserCheck, UserCog, WalletCards,
-  CircleHelp, Filter, CheckCheck, Printer, MessageSquare, Copy, Link2, Trash2
+  CircleHelp, Filter, CheckCheck, Printer, MessageSquare, Copy, Link2, Trash2, Edit3
 } from 'lucide-react';
 
-import {
-  initialBatches, initialTeachers, initialStudents, initialTransactions,
-  initialNotices, initialSyllabus, initialExams, initialMaterials
-} from './data/mockData';
+import { apiRequest, clearAuthSession } from './api';
 
 import BatchesView from './components/Admin/BatchesView';
 import RoutineScheduleView from './components/Admin/RoutineScheduleView';
@@ -24,30 +21,15 @@ import FinanceView from './components/Admin/FinanceView';
 import NoticeBoardView from './components/Admin/NoticeBoardView';
 import ReportsView from './components/Admin/ReportsView';
 
-const navGroups = [
-  {
-    label: 'WORKSPACE',
-    items: [
-      { label: 'Home', icon: Home },
-      { label: 'Batches & Courses', icon: BookOpen },
-      { label: 'Routine & Schedule', icon: CalendarDays },
-      { label: 'Teachers & Staff', icon: UserCog },
-      { label: 'Students & Admissions', icon: Users },
-    ],
-  },
-  {
-    label: 'OPERATIONS',
-    items: [
-      { label: 'Finance & Fees', icon: WalletCards },
-      { label: 'Notice Board', icon: Megaphone },
-    ],
-  },
-  {
-    label: 'INSIGHTS',
-    items: [
-      { label: 'Reports & Analytics', icon: ChartNoAxesCombined },
-    ],
-  },
+const navItems = [
+  { label: 'Home', icon: Home },
+  { label: 'Batches & Courses', icon: BookOpen },
+  { label: 'Routine & Schedule', icon: CalendarDays },
+  { label: 'Teachers & Staff', icon: UserCog },
+  { label: 'Students & Admissions', icon: Users },
+  { label: 'Finance & Fees', icon: WalletCards },
+  { label: 'Notice Board', icon: Megaphone },
+  { label: 'Reports & Analytics', icon: ChartNoAxesCombined },
 ];
 
 const monthData = [
@@ -78,7 +60,7 @@ function Brand({ collapsed }) {
   );
 }
 
-function Sidebar({ activePage, onNavigate, collapsed, setCollapsed, mobileOpen, setMobileOpen, studentCount, batchCount, teacherCount }) {
+function Sidebar({ activePage, onNavigate, collapsed, setCollapsed, mobileOpen, setMobileOpen, onSignOut }) {
   return (
     <>
       {mobileOpen && <button className="mobile-scrim" aria-label="Close navigation" onClick={() => setMobileOpen(false)} />}
@@ -91,34 +73,54 @@ function Sidebar({ activePage, onNavigate, collapsed, setCollapsed, mobileOpen, 
           <button className="icon-button mobile-close" aria-label="Close navigation" onClick={() => setMobileOpen(false)}><X size={19} /></button>
         </div>
         <nav className="side-nav">
-          {navGroups.map((group) => (
-            <div className="nav-group" key={group.label}>
-              {group.items.map((item) => {
-                const Icon = item.icon;
-                const active = activePage === item.label;
-                return (
-                  <button
-                    key={item.label}
-                    className={`nav-item ${active ? 'active' : ''}`}
-                    onClick={() => { onNavigate(item.label); setMobileOpen(false); }}
-                  >
-                    <Icon size={18} />
-                    {!collapsed && <span className="nav-item-label">{item.label}</span>}
-                    {collapsed && <span className="nav-tooltip">{item.label}</span>}
-                  </button>
-                );
-              })}
-            </div>
-          ))}
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            const active = activePage === item.label;
+            return (
+              <button
+                key={item.label}
+                className={`nav-item ${active ? 'active' : ''}`}
+                onClick={() => { onNavigate(item.label); setMobileOpen(false); }}
+              >
+                <Icon size={18} />
+                {!collapsed && <span className="nav-item-label">{item.label}</span>}
+                {collapsed && <span className="nav-tooltip">{item.label}</span>}
+              </button>
+            );
+          })}
         </nav>
+
+        <div className="sidebar-bottom" style={{ marginTop: 'auto', paddingTop: '12px', borderTop: '1px solid var(--border)' }}>
+          <button
+            type="button"
+            className="nav-item sidebar-logout-btn"
+            onClick={onSignOut}
+            title="Log out"
+          >
+            <LogOut size={18} />
+            {!collapsed && <span className="nav-item-label">Log out</span>}
+            {collapsed && <span className="nav-tooltip">Log out</span>}
+          </button>
+        </div>
       </aside>
     </>
   );
 }
 
-function Topbar({ searchQuery, setSearchQuery, onMobileMenu, darkMode, setDarkMode, onQuickAction, onNavigate }) {
+function Topbar({ user, searchQuery, setSearchQuery, onMobileMenu, darkMode, setDarkMode, onQuickAction, onNavigate }) {
   const [profileOpen, setProfileOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
+
+  const userName = user?.full_name || 'Admin';
+  const userEmail = user?.email || '';
+  const userRole = (user?.role || 'ADMIN').toUpperCase();
+  const userInitials = userName
+    .split(' ')
+    .filter(Boolean)
+    .map(w => w[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase() || 'AD';
 
   return (
     <header className="topbar">
@@ -181,17 +183,29 @@ function Topbar({ searchQuery, setSearchQuery, onMobileMenu, darkMode, setDarkMo
         <div className="popover-wrap">
           <button
             className="top-profile"
+            aria-label="User Profile"
             onClick={() => { setProfileOpen(!profileOpen); setNotifOpen(false); }}
           >
-            <div className="top-profile-avatar">AD</div>
+            <div className="top-profile-avatar">{userInitials}</div>
             <ChevronDown size={14} className="profile-chevron" />
           </button>
 
           {profileOpen && (
             <div className="floating-popover profile-menu">
-              <strong>Admin Director</strong>
-              <span>admin@digitute.app</span>
-              <button onClick={() => { setProfileOpen(false); onQuickAction('Sign out'); }}><LogOut size={14} /> Sign out</button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                <div className="top-profile-avatar" style={{ width: 32, height: 32, fontSize: 11 }}>{userInitials}</div>
+                <div>
+                  <strong style={{ display: 'block', lineHeight: 1.2 }}>{userName}</strong>
+                  <span style={{ fontSize: '10px', color: 'var(--teal)', fontWeight: 700 }}>{userRole}</span>
+                </div>
+              </div>
+              <span style={{ fontSize: '11px', color: 'var(--text-3)', wordBreak: 'break-all', marginBottom: '10px' }}>{userEmail}</span>
+              <button 
+                onClick={() => { setProfileOpen(false); onQuickAction('Sign out'); }} 
+                style={{ cursor: 'pointer', width: '100%', display: 'flex', alignItems: 'center', gap: '8px' }}
+              >
+                <LogOut size={14} /> Sign out
+              </button>
             </div>
           )}
         </div>
@@ -365,22 +379,30 @@ function HomeView({ searchQuery, onQuickAction, onNavigate, onCollect, students 
                 </tr>
               </thead>
               <tbody>
-                {dueList.map((s) => (
-                  <tr key={s.id}>
-                    <td>
-                      <div className="student-cell">
-                        <div className={`student-avatar ${s.avatarTone}`}>{s.name[0]}</div>
-                        <div><strong>{s.name}</strong><small>{s.studentId || s.id}</small></div>
-                      </div>
-                    </td>
-                    <td><span className="batch-name">{s.batch}</span></td>
-                    <td><strong className="due-amount">₹{s.dueAmount.toLocaleString('en-IN')}</strong></td>
-                    <td><span className="due-date">{s.dueDate}</span></td>
-                    <td style={{ textAlign: 'right' }}>
-                      <button className="collect-row-button" onClick={() => onCollect(s)}>Collect</button>
+                {dueList.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} style={{ textAlign: 'center', padding: '24px 16px', color: 'var(--text-3)' }}>
+                      No pending fee dues. All student accounts are clear.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  dueList.map((s) => (
+                    <tr key={s.id}>
+                      <td>
+                        <div className="student-cell">
+                          <div className={`student-avatar ${s.avatarTone}`}>{s.name[0]}</div>
+                          <div><strong>{s.name}</strong><small>{s.studentId || s.id}</small></div>
+                        </div>
+                      </td>
+                      <td><span className="batch-name">{s.batch}</span></td>
+                      <td><strong className="due-amount">₹{s.dueAmount.toLocaleString('en-IN')}</strong></td>
+                      <td><span className="due-date">{s.dueDate}</span></td>
+                      <td style={{ textAlign: 'right' }}>
+                        <button className="collect-row-button" onClick={() => onCollect(s)}>Collect</button>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -418,80 +440,85 @@ function HomeView({ searchQuery, onQuickAction, onNavigate, onCollect, students 
 }
 
 function Modal({ modal, onClose, onSubmit, selectedItem, batches, teachers }) {
+  const isAdmission = modal === 'New admission';
+  const isEditStudent = modal === 'Edit student';
+  const isBatch = modal === 'Create batch' || modal === 'Edit batch';
+  const isEditBatch = modal === 'Edit batch';
+  const isDeleteBatch = modal === 'Delete batch';
+  const isTeacher = modal === 'Add teacher' || modal === 'Edit teacher';
+  const isEditTeacher = modal === 'Edit teacher';
+  const isCollect = modal === 'Collect cash' || modal === 'Collect fee' || (typeof modal === 'string' && modal.startsWith('Collect for '));
+  const isReceipt = typeof modal === 'string' && modal.startsWith('Receipt: ');
+  const isNotice = modal === 'Broadcast notice' || modal === 'Send fee reminders';
+  const isExport = modal === 'Export report';
+
   const [form, setForm] = useState({
-    name: selectedItem?.name || '',
+    name: selectedItem?.full_name || selectedItem?.name || '',
     email: selectedItem?.email || '',
     phone: selectedItem?.phone || '',
-    batch: selectedItem?.batch || (batches[0]?.name || ''),
-    guardianName: selectedItem?.guardianName || '',
-    guardianPhone: selectedItem?.guardianPhone || '',
-    guardianWhatsapp: selectedItem?.guardianWhatsapp || '',
+    batch: selectedItem?.batches?.name || selectedItem?.batch || (batches[0]?.name || ''),
+    guardianName: selectedItem?.guardian_name || selectedItem?.guardianName || '',
+    guardianPhone: selectedItem?.guardian_phone || selectedItem?.guardianPhone || '',
+    guardianWhatsapp: selectedItem?.guardian_phone || selectedItem?.guardianWhatsapp || '',
     address: selectedItem?.address || '',
-    discountAmount: selectedItem?.discountAmount || '',
-    amount: selectedItem?.dueAmount || '',
+    discountAmount: selectedItem?.discount_amount != null ? selectedItem.discount_amount : (selectedItem?.discountAmount || ''),
+    customMonthlyFee: selectedItem?.custom_monthly_fee != null ? selectedItem.custom_monthly_fee : (selectedItem?.customMonthlyFee || ''),
+    isActive: selectedItem?.is_active !== undefined ? selectedItem.is_active : true,
+    amount: selectedItem?.feeAmount || selectedItem?.fee_amount || selectedItem?.monthlyFee || selectedItem?.dueAmount || '',
+    feeType: selectedItem?.feeType || selectedItem?.fee_type || 'MONTHLY',
     mode: 'Cash',
-    title: '',
-    duration: '1 Year',
+    title: selectedItem?.name || '',
+    duration: selectedItem?.duration || '1 Year',
     dueDay: '10',
     lateFine: '100',
-    qualification: '',
-    specialization: '',
+    qualification: selectedItem?.qualification || '',
+    specialization: selectedItem?.specialization || '',
     payoutModel: 'Fixed Monthly (₹6,000/mo)',
     audience: 'All Students & Teachers',
     message: '',
   });
 
-  const [batchSubjects, setBatchSubjects] = useState([
-    {
-      name: 'Physics',
-      teacherId: teachers?.[0]?.id || 't-1',
-      teacher: teachers?.[0]?.name || 'Arindam Roy',
-      sharePercent: 35
-    },
-    {
-      name: 'Chemistry',
-      teacherId: teachers?.[1]?.id || 't-2',
-      teacher: teachers?.[1]?.name || 'Debjani Paul',
-      sharePercent: 30
+  const [batchSubjects, setBatchSubjects] = useState(() => {
+    if (selectedItem?.subjects && Array.isArray(selectedItem.subjects) && selectedItem.subjects.length > 0) {
+      return selectedItem.subjects.map(s => ({
+        name: s.name || '',
+        teacherId: s.teacherId || s.teacher_id || '',
+        teacher: s.teacher || s.teacher_name || '',
+        sharePercent: s.sharePercent != null ? s.sharePercent : (s.share_percent != null ? s.share_percent : 35)
+      }));
     }
-  ]);
-
-  const [batchRoutine, setBatchRoutine] = useState([
-    { day: 'Monday', subject: 'Physics', time: '04:00 PM - 05:30 PM' },
-    { day: 'Wednesday', subject: 'Chemistry', time: '04:30 PM - 06:00 PM' }
-  ]);
-
-  const [selectedTeacherBatches, setSelectedTeacherBatches] = useState(
-    batches?.[0]?.name ? [batches[0].name] : []
-  );
+    return [
+      {
+        name: '',
+        teacherId: teachers?.[0]?.id || '',
+        teacher: teachers?.[0]?.name || '',
+        sharePercent: ''
+      }
+    ];
+  });
 
   if (!modal) return null;
-
-  const isAdmission = modal === 'New admission';
-  const isBatch = modal === 'Create batch';
-  const isTeacher = modal === 'Add teacher';
-  const isCollect = modal === 'Collect cash' || modal === 'Collect fee' || modal.startsWith('Collect for ');
-  const isReceipt = modal.startsWith('Receipt: ');
-  const isNotice = modal === 'Broadcast notice' || modal === 'Send fee reminders';
-  const isExport = modal === 'Export report';
 
   const update = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
   const addSubject = () => {
-    const defaultTeacher = teachers?.[0] || { id: 't-1', name: 'Faculty' };
+    const defaultTeacher = teachers?.[0] || { id: '', name: '' };
     setBatchSubjects(prev => [
       ...prev,
       {
         name: '',
-        teacherId: defaultTeacher.id,
-        teacher: defaultTeacher.name,
-        sharePercent: 30
+        teacherId: defaultTeacher.id || '',
+        teacher: defaultTeacher.name || defaultTeacher.full_name || '',
+        sharePercent: ''
       }
     ]);
   };
 
   const removeSubject = (index) => {
-    if (batchSubjects.length <= 1) return;
+    if (batchSubjects.length <= 1) {
+      setBatchSubjects([{ name: '', teacherId: '', teacher: '', sharePercent: '' }]);
+      return;
+    }
     setBatchSubjects(prev => prev.filter((_, i) => i !== index));
   };
 
@@ -500,42 +527,12 @@ function Modal({ modal, onClose, onSubmit, selectedItem, batches, teachers }) {
       const copy = [...prev];
       if (field === 'teacherId') {
         const found = teachers.find(t => t.id === value);
-        copy[index] = { ...copy[index], teacherId: value, teacher: found ? found.name : '' };
+        copy[index] = { ...copy[index], teacherId: value, teacher: found ? (found.full_name || found.name) : '' };
       } else {
         copy[index] = { ...copy[index], [field]: value };
       }
       return copy;
     });
-  };
-
-  const addRoutineSlot = () => {
-    const defaultSubj = batchSubjects[0]?.name || 'Physics';
-    setBatchRoutine(prev => [
-      ...prev,
-      { day: 'Friday', subject: defaultSubj, time: '04:00 PM - 05:30 PM' }
-    ]);
-  };
-
-  const removeRoutineSlot = (index) => {
-    setBatchRoutine(prev => prev.filter((_, i) => i !== index));
-  };
-
-  const updateRoutineSlot = (index, field, value) => {
-    setBatchRoutine(prev => {
-      const copy = [...prev];
-      copy[index] = { ...copy[index], [field]: value };
-      return copy;
-    });
-  };
-
-
-
-  const toggleTeacherBatch = (batchName) => {
-    setSelectedTeacherBatches(prev =>
-      prev.includes(batchName)
-        ? (prev.length > 1 ? prev.filter(b => b !== batchName) : prev)
-        : [...prev, batchName]
-    );
   };
 
   const totalShare = batchSubjects.reduce((sum, s) => sum + (Number(s.sharePercent) || 0), 0);
@@ -547,16 +544,7 @@ function Modal({ modal, onClose, onSubmit, selectedItem, batches, teachers }) {
         type: modal,
         form: {
           ...form,
-          subjects: batchSubjects,
-          routine: batchRoutine
-        }
-      });
-    } else if (isTeacher) {
-      onSubmit({
-        type: modal,
-        form: {
-          ...form,
-          assignedBatches: selectedTeacherBatches
+          subjects: batchSubjects
         }
       });
     } else {
@@ -568,30 +556,93 @@ function Modal({ modal, onClose, onSubmit, selectedItem, batches, teachers }) {
     <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className={`modal-card ${isBatch || isTeacher ? 'modal-card-lg' : ''}`}>
         <div className="modal-header">
-          <div className="modal-heading-icon"><Sparkles size={19} /></div>
+          <div className="modal-heading-icon" style={isDeleteBatch ? { background: '#fff1f2', color: '#e11d48' } : {}}>
+            {isDeleteBatch ? <Trash2 size={19} /> : (isEditStudent || isEditTeacher) ? <Edit3 size={19} /> : <Sparkles size={19} />}
+          </div>
           <div>
             <h2>
               {isAdmission ? 'New Student Admission' :
-                isBatch ? 'Create New Course Batch' :
-                  isTeacher ? 'Add Faculty Member' :
-                    isCollect ? (modal.startsWith('Collect for ') ? modal : 'Collect Tuition Fee') :
-                      isReceipt ? 'Official Payment Receipt' :
-                        isNotice ? 'Broadcast Announcement' :
-                          isExport ? 'Export Institute Report' : modal}
+                isEditStudent ? `Edit Student: ${selectedItem?.full_name || selectedItem?.name || ''}` :
+                isDeleteBatch ? 'Delete Course Batch' :
+                isEditBatch ? `Edit Batch: ${selectedItem?.name || ''}` :
+                  isBatch ? 'Create New Course Batch' :
+                    isEditTeacher ? `Edit Faculty: ${selectedItem?.full_name || selectedItem?.name || ''}` :
+                    isTeacher ? 'Add Faculty Member' :
+                      isCollect ? ((typeof modal === 'string' && modal.startsWith('Collect for ')) ? modal : 'Collect Tuition Fee') :
+                        isReceipt ? 'Official Payment Receipt' :
+                          isNotice ? 'Broadcast Announcement' :
+                            isExport ? 'Export Institute Report' : modal}
             </h2>
             <p>
               {isAdmission ? 'Enter student and guardian contact details for batch enrolment.' :
-                isBatch ? 'Configure batch name, tuition fee model, faculty revenue sharing and class schedule.' :
-                  isTeacher ? 'Onboard teacher with qualification, subjects and payout model.' :
-                    isCollect ? 'Record counter cash payment and issue digital receipt slip.' :
-                      isReceipt ? 'Official money voucher with institute seal.' :
-                        isNotice ? 'Publish notification to student and faculty portals.' : 'Confirm action.'}
+                isEditStudent ? 'Update student profile, enrolled batch, contact numbers and scholarship discount.' :
+                isDeleteBatch ? 'Confirm permanent removal of this course batch from database.' :
+                isEditBatch ? 'Update batch fee model, course fee and faculty revenue sharing.' :
+                  isBatch ? 'Configure batch name, tuition fee model and faculty revenue sharing.' :
+                    isEditTeacher ? 'Update faculty contact info, qualifications and academic specialization.' :
+                    isTeacher ? 'Onboard teacher with qualification, subjects and payout model.' :
+                      isCollect ? 'Record counter cash payment and issue digital receipt slip.' :
+                        isReceipt ? 'Official money voucher with institute seal.' :
+                          isNotice ? 'Publish notification to student and faculty portals.' : 'Confirm action.'}
             </p>
           </div>
           <button className="icon-button" onClick={onClose}><X size={19} /></button>
         </div>
 
-        {isReceipt ? (
+        {isDeleteBatch ? (
+          <div>
+            <div style={{ padding: '16px 8px 24px', textAlign: 'center' }}>
+              <div style={{
+                width: 56,
+                height: 56,
+                borderRadius: '50%',
+                background: '#fff1f2',
+                color: '#e11d48',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto 16px',
+                border: '1px solid #ffe4e6'
+              }}>
+                <Trash2 size={26} />
+              </div>
+              <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8, color: 'var(--text-1)' }}>
+                Delete "{selectedItem?.name || 'this batch'}"?
+              </h3>
+              <p style={{ fontSize: 14, color: 'var(--text-3)', maxWidth: 420, margin: '0 auto 12px', lineHeight: 1.5 }}>
+                Are you sure you want to delete this course batch? This will remove the batch offering, its subject allocations, and unassign any enrolled students.
+              </p>
+              {(selectedItem?.studentCount || selectedItem?.student_count) > 0 && (
+                <div style={{
+                  background: '#fff8e6',
+                  color: '#b45309',
+                  border: '1px solid #fde68a',
+                  padding: '10px 14px',
+                  borderRadius: 8,
+                  fontSize: 13,
+                  maxWidth: 420,
+                  margin: '12px auto 0',
+                  textAlign: 'left'
+                }}>
+                  ⚠️ <strong>Warning:</strong> {selectedItem?.studentCount || selectedItem?.student_count} student(s) currently enrolled will be unassigned from this batch.
+                </div>
+              )}
+            </div>
+            <div className="modal-footer" style={{ borderTop: '1px solid var(--border)', paddingTop: 14, display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+              <button type="button" className="button-secondary" onClick={onClose}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="button-primary"
+                style={{ background: '#e11d48', borderColor: '#e11d48', color: '#fff' }}
+                onClick={() => onSubmit({ type: 'Delete batch', form: selectedItem })}
+              >
+                <Trash2 size={15} /> Yes, Delete Batch
+              </button>
+            </div>
+          </div>
+        ) : isReceipt ? (
           <div>
             <div style={{ border: '1px dashed #cedbd7', borderRadius: 12, padding: 18, background: '#f8fbfb', marginBottom: 16 }}>
               <div style={{ textAlign: 'center', borderBottom: '1px solid #e1e9e7', paddingBottom: 10, marginBottom: 12 }}>
@@ -620,17 +671,24 @@ function Modal({ modal, onClose, onSubmit, selectedItem, batches, teachers }) {
           </div>
         ) : (
           <form onSubmit={handleSubmit}>
-            {isAdmission && (
+            {(isAdmission || isEditStudent) && (
               <>
                 <div className="form-row">
                   <label className="form-field">
                     <span>Student Full Name <b>*</b></span>
                     <input required value={form.name} onChange={(e) => update('name', e.target.value)} placeholder="e.g. Rahul Sharma" />
                   </label>
-                  <label className="form-field">
-                    <span>Email Address (Mandatory for Login) <b>*</b></span>
-                    <input required type="email" value={form.email} onChange={(e) => update('email', e.target.value)} placeholder="rahul.sharma@gmail.com" />
-                  </label>
+                  {isAdmission ? (
+                    <label className="form-field">
+                      <span>Email Address (Mandatory for Login) <b>*</b></span>
+                      <input required type="email" value={form.email} onChange={(e) => update('email', e.target.value)} placeholder="rahul.sharma@gmail.com" />
+                    </label>
+                  ) : (
+                    <label className="form-field">
+                      <span>Email Address (Login Identity · Read-only)</span>
+                      <input type="email" value={form.email} disabled readOnly style={{ opacity: 0.75, cursor: 'not-allowed', background: 'var(--bg-card)' }} />
+                    </label>
+                  )}
                 </div>
                 <div className="form-row">
                   <label className="form-field">
@@ -664,6 +722,17 @@ function Modal({ modal, onClose, onSubmit, selectedItem, batches, teachers }) {
                     <input value={form.address} onChange={(e) => update('address', e.target.value)} placeholder="Student can fill later after login" />
                   </label>
                 </div>
+                {isEditStudent && (
+                  <div className="form-row">
+                    <label className="form-field">
+                      <span>Enrolment Status</span>
+                      <select value={form.isActive ? 'true' : 'false'} onChange={(e) => update('isActive', e.target.value === 'true')}>
+                        <option value="true">Active (Enrolled)</option>
+                        <option value="false">Inactive (Suspended / Left)</option>
+                      </select>
+                    </label>
+                  </div>
+                )}
               </>
             )}
 
@@ -730,12 +799,13 @@ function Modal({ modal, onClose, onSubmit, selectedItem, batches, teachers }) {
                         <label className="form-field flex-3">
                           <span style={{ fontSize: 9.5 }}>Assigned Teacher <b>*</b></span>
                           <select
-                            value={subj.teacherId}
+                            value={subj.teacherId || ''}
                             onChange={(e) => updateSubject(idx, 'teacherId', e.target.value)}
                           >
+                            <option value="">{teachers.length > 0 ? 'Select Assigned Faculty' : 'No Faculty Available'}</option>
                             {teachers.map(t => (
                               <option key={t.id} value={t.id}>
-                                {t.name} ({t.specialization || 'Faculty'})
+                                {t.full_name || t.name} ({t.specialization || 'Faculty'})
                               </option>
                             ))}
                           </select>
@@ -777,74 +847,6 @@ function Modal({ modal, onClose, onSubmit, selectedItem, batches, teachers }) {
                     )}
                   </div>
                 </div>
-
-                <div className="batch-form-section">
-                  <div className="batch-section-header">
-                    <div>
-                      <span>3. Weekly Class Schedule & Routine</span>
-                      <small>Timetable slots for recurring weekly classes</small>
-                    </div>
-                    <button type="button" className="button-secondary btn-sm" onClick={addRoutineSlot}>
-                      <Plus size={13} /> Add Routine Slot
-                    </button>
-                  </div>
-
-                  <div className="batch-dynamic-list">
-                    {batchRoutine.map((slot, idx) => (
-                      <div key={idx} className="batch-dynamic-row">
-                        <label className="form-field flex-2">
-                          <span style={{ fontSize: 9.5 }}>Day <b>*</b></span>
-                          <select
-                            value={slot.day}
-                            onChange={(e) => updateRoutineSlot(idx, 'day', e.target.value)}
-                          >
-                            <option value="Monday">Monday</option>
-                            <option value="Tuesday">Tuesday</option>
-                            <option value="Wednesday">Wednesday</option>
-                            <option value="Thursday">Thursday</option>
-                            <option value="Friday">Friday</option>
-                            <option value="Saturday">Saturday</option>
-                            <option value="Sunday">Sunday</option>
-                          </select>
-                        </label>
-                        <label className="form-field flex-2">
-                          <span style={{ fontSize: 9.5 }}>Subject <b>*</b></span>
-                          <input
-                            required
-                            placeholder="Subject"
-                            list={`subj-datalist-${idx}`}
-                            value={slot.subject}
-                            onChange={(e) => updateRoutineSlot(idx, 'subject', e.target.value)}
-                          />
-                          <datalist id={`subj-datalist-${idx}`}>
-                            {batchSubjects.filter(s => s.name).map((s, i) => (
-                              <option key={i} value={s.name} />
-                            ))}
-                          </datalist>
-                        </label>
-                        <label className="form-field flex-3">
-                          <span style={{ fontSize: 9.5 }}>Time Slot <b>*</b></span>
-                          <input
-                            required
-                            placeholder="04:00 PM - 05:30 PM"
-                            value={slot.time}
-                            onChange={(e) => updateRoutineSlot(idx, 'time', e.target.value)}
-                          />
-                        </label>
-                        {batchRoutine.length > 1 && (
-                          <button
-                            type="button"
-                            className="btn-trash"
-                            title="Remove Slot"
-                            onClick={() => removeRoutineSlot(idx)}
-                          >
-                            <Trash2 size={15} />
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
               </>
             )}
 
@@ -855,10 +857,17 @@ function Modal({ modal, onClose, onSubmit, selectedItem, batches, teachers }) {
                     <span>Faculty Full Name <b>*</b></span>
                     <input required value={form.name} onChange={(e) => update('name', e.target.value)} placeholder="e.g. Arindam Roy" />
                   </label>
-                  <label className="form-field">
-                    <span>Email Address (Mandatory for Login) <b>*</b></span>
-                    <input required type="email" value={form.email} onChange={(e) => update('email', e.target.value)} placeholder="arindam.roy@digitute.app" />
-                  </label>
+                  {isEditTeacher ? (
+                    <label className="form-field">
+                      <span>Email Address (Login Identity · Read-only)</span>
+                      <input type="email" value={form.email} disabled readOnly style={{ opacity: 0.75, cursor: 'not-allowed', background: 'var(--bg-card)' }} />
+                    </label>
+                  ) : (
+                    <label className="form-field">
+                      <span>Email Address (Mandatory for Login) <b>*</b></span>
+                      <input required type="email" value={form.email} onChange={(e) => update('email', e.target.value)} placeholder="arindam.roy@digitute.app" />
+                    </label>
+                  )}
                 </div>
                 <div className="form-row">
                   <label className="form-field">
@@ -874,22 +883,36 @@ function Modal({ modal, onClose, onSubmit, selectedItem, batches, teachers }) {
                   <span>Subject Specialization <b>*</b></span>
                   <input required value={form.specialization} onChange={(e) => update('specialization', e.target.value)} placeholder="e.g. Mechanics & Optics" />
                 </label>
-                <div className="form-field">
-                  <span>Assigned Batches / Classes <b>*</b></span>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7, marginTop: 4 }}>
-                    {batches.map(b => {
-                      const isSelected = selectedTeacherBatches.includes(b.name);
-                      return (
-                        <button
-                          key={b.id}
-                          type="button"
-                          className={`batch-chip-toggle ${isSelected ? 'active' : ''}`}
-                          onClick={() => toggleTeacherBatch(b.name)}
-                        >
-                          {isSelected ? '✓ ' : '+ '} {b.name}
-                        </button>
-                      );
-                    })}
+                {isEditTeacher && (
+                  <div className="form-row">
+                    <label className="form-field">
+                      <span>Faculty Status</span>
+                      <select value={form.isActive ? 'true' : 'false'} onChange={(e) => update('isActive', e.target.value === 'true')}>
+                        <option value="true">Active (Teaching)</option>
+                        <option value="false">Inactive (On Leave / Relieved)</option>
+                      </select>
+                    </label>
+                  </div>
+                )}
+                <div style={{
+                  marginTop: 6,
+                  padding: '12px 14px',
+                  borderRadius: 10,
+                  background: 'var(--surface-2, #f3f7f6)',
+                  border: '1px solid var(--border)',
+                  fontSize: 13,
+                  color: 'var(--text-2)',
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: 8,
+                  lineHeight: 1.5
+                }}>
+                  <BookOpen size={16} style={{ color: 'var(--teal-primary)', marginTop: 2, flexShrink: 0 }} />
+                  <div>
+                    <strong style={{ color: 'var(--text-1)' }}>Course & Subject Assignment:</strong>
+                    <div style={{ marginTop: 2, color: 'var(--text-3)' }}>
+                      Assign this faculty member to specific batch subjects & revenue share % from the <strong>Batches & Courses</strong> tab.
+                    </div>
                   </div>
                 </div>
               </>
@@ -959,11 +982,14 @@ function Modal({ modal, onClose, onSubmit, selectedItem, batches, teachers }) {
               <button type="button" className="button-secondary" onClick={onClose}>Cancel</button>
               <button type="submit" className="button-primary">
                 {isAdmission ? 'Complete Admission' :
-                  isBatch ? 'Create Batch' :
-                    isTeacher ? 'Add Faculty' :
-                      isCollect ? 'Confirm & Issue Receipt' :
-                        isNotice ? 'Publish Notice' :
-                          isExport ? 'Download CSV' : 'Submit'}
+                  isEditStudent ? 'Save Student Changes' :
+                  isEditTeacher ? 'Save Faculty Changes' :
+                  isEditBatch ? 'Update Batch' :
+                    isBatch ? 'Create Batch' :
+                      isTeacher ? 'Add Faculty' :
+                        isCollect ? 'Confirm & Issue Receipt' :
+                          isNotice ? 'Publish Notice' :
+                            isExport ? 'Download CSV' : 'Submit'}
                 <ChevronRight size={15} />
               </button>
             </div>
@@ -989,6 +1015,24 @@ function Toast({ toast, onClose }) {
 }
 
 export default function AdminPanel({ onBackToLanding }) {
+  const [currentUser, setCurrentUser] = useState(() => {
+    try {
+      const u = localStorage.getItem('digitute_user');
+      return u ? JSON.parse(u) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  // Auth Guard: if not authenticated, redirect back to landing
+  useEffect(() => {
+    const token = localStorage.getItem('digitute_token');
+    const refreshToken = localStorage.getItem('digitute_refresh_token');
+    if (!token && !refreshToken) {
+      if (onBackToLanding) onBackToLanding();
+    }
+  }, [onBackToLanding]);
+
   const [activePage, setActivePage] = useState('Home');
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -998,15 +1042,47 @@ export default function AdminPanel({ onBackToLanding }) {
   const [modalItem, setModalItem] = useState(null);
   const [toast, setToast] = useState(null);
 
-  // Core Mock States
-  const [batches, setBatches] = useState(initialBatches);
-  const [teachers, setTeachers] = useState(initialTeachers);
-  const [students, setStudents] = useState(initialStudents);
-  const [transactions, setTransactions] = useState(initialTransactions);
-  const [notices, setNotices] = useState(initialNotices);
-  const [syllabus, setSyllabus] = useState(initialSyllabus);
-  const [exams, setExams] = useState(initialExams);
-  const [materials, setMaterials] = useState(initialMaterials);
+  // Core States
+  const [batches, setBatches] = useState([]);
+  const [teachers, setTeachers] = useState([]);
+  const [students, setStudents] = useState([]);
+  const [transactions, setTransactions] = useState([]);
+  const [notices, setNotices] = useState([]);
+  const [syllabus, setSyllabus] = useState([]);
+  const [exams, setExams] = useState([]);
+  const [materials, setMaterials] = useState([]);
+
+  // Load live course batches and faculty from API
+  useEffect(() => {
+    let isMounted = true;
+    async function fetchInitialData() {
+      try {
+        const [batchData, teacherData, studentData] = await Promise.all([
+          apiRequest('/api/admin/batches').catch(err => {
+            console.warn('API batches fetch notice:', err?.message || err);
+            return [];
+          }),
+          apiRequest('/api/admin/teachers').catch(err => {
+            console.warn('API teachers fetch notice:', err?.message || err);
+            return [];
+          }),
+          apiRequest('/api/admin/students').catch(err => {
+            console.warn('API students fetch notice:', err?.message || err);
+            return [];
+          })
+        ]);
+        if (isMounted) {
+          if (Array.isArray(batchData)) setBatches(batchData);
+          if (Array.isArray(teacherData)) setTeachers(teacherData);
+          if (Array.isArray(studentData)) setStudents(studentData);
+        }
+      } catch (err) {
+        console.warn('API initial data fetch notice:', err?.message || err);
+      }
+    }
+    fetchInitialData();
+    return () => { isMounted = false; };
+  }, []);
 
   function showToast(title, message) {
     setToast({ title, message });
@@ -1014,13 +1090,16 @@ export default function AdminPanel({ onBackToLanding }) {
     showToast.timeout = window.setTimeout(() => setToast(null), 4500);
   }
 
+  function handleSignOut() {
+    clearAuthSession(false);
+    if (onBackToLanding) {
+      onBackToLanding();
+    }
+  }
+
   function openAction(action, item = null) {
     if (action === 'Sign out') {
-      if (onBackToLanding) {
-        onBackToLanding();
-      } else {
-        showToast('Session Active', 'You are logged into DigiTute admin.');
-      }
+      handleSignOut();
       return;
     }
     setModalItem(item);
@@ -1046,91 +1125,208 @@ export default function AdminPanel({ onBackToLanding }) {
     setModal(`Receipt: ${tx.receiptNo}`);
   }
 
-  function submitModal(payload) {
+  async function submitModal(payload) {
     const { type, form } = payload;
 
     if (type === 'New admission') {
-      const newSt = {
-        id: `s-${Date.now()}`,
-        studentId: `DT-${1000 + students.length + 1}`,
-        name: form.name,
-        email: form.email,
-        batch: form.batch,
-        phone: form.phone,
-        guardianName: form.guardianName,
-        guardianPhone: form.guardianWhatsapp || form.phone,
-        guardianWhatsapp: form.guardianWhatsapp || form.phone,
-        discountAmount: Number(form.discountAmount) || 0,
-        address: form.address || '',
-        status: 'Paid',
-        dueAmount: 0,
-        dueDate: 'New Enrolment',
-        attendancePercent: 100,
-        avatarTone: 'mint',
+      const selectedBatch = batches.find(b => b.name === form.batch || b.id === form.batchId || b.id === form.batch) || batches[0];
+      const batchId = selectedBatch?.id || null;
+      const batchName = selectedBatch?.name || form.batch || 'Unassigned';
+
+      const payload = {
+        full_name: (form.name || '').trim(),
+        email: (form.email || '').trim().toLowerCase(),
+        phone: (form.phone || '').trim(),
+        batch_id: batchId,
+        guardian_name: (form.guardianName || '').trim() || null,
+        guardian_phone: (form.guardianWhatsapp || form.guardianPhone || form.phone || '').trim() || null,
+        address: (form.address || '').trim() || null,
+        discount_amount: Number(form.discountAmount) || 0.0,
       };
-      setStudents(prev => [newSt, ...prev]);
-      showToast('Student Enrolled', `${form.name} admitted to ${form.batch}.`);
+
+      try {
+        const res = await apiRequest('/api/admin/students/admit', {
+          method: 'POST',
+          body: JSON.stringify(payload)
+        });
+        const createdStudent = res.student;
+        setStudents(prev => [createdStudent, ...prev]);
+        if (batchId || batchName) {
+          setBatches(prev => prev.map(b => (b.id === batchId || b.name === batchName) ? {
+            ...b,
+            student_count: (b.student_count || 0) + 1,
+            studentCount: (b.studentCount || b.student_count || 0) + 1
+          } : b));
+        }
+        showToast('Student Enrolled', `${createdStudent.full_name} admitted to ${batchName}. Default password is phone number.`);
+      } catch (err) {
+        console.error('Failed to admit student on server:', err);
+        showToast('Admission Failed', err.message || 'Could not register student.');
+      }
+    } else if (type === 'Edit student') {
+      const selectedBatch = batches.find(b => b.name === form.batch || b.id === form.batchId || b.id === form.batch);
+      const batchId = selectedBatch?.id || null;
+      const batchName = selectedBatch?.name || form.batch || 'Unassigned';
+      const studentId = modalItem?.id;
+
+      if (!studentId) {
+        showToast('Error', 'Student identifier missing.');
+        setModal(null);
+        return;
+      }
+
+      const editPayload = {
+        full_name: (form.name || '').trim(),
+        phone: (form.phone || '').trim(),
+        batch_id: batchId,
+        guardian_name: (form.guardianName || '').trim() || null,
+        guardian_phone: (form.guardianWhatsapp || form.guardianPhone || form.phone || '').trim() || null,
+        address: (form.address || '').trim() || null,
+        discount_amount: Number(form.discountAmount) || 0.0,
+        is_active: Boolean(form.isActive)
+      };
+
+      try {
+        const res = await apiRequest(`/api/admin/students/${studentId}`, {
+          method: 'PUT',
+          body: JSON.stringify(editPayload)
+        });
+        const updatedStudent = res.student || res;
+        setStudents(prev => prev.map(s => s.id === studentId ? { ...s, ...updatedStudent, batches: { name: batchName } } : s));
+        apiRequest('/api/admin/batches').then(bList => {
+          if (Array.isArray(bList)) setBatches(bList);
+        }).catch(() => {});
+        showToast('Student Updated', `${updatedStudent.full_name || form.name}'s profile updated successfully.`);
+      } catch (err) {
+        console.error('Failed to update student on server:', err);
+        showToast('Update Failed', err.message || 'Could not update student.');
+      }
     } else if (type === 'Create batch') {
-      const newB = {
-        id: `b-${Date.now()}`,
-        name: form.title,
-        feeType: form.feeType || 'MONTHLY',
-        feeAmount: Number(form.amount) || 2000,
-        monthlyFee: Number(form.amount) || 2000,
-        studentCount: 0,
-        active: true,
-        subjects: form.subjects && form.subjects.length > 0
-          ? form.subjects
-            .filter(s => s.name && s.name.trim() !== '')
-            .map(s => {
-              const matchedTeacher = teachers.find(t => t.id === s.teacherId);
-              const share = Number(s.sharePercent) || 35;
-              return {
-                name: s.name.trim(),
-                teacherId: s.teacherId || (matchedTeacher?.id || 't-1'),
-                teacher: s.teacher || (matchedTeacher?.name || 'Faculty'),
-                sharePercent: share,
-                earningModel: `${share}% Share`
-              };
-            })
-          : [
-            { name: 'Core Subject', teacher: 'Arindam Roy', teacherId: 't-1', sharePercent: 35, earningModel: '35% Share' }
-          ],
-        routine: form.routine && form.routine.length > 0
-          ? form.routine
-            .filter(r => r.subject && r.subject.trim() !== '')
-            .map(r => ({
-              day: r.day || 'Monday',
-              subject: r.subject.trim(),
-              time: r.time || '04:00 PM - 05:30 PM'
-            }))
-          : [
-            { day: 'Monday', subject: 'Core Subject', time: '04:00 PM - 05:30 PM' }
-          ],
+      const feeVal = Number(form.amount) || 0;
+      const cleanSubjects = form.subjects && form.subjects.length > 0
+        ? form.subjects
+          .filter(s => s.name && s.name.trim() !== '')
+          .map(s => ({
+            name: s.name.trim(),
+            teacher_id: s.teacherId || s.teacher_id || null,
+            share_percent: Number(s.sharePercent || s.share_percent) || 35.0,
+            chapters: s.chapters || []
+          }))
+        : [];
+
+      const batchPayload = {
+        name: (form.title || 'New Batch').trim(),
+        fee_type: form.feeType || 'MONTHLY',
+        fee_amount: feeVal,
+        subjects: cleanSubjects
       };
-      setBatches(prev => [newB, ...prev]);
-      showToast('Batch Created', `${form.title} created with ${newB.subjects.length} subjects & timetable.`);
+
+      try {
+        const createdBatch = await apiRequest('/api/admin/batches', {
+          method: 'POST',
+          body: JSON.stringify(batchPayload)
+        });
+        setBatches(prev => [createdBatch, ...prev]);
+        showToast('Batch Created', `${createdBatch.name} successfully created.`);
+      } catch (err) {
+        console.error('Failed to create batch on server:', err);
+        showToast('Creation Failed', err.message || 'Could not create batch.');
+      }
+    } else if (type === 'Edit batch') {
+      const feeVal = Number(form.amount) || 0;
+      const cleanSubjects = form.subjects && form.subjects.length > 0
+        ? form.subjects
+          .filter(s => s.name && s.name.trim() !== '')
+          .map(s => ({
+            name: s.name.trim(),
+            teacher_id: s.teacherId || s.teacher_id || null,
+            share_percent: Number(s.sharePercent || s.share_percent) || 35.0,
+            chapters: s.chapters || []
+          }))
+        : [];
+
+      const batchPayload = {
+        name: (form.title || modalItem?.name || 'Batch').trim(),
+        fee_type: form.feeType || 'MONTHLY',
+        fee_amount: feeVal,
+        subjects: cleanSubjects
+      };
+
+      try {
+        const updatedBatch = await apiRequest(`/api/admin/batches/${modalItem.id}`, {
+          method: 'PUT',
+          body: JSON.stringify(batchPayload)
+        });
+        setBatches(prev => prev.map(b => b.id === modalItem.id ? updatedBatch : b));
+        showToast('Batch Updated', `${updatedBatch.name} updated successfully.`);
+      } catch (err) {
+        console.error('Failed to update batch on server:', err);
+        showToast('Update Failed', err.message || 'Could not update batch.');
+      }
+    } else if (type === 'Delete batch') {
+      const target = modalItem || form;
+      if (target?.id) {
+        try {
+          await apiRequest(`/api/admin/batches/${target.id}`, { method: 'DELETE' });
+          setBatches(prev => prev.filter(b => b.id !== target.id));
+          showToast('Batch Deleted', `"${target.name}" has been successfully deleted.`);
+        } catch (err) {
+          console.error('Failed to delete batch on server:', err);
+          showToast('Delete Failed', err.message || 'Could not delete batch.');
+        }
+      }
+      setModal(null);
+      setModalItem(null);
+      return;
     } else if (type === 'Add teacher') {
-      const avatarTones = ['teal', 'orange', 'violet', 'blue', 'mint', 'rose'];
-      const randomTone = avatarTones[teachers.length % avatarTones.length];
-      const newT = {
-        id: `t-${Date.now()}`,
-        name: form.name,
-        phone: form.phone,
-        email: form.email || `${form.name.toLowerCase().replace(/\s+/g, '.')}@digitute.app`,
-        qualification: form.qualification,
-        specialization: form.specialization,
-        assignedBatches: form.assignedBatches && form.assignedBatches.length > 0
-          ? form.assignedBatches
-          : [batches[0]?.name || 'Class 12 · Science'],
-        classesThisMonth: 0,
-        payoutModel: 'Revenue Share (from Batches)',
-        monthlyEarnings: 0,
-        bankStatus: 'Bank Verified',
-        avatarTone: randomTone,
+      const payload = {
+        full_name: (form.name || '').trim(),
+        email: (form.email || '').trim().toLowerCase(),
+        phone: (form.phone || '').trim(),
+        qualification: (form.qualification || '').trim() || null,
+        specialization: (form.specialization || '').trim() || null
       };
-      setTeachers(prev => [newT, ...prev]);
-      showToast('Faculty Added', `${form.name} joined DigiTute faculty.`);
+
+      try {
+        const res = await apiRequest('/api/admin/teachers/onboard', {
+          method: 'POST',
+          body: JSON.stringify(payload)
+        });
+        const createdTeacher = res.teacher;
+        setTeachers(prev => [createdTeacher, ...prev]);
+        showToast('Faculty Onboarded', `${createdTeacher.full_name} successfully registered.`);
+      } catch (err) {
+        console.error('Failed to onboard teacher to server:', err);
+        showToast('Onboard Failed', err.message || 'Could not register faculty member.');
+      }
+    } else if (type === 'Edit teacher') {
+      const teacherId = modalItem?.id;
+      if (!teacherId) {
+        showToast('Error', 'Faculty identifier missing.');
+        setModal(null);
+        return;
+      }
+
+      const payload = {
+        full_name: (form.name || '').trim(),
+        phone: (form.phone || '').trim(),
+        qualification: (form.qualification || '').trim() || null,
+        specialization: (form.specialization || '').trim() || null,
+        is_active: Boolean(form.isActive)
+      };
+
+      try {
+        const res = await apiRequest(`/api/admin/teachers/${teacherId}`, {
+          method: 'PUT',
+          body: JSON.stringify(payload)
+        });
+        const updatedTeacher = res.teacher || res;
+        setTeachers(prev => prev.map(t => t.id === teacherId ? { ...t, ...updatedTeacher } : t));
+        showToast('Faculty Updated', `${updatedTeacher.full_name || form.name}'s profile updated successfully.`);
+      } catch (err) {
+        console.error('Failed to update teacher on server:', err);
+        showToast('Update Failed', err.message || 'Could not update faculty member.');
+      }
     } else if (type === 'Collect cash' || type === 'Collect fee' || type.startsWith('Collect for ')) {
       const amt = Number(form.amount) || 2000;
       const recNo = `REC-2026-${String(transactions.length + 185).padStart(4, '0')}`;
@@ -1192,13 +1388,12 @@ export default function AdminPanel({ onBackToLanding }) {
         setCollapsed={setCollapsed}
         mobileOpen={mobileOpen}
         setMobileOpen={setMobileOpen}
-        studentCount={students.length}
-        batchCount={batches.length}
-        teacherCount={teachers.length}
+        onSignOut={() => openAction('Sign out')}
       />
 
       <div className="main-shell">
         <Topbar
+          user={currentUser}
           searchQuery={searchQuery}
           setSearchQuery={setSearchQuery}
           onMobileMenu={() => setMobileOpen(true)}
@@ -1222,7 +1417,11 @@ export default function AdminPanel({ onBackToLanding }) {
           {activePage === 'Batches & Courses' && (
             <BatchesView
               batches={batches}
+              teachers={teachers}
+              students={students}
               onCreateBatch={() => openAction('Create batch')}
+              onEditBatch={(batch) => openAction('Edit batch', batch)}
+              onDeleteBatch={(batch) => openAction('Delete batch', batch)}
               onSelectBatch={() => { }}
             />
           )}
@@ -1240,6 +1439,7 @@ export default function AdminPanel({ onBackToLanding }) {
               teachers={teachers}
               batches={batches}
               onAddTeacher={() => openAction('Add teacher')}
+              onEditTeacher={(teacher) => openAction('Edit teacher', teacher)}
             />
           )}
 
@@ -1247,6 +1447,7 @@ export default function AdminPanel({ onBackToLanding }) {
             <StudentsView
               students={students}
               onNewAdmission={() => openAction('New admission')}
+              onEditStudent={(student) => openAction('Edit student', student)}
             />
           )}
 
@@ -1277,15 +1478,17 @@ export default function AdminPanel({ onBackToLanding }) {
         </main>
       </div>
 
-      <Modal
-        key={modal || 'modal'}
-        modal={modal}
-        selectedItem={modalItem}
-        batches={batches}
-        teachers={teachers}
-        onClose={() => setModal(null)}
-        onSubmit={submitModal}
-      />
+      {modal && (
+        <Modal
+          key={`${modal}-${modalItem?.id || 'new'}`}
+          modal={modal}
+          selectedItem={modalItem}
+          batches={batches}
+          teachers={teachers}
+          onClose={() => { setModal(null); setModalItem(null); }}
+          onSubmit={submitModal}
+        />
+      )}
 
       <Toast toast={toast} onClose={() => setToast(null)} />
     </div>
