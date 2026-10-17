@@ -1,9 +1,31 @@
 import React, { useState, useEffect } from 'react';
 
-export function Profile({ onNavigate, onBackToLanding }) {
+export function Profile({ onNavigate, onBackToLanding, user }) {
   // ── 1. Teacher Profile Data (loaded from real local storage / account) ──
-  const [profile, setProfile] = useState(() => {
+  const getInitialProfile = () => {
+    if (user && user.full_name) {
+      return {
+        name: user.full_name,
+        username: user.email ? `@${user.email.split('@')[0]}` : '@sudipta',
+        phone: user.phone || '+91 98765 43210',
+        email: user.email || 'sudipta.teacher@digitute.edu',
+        avatarUrl: user.avatar_url || ''
+      };
+    }
     try {
+      const userStr = localStorage.getItem('digitute_user');
+      if (userStr) {
+        const u = JSON.parse(userStr);
+        if (u.role === 'TEACHER' || u.full_name) {
+          return {
+            name: u.full_name || 'Sudipta Sir',
+            username: u.email ? `@${u.email.split('@')[0]}` : '@sudipta',
+            phone: u.phone || '+91 98765 43210',
+            email: u.email || 'sudipta.teacher@digitute.edu',
+            avatarUrl: u.avatar_url || ''
+          };
+        }
+      }
       const saved = localStorage.getItem('digitute_teacher_profile');
       if (saved) return JSON.parse(saved);
     } catch { /* ignore */ }
@@ -14,7 +36,23 @@ export function Profile({ onNavigate, onBackToLanding }) {
       email: 'sudipta.teacher@digitute.edu',
       avatarUrl: ''
     };
-  });
+  };
+
+  const [profile, setProfile] = useState(getInitialProfile);
+
+  // Sync state if user prop changes
+  useEffect(() => {
+    if (user) {
+      setProfile(prev => ({
+        ...prev,
+        name: user.full_name || prev.name,
+        username: user.email ? `@${user.email.split('@')[0]}` : prev.username,
+        phone: user.phone || prev.phone,
+        email: user.email || prev.email,
+        avatarUrl: user.avatar_url || prev.avatarUrl
+      }));
+    }
+  }, [user]);
 
   // ── 2. Dark Mode Toggle (Visual state only, per requirement: "আপাতত এটি কাজ করার প্রয়োজন নেই") ──
   const [darkMode, setDarkMode] = useState(() => {

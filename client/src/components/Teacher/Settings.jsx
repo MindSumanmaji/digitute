@@ -1,9 +1,31 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
-export function Settings({ onNavigate: _onNavigate, onBackToLanding }) {
+export function Settings({ onNavigate: _onNavigate, onBackToLanding, user }) {
   // ── Teacher Profile Data ──
-  const [teacherProfile, setTeacherProfile] = useState(() => {
+  const getInitialTeacherProfile = () => {
+    if (user && user.full_name) {
+      return {
+        name: user.full_name,
+        username: user.email ? `@${user.email.split('@')[0]}` : '@sudipta',
+        phone: user.phone || '+91 98765 43210',
+        email: user.email || 'sudipta.teacher@digitute.edu',
+        avatarUrl: user.avatar_url || ''
+      };
+    }
     try {
+      const userStr = localStorage.getItem('digitute_user');
+      if (userStr) {
+        const u = JSON.parse(userStr);
+        if (u.role === 'TEACHER' || u.full_name) {
+          return {
+            name: u.full_name || 'Sudipta Sir',
+            username: u.email ? `@${u.email.split('@')[0]}` : '@sudipta',
+            phone: u.phone || '+91 98765 43210',
+            email: u.email || 'sudipta.teacher@digitute.edu',
+            avatarUrl: u.avatar_url || ''
+          };
+        }
+      }
       const saved = localStorage.getItem('digitute_teacher_profile');
       if (saved) return JSON.parse(saved);
     } catch { /* ignore */ }
@@ -14,7 +36,22 @@ export function Settings({ onNavigate: _onNavigate, onBackToLanding }) {
       email: 'sudipta.teacher@digitute.edu',
       avatarUrl: ''
     };
-  });
+  };
+
+  const [teacherProfile, setTeacherProfile] = useState(getInitialTeacherProfile);
+
+  useEffect(() => {
+    if (user) {
+      setTeacherProfile(prev => ({
+        ...prev,
+        name: user.full_name || prev.name,
+        username: user.email ? `@${user.email.split('@')[0]}` : prev.username,
+        phone: user.phone || prev.phone,
+        email: user.email || prev.email,
+        avatarUrl: user.avatar_url || prev.avatarUrl
+      }));
+    }
+  }, [user]);
 
   // ── Preferences State ──
   const [themeDark, setThemeDark] = useState(() => {

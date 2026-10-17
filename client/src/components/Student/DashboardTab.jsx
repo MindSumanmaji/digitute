@@ -1,8 +1,13 @@
 import React, { useState, useEffect } from 'react';
 
-export default function DashboardTab({ setActiveTab }) {
+export default function DashboardTab({ setActiveTab, user }) {
   const [time, setTime] = useState(new Date());
   const [monthOffset, setMonthOffset] = useState(0);
+
+  const displayName = user?.full_name || 'Suman Maji';
+  const batchSubtitle = (Array.isArray(user?.batches) ? user.batches[0]?.name : user?.batches?.name)
+    ? `${Array.isArray(user?.batches) ? user.batches[0]?.name : user?.batches?.name} • DigiTute Institute`
+    : 'Class XII - Science • Batch A • DigiTute Institute';
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -175,9 +180,9 @@ export default function DashboardTab({ setActiveTab }) {
           <div className="sp-dash-welcome-content">
             <div className="sp-dash-welcome-text-col">
               <span className="sp-dash-welcome-greeting">{greeting}</span>
-              <h1 className="sp-dash-welcome-title">Suman Maji</h1>
+              <h1 className="sp-dash-welcome-title">{displayName}</h1>
               <p className="sp-dash-welcome-subtitle">
-                Class XII - Science • Batch A • DigiTute Institute
+                {batchSubtitle}
               </p>
               <div className="sp-dash-welcome-date-pill">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">

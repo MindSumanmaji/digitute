@@ -47,6 +47,32 @@ export default function App() {
   const [loginError, setLoginError] = useState(null);
   const [loginSuccessUser, setLoginSuccessUser] = useState(null);
 
+  const resetLoginForm = () => {
+    setLoginEmail('');
+    setLoginPassword('');
+    setShowPassword(false);
+    setLoginError(null);
+    setLoginSuccessUser(null);
+  };
+
+  const openLoginModal = () => {
+    resetLoginForm();
+    setLoginModalOpen(true);
+  };
+
+  const closeLoginModal = () => {
+    setLoginModalOpen(false);
+    resetLoginForm();
+  };
+
+  const handleLogoutToLanding = () => {
+    clearAuthSession(false);
+    resetLoginForm();
+    setLoginModalOpen(false);
+    setCurrentView('landing');
+    localStorage.setItem('digitute_active_view', 'landing');
+  };
+
   // Proactive Session Lifecycle (Mobile / SPA Standard)
   useEffect(() => {
     // Check and validate/refresh the session in background
@@ -57,11 +83,12 @@ export default function App() {
       const token = localStorage.getItem('digitute_token');
       const refreshToken = localStorage.getItem('digitute_refresh_token');
       if (!token && !refreshToken) {
-        setLoginError(null);
+        resetLoginForm();
         setLoginModalOpen(false);
         setCurrentView('landing');
         return;
       }
+      resetLoginForm();
       setCurrentView('landing');
       setLoginError('Your session has expired. Please sign in again.');
       setLoginModalOpen(true);
@@ -101,8 +128,7 @@ export default function App() {
       localStorage.setItem('digitute_active_view', targetView);
 
       setTimeout(() => {
-        setLoginModalOpen(false);
-        setLoginSuccessUser(null);
+        closeLoginModal();
         setCurrentView(targetView);
       }, 500);
     } catch (err) {
@@ -122,7 +148,7 @@ export default function App() {
     const handleKeyDown = (e) => {
       if (e.key === 'Escape') {
         setEnquiryModalOpen(false);
-        setLoginModalOpen(false);
+        closeLoginModal();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -133,13 +159,7 @@ export default function App() {
   if (currentView === 'student') {
     return (
       <StudentPanel 
-        onBackToLanding={() => {
-          clearAuthSession(false);
-          setLoginError(null);
-          setLoginModalOpen(false);
-          setCurrentView('landing');
-          localStorage.setItem('digitute_active_view', 'landing');
-        }} 
+        onBackToLanding={handleLogoutToLanding} 
       />
     );
   }
@@ -149,13 +169,7 @@ export default function App() {
     return (
       <Router>
         <TeacherPanel 
-          onBackToLanding={() => {
-            clearAuthSession(false);
-            setLoginError(null);
-            setLoginModalOpen(false);
-            setCurrentView('landing');
-            localStorage.setItem('digitute_active_view', 'landing');
-          }} 
+          onBackToLanding={handleLogoutToLanding} 
         />
       </Router>
     );
@@ -165,13 +179,7 @@ export default function App() {
   if (currentView === 'admin') {
     return (
       <AdminPanel 
-        onBackToLanding={() => {
-          clearAuthSession(false);
-          setLoginError(null);
-          setLoginModalOpen(false);
-          setCurrentView('landing');
-          localStorage.setItem('digitute_active_view', 'landing');
-        }} 
+        onBackToLanding={handleLogoutToLanding} 
       />
     );
   }
@@ -211,10 +219,7 @@ export default function App() {
                 <button 
                   type="button"
                   className="button button-primary" 
-                  onClick={() => {
-                    setLoginError(null);
-                    setLoginModalOpen(true);
-                  }}
+                  onClick={openLoginModal}
                   style={{ cursor: 'pointer' }}
                 >
                   Enter into the class <span>→</span>
@@ -780,8 +785,7 @@ export default function App() {
         aria-labelledby="login-modal-title"
         onClick={(e) => {
           if (e.target.classList.contains('modal-backdrop')) {
-            setLoginModalOpen(false);
-            setLoginError(null);
+            closeLoginModal();
           }
         }}
       >
@@ -797,16 +801,13 @@ export default function App() {
             <button 
               className="close" 
               aria-label="Close dialog" 
-              onClick={() => {
-                setLoginModalOpen(false);
-                setLoginError(null);
-              }}
+              onClick={closeLoginModal}
             >
               ×
             </button>
           </div>
 
-          <form className="portal-auth-form" onSubmit={handleLoginSubmit}>
+          <form className="portal-auth-form" onSubmit={handleLoginSubmit} autoComplete="off">
             {loginError && (
               <div className="portal-auth-error" role="alert">
                 <span className="error-icon">⚠️</span>
@@ -831,6 +832,7 @@ export default function App() {
                   type="email"
                   required
                   autoFocus
+                  autoComplete="off"
                   placeholder="Enter your registered email"
                   value={loginEmail}
                   onChange={(e) => setLoginEmail(e.target.value)}
@@ -850,6 +852,7 @@ export default function App() {
                   id="auth-password"
                   type={showPassword ? 'text' : 'password'}
                   required
+                  autoComplete="new-password"
                   placeholder="Enter your password"
                   value={loginPassword}
                   onChange={(e) => setLoginPassword(e.target.value)}

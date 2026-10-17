@@ -11,7 +11,11 @@ export default function TopHeader({
   mobileSidebarOpen,
   setMobileSidebarOpen,
   onOpenMobileProfile,
+  user,
 }) {
+  const displayName = user?.full_name || 'Suman Maji';
+  const batchName = (Array.isArray(user?.batches) ? user.batches[0]?.name : user?.batches?.name) || user?.batch || 'Class XII - Science';
+
   return (
     <header className="sp-top-header">
       {/* Mobile Drawer Hamburger & Institute Logo */}
@@ -72,15 +76,15 @@ export default function TopHeader({
           >
             <img 
               src="/student-avatar.jpg" 
-              alt="Suman Maji" 
+              alt={displayName} 
               className="sp-avatar-img"
               onError={(e) => {
                 e.target.src = "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80";
               }}
             />
             <div className="sp-profile-text">
-              <span className="sp-profile-name">Suman Maji</span>
-              <span className="sp-profile-role">Class XII - Science</span>
+              <span className="sp-profile-name">{displayName}</span>
+              <span className="sp-profile-role">{batchName}</span>
             </div>
             <span className="sp-profile-chevron">⌵</span>
           </div>
@@ -89,10 +93,10 @@ export default function TopHeader({
             <div className="sp-popover-menu sp-profile-menu">
               <div className="sp-profile-menu-head">
                 <div className="sp-pm-name-badge">
-                  <strong>Suman Maji</strong>
+                  <strong>{displayName}</strong>
                   <span className="sp-pm-online-pill">Active</span>
                 </div>
-                <span className="sp-pm-roll">Roll: 12-SCI-042</span>
+                <span className="sp-pm-roll">{user?.phone || user?.email || 'Roll: 12-SCI-042'}</span>
               </div>
               <div className="sp-profile-menu-body">
                 <button 

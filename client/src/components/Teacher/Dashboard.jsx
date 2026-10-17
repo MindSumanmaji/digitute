@@ -51,11 +51,27 @@ const ringOffset = (pct) => 157 * (1 - pct / 100);
 /* ══════════════════════════════════════════════════════════════════════════
    COMPONENT
    ══════════════════════════════════════════════════════════════════════════ */
-const Dashboard = ({ onNavigate }) => {
+const Dashboard = ({ onNavigate, user }) => {
   // null = nothing selected yet
   const [selectedBatch,   setSelectedBatch]   = useState(null);
   const [selectedSubject, setSelectedSubject] = useState(null);
   const [showClassModal,  setShowClassModal]  = useState(false);
+
+  const teacherName = user?.full_name || (() => {
+    try {
+      const stored = localStorage.getItem('digitute_user');
+      if (stored) {
+        const u = JSON.parse(stored);
+        if (u.full_name) return u.full_name;
+      }
+      const saved = localStorage.getItem('digitute_teacher_profile');
+      if (saved) {
+        const p = JSON.parse(saved);
+        if (p.name) return p.name;
+      }
+    } catch {}
+    return 'Sudipta Sir';
+  })();
 
   // Animation values for smooth number counter & progress advancement
   const [animatedSolved,   setAnimatedSolved]   = useState(0);
@@ -184,7 +200,7 @@ const Dashboard = ({ onNavigate }) => {
           <div className="dash-hero-content">
             <span className="dash-hero-salutation">{getGreeting()}</span>
             <div className="dash-hero-title-group">
-              <h1 className="dash-hero-name">Sudipta Sir</h1>
+              <h1 className="dash-hero-name">{teacherName}</h1>
               <div className="dash-hero-underline" aria-hidden="true" />
             </div>
             <div
