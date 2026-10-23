@@ -1973,6 +1973,112 @@ textarea.input-field {
   background-color: #2563EB;
 }
 
+/* Sidebar Submenu Styles */
+.dt-sidebar-menu-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.dt-sidebar-submenu {
+  list-style: none;
+  margin: 3px 0 6px 0;
+  padding: 3px 0 3px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  position: relative;
+  border-left: 2px solid #E2E8F0;
+  margin-left: 24px;
+}
+
+.dt-sidebar-sub-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 11px;
+  border-radius: 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  color: #64748B;
+  font-size: 0.835rem;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.16s ease;
+  box-sizing: border-box;
+}
+
+.dt-sidebar-sub-item:hover {
+  background-color: #F8FAFC;
+  color: #0F172A;
+}
+
+.dt-sidebar-sub-item.is-active {
+  background-color: #ECFDF5;
+  color: #0D9488;
+  font-weight: 600;
+  border-color: transparent;
+  outline: none;
+}
+
+.dt-sidebar-sub-item:focus,
+.dt-sidebar-sub-item:focus-visible {
+  outline: none;
+  border-color: transparent;
+}
+
+.dt-sidebar-sub-icon {
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: #94A3B8;
+  transition: color 0.16s ease;
+}
+
+.dt-sidebar-sub-item:hover .dt-sidebar-sub-icon {
+  color: #0D9488;
+}
+
+.dt-sidebar-sub-item.is-active .dt-sidebar-sub-icon {
+  color: #0D9488;
+}
+
+.dt-sidebar-sub-label {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: -0.01em;
+}
+
+/* Chevron indicator for expandable menu items */
+.dt-sidebar-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: auto;
+  color: #94A3B8;
+  transition: transform 0.2s ease, color 0.16s ease;
+  padding: 2px;
+  border-radius: 4px;
+}
+
+.dt-sidebar-item:hover .dt-sidebar-chevron {
+  color: #475569;
+}
+
+.dt-sidebar-item.is-active .dt-sidebar-chevron {
+  color: #0D9488;
+}
+
+.dt-sidebar-chevron.is-open {
+  transform: rotate(180deg);
+}
+
 /* 5. Footer: Profile Section */
 .dt-sidebar-footer {
   padding: 12px;
@@ -3885,451 +3991,6 @@ textarea.input-field {
   flex-direction: column;
   box-sizing: border-box;
   color: var(--text-dark, #1E1E2D);
-}
-
-/* Main scrollable body */
-.dt-academics-content {
-  flex: 1;
-  padding: 16px 16px 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  box-sizing: border-box;
-}
-
-@media (min-width: 768px) {
-  .dt-academics-content {
-    padding: 24px 24px 36px;
-    gap: 24px;
-  }
-}
-
-@media (min-width: 1024px) {
-  .dt-academics-content {
-    padding: 32px 24px 48px;
-    gap: 28px;
-  }
-}
-
-/* -------------------------------------------
-   Hero Section
-------------------------------------------- */
-.dt-academics-hero {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  background: linear-gradient(135deg, #FFFFFF 0%, #F3F6FD 100%);
-  border-radius: var(--radius-lg, 16px);
-  padding: 20px 18px;
-  border: 1px solid rgba(229, 231, 235, 0.8);
-  box-shadow: 0 4px 18px var(--shadow, rgba(45, 58, 140, 0.08));
-  overflow: hidden;
-}
-
-.dt-academics-hero-left {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  z-index: 2;
-}
-
-/* Uppercase label: 'ACADEMICS' */
-.dt-academics-hero-tag {
-  font-size: 0.6875rem;
-  font-weight: 800;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--primary, #2D3A8C);
-  margin-bottom: 4px;
-  display: inline-block;
-}
-
-/* Bold heading: 'Academics' with blue underline */
-.dt-academics-hero-title-group {
-  display: inline-flex;
-  flex-direction: column;
-  align-items: flex-start;
-  margin-bottom: 6px;
-}
-
-.dt-academics-hero-title {
-  margin: 0;
-  font-size: 1.625rem;
-  line-height: 1.15;
-  font-weight: 800;
-  color: var(--text-dark, #1E1E2D);
-  letter-spacing: -0.02em;
-}
-
-.dt-academics-hero-underline {
-  height: 4px;
-  width: 48px;
-  background: var(--primary, #2D3A8C);
-  border-radius: 4px;
-  margin-top: 4px;
-}
-
-/* Subtitle: 'Manage your teaching journey' */
-.dt-academics-hero-subtitle {
-  margin: 2px 0 0;
-  font-size: 0.8125rem;
-  line-height: 1.35;
-  color: var(--text-secondary, #6B7280);
-  font-weight: 500;
-}
-
-/* Decorative Illustration (Right side) */
-.dt-academics-hero-illustration {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-left: 12px;
-  flex: 0 0 205px;
-  width: 205px;
-  max-width: 48%;
-  aspect-ratio: 1200 / 598;
-  overflow: visible;
-  z-index: 2;
-}
-
-@media (max-width: 420px) {
-  .dt-academics-hero {
-    padding: 16px 14px;
-    gap: 10px;
-  }
-
-  .dt-academics-hero-illustration {
-    flex: 0 0 182px;
-    width: 182px;
-    max-width: 48%;
-    margin-left: 6px;
-  }
-}
-
-@media (max-width: 360px) {
-  .dt-academics-hero-illustration {
-    flex: 0 0 154px;
-    width: 154px;
-    max-width: 45%;
-    margin-left: 4px;
-  }
-}
-
-@media (min-width: 768px) {
-  .dt-academics-hero-illustration {
-    flex: 0 0 310px;
-    width: 310px;
-    max-width: 42%;
-  }
-}
-
-@media (min-width: 1024px) {
-  .dt-academics-hero-illustration {
-    flex: 0 0 390px;
-    width: 390px;
-    max-width: 38%;
-  }
-}
-
-@media (min-width: 1280px) {
-  .dt-academics-hero-illustration {
-    flex: 0 0 440px;
-    width: 440px;
-    max-width: 38%;
-  }
-}
-
-/* Decorative backdrop glow */
-.dt-hero-glow {
-  position: absolute;
-  top: -20px;
-  right: -20px;
-  width: 110px;
-  height: 110px;
-  background: radial-gradient(circle, rgba(79, 91, 213, 0.12) 0%, rgba(255, 255, 255, 0) 70%);
-  border-radius: 50%;
-  pointer-events: none;
-  z-index: 1;
-}
-
-/* -------------------------------------------
-   6 Feature Cards (Responsive Grid: 2-Col Mobile, 3-Col Tablet/PC)
-------------------------------------------- */
-.dt-academics-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 14px;
-  width: 100%;
-  box-sizing: border-box;
-}
-
-@media (min-width: 768px) {
-  .dt-academics-grid {
-    grid-template-columns: repeat(3, 1fr);
-    gap: 18px;
-  }
-}
-
-@media (min-width: 1024px) {
-  .dt-academics-grid {
-    grid-template-columns: repeat(3, 1fr);
-    gap: 24px;
-  }
-}
-
-/* Feature Card (Tall, generous padding, 16px radius, subtle shadow) */
-.dt-feature-card {
-  position: relative;
-  background-color: var(--white, #FFFFFF);
-  border-radius: var(--radius-lg, 16px);
-  padding: 18px 16px 16px;
-  min-height: 168px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  border: 1px solid rgba(229, 231, 235, 0.85);
-  box-shadow: 0 4px 18px var(--shadow, rgba(45, 58, 140, 0.08)), 0 1px 3px rgba(0, 0, 0, 0.03);
-  cursor: pointer;
-  outline: none;
-  text-align: left;
-  user-select: none;
-  box-sizing: border-box;
-  transition: transform var(--transition-fast, 0.2s ease), box-shadow var(--transition-fast, 0.2s ease), border-color var(--transition-fast, 0.2s ease);
-  -webkit-tap-highlight-color: transparent;
-}
-
-.dt-feature-card:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 10px 24px var(--shadow, rgba(45, 58, 140, 0.12)), 0 2px 6px rgba(0, 0, 0, 0.05);
-  border-color: rgba(79, 91, 213, 0.35);
-}
-
-.dt-feature-card:active {
-  transform: translateY(-1px) scale(0.985);
-}
-
-.dt-feature-card:focus-visible {
-  box-shadow: 0 0 0 3px rgba(45, 58, 140, 0.25), 0 4px 18px var(--shadow);
-}
-
-/* Card Top Section: Icon */
-.dt-feature-card-top {
-  display: flex;
-  align-items: flex-start;
-  justify-content: flex-start;
-}
-
-/* Large icon in a pastel colored circle (48-56px) */
-.dt-feature-icon-circle {
-  width: 52px;
-  height: 52px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-  flex-shrink: 0;
-  transition: transform var(--transition-fast, 0.2s ease);
-}
-
-.dt-feature-card:hover .dt-feature-icon-circle {
-  transform: scale(1.06);
-}
-
-.dt-feature-icon-circle svg {
-  width: 25px;
-  height: 25px;
-}
-
-/* Card Middle Section: Title & Underline */
-.dt-feature-card-body {
-  margin-top: 14px;
-  margin-bottom: auto;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-}
-
-/* Feature title (bold) */
-.dt-feature-title {
-  margin: 0;
-  font-size: 0.9675rem;
-  font-weight: 700;
-  line-height: 1.25;
-  color: var(--text-dark, #1E1E2D);
-  letter-spacing: -0.01em;
-  word-break: break-word;
-}
-
-/* Colored underline bar (matches the accent color) */
-.dt-feature-underline {
-  height: 3.5px;
-  width: 32px;
-  border-radius: 4px;
-  margin-top: 7px;
-  transition: width var(--transition-fast, 0.2s ease);
-}
-
-.dt-feature-card:hover .dt-feature-underline {
-  width: 44px;
-}
-
-/* Card Bottom-Right: Arrow → */
-.dt-feature-card-bottom {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  margin-top: 14px;
-}
-
-.dt-feature-arrow {
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-secondary, #6B7280);
-  background-color: #F8FAFD;
-  transition: all var(--transition-fast, 0.2s ease);
-}
-
-.dt-feature-arrow svg {
-  width: 15px;
-  height: 15px;
-  transition: transform var(--transition-fast, 0.2s ease);
-}
-
-.dt-feature-card:hover .dt-feature-arrow {
-  color: var(--primary, #2D3A8C);
-  background-color: var(--primary-bg, #EBF0FF);
-}
-
-.dt-feature-card:hover .dt-feature-arrow svg {
-  transform: translateX(2px);
-}
-
-/* -------------------------------------------
-   Card-Specific Accent Variations
-------------------------------------------- */
-
-/* 1. Student Info - Purple Icon, Pink Underline */
-.dt-feature-card.student-info .dt-feature-icon-circle {
-  color: var(--accent-purple, #7C3AED);
-  background-color: var(--accent-purple-bg, #EDE9FE);
-}
-.dt-feature-card.student-info .dt-feature-underline {
-  background-color: var(--accent-pink, #EC4899);
-}
-
-/* 2. Attendance - Pink/Red Icon, Pink Underline */
-.dt-feature-card.attendance .dt-feature-icon-circle {
-  color: var(--accent-pink, #EC4899);
-  background-color: var(--accent-pink-bg, #FCE7F3);
-}
-.dt-feature-card.attendance .dt-feature-underline {
-  background-color: var(--accent-pink, #EC4899);
-}
-
-/* 3. Syllabus Setup - Purple Icon, Purple Underline */
-.dt-feature-card.syllabus-setup .dt-feature-icon-circle {
-  color: var(--accent-purple, #7C3AED);
-  background-color: var(--accent-purple-bg, #EDE9FE);
-}
-.dt-feature-card.syllabus-setup .dt-feature-underline {
-  background-color: var(--accent-purple, #7C3AED);
-}
-
-/* 4. Exam Evaluation - Orange Icon, Orange Underline */
-.dt-feature-card.exam-evaluation .dt-feature-icon-circle {
-  color: var(--accent-orange, #F59E0B);
-  background-color: var(--accent-orange-bg, #FEF3C7);
-}
-.dt-feature-card.exam-evaluation .dt-feature-underline {
-  background-color: var(--accent-orange, #F59E0B);
-}
-
-/* 5. Doubt Corner - Red Icon, Red Underline */
-.dt-feature-card.doubt-corner .dt-feature-icon-circle {
-  color: var(--accent-red, #EF4444);
-  background-color: var(--accent-red-bg, #FEE2E2);
-}
-.dt-feature-card.doubt-corner .dt-feature-underline {
-  background-color: var(--accent-red, #EF4444);
-}
-
-/* 6. DPP Management - Green Icon, Green Underline */
-.dt-feature-card.dpp-management .dt-feature-icon-circle {
-  color: var(--accent-green, #10B981);
-  background-color: var(--accent-green-bg, #D1FAE5);
-}
-.dt-feature-card.dpp-management .dt-feature-underline {
-  background-color: var(--accent-green, #10B981);
-}
-
-/* 7. Class Test Notice - Purple/Indigo Icon, Purple Underline */
-.dt-feature-card.class-test-notice .dt-feature-icon-circle {
-  color: #7C3AED;
-  background-color: #EDE9FE;
-}
-.dt-feature-card.class-test-notice .dt-feature-underline {
-  background-color: #7C3AED;
-}
-
-/* -------------------------------------------
-   Responsive Adjustments
-------------------------------------------- */
-@media (max-width: 360px) {
-  .dt-academics-content {
-    padding: 14px 12px 84px;
-    gap: 16px;
-  }
-
-  .dt-academics-grid {
-    gap: 10px;
-  }
-
-  .dt-feature-card {
-    padding: 14px 12px 14px;
-    min-height: 156px;
-  }
-
-  .dt-feature-icon-circle {
-    width: 48px;
-    height: 48px;
-  }
-
-  .dt-feature-icon-circle svg {
-    width: 22px;
-    height: 22px;
-  }
-
-  .dt-feature-title {
-    font-size: 0.875rem;
-  }
-
-  .dt-academics-hero {
-    padding: 16px 14px;
-  }
-
-  .dt-academics-hero-title {
-    font-size: 1.45rem;
-  }
-
-  .dt-illustration-cluster {
-    width: 64px;
-    height: 64px;
-  }
-}
-
-@media (min-width: 481px) {
-  .dt-academics-page {
-    border-left: 1px solid var(--border, #E5E7EB);
-    border-right: 1px solid var(--border, #E5E7EB);
-    box-shadow: 0 0 30px rgba(0, 0, 0, 0.05);
-  }
 }
 
 /* Sub-page wrapper: full-width without extra dt-academics-content padding */

@@ -4,16 +4,33 @@ import Header from './components/Teacher/Header';
 import Sidebar from './components/Teacher/Sidebar';
 import BottomNav from './components/Teacher/BottomNav';
 import Dashboard from './components/Teacher/Dashboard';
-import Academics from './components/Teacher/Academics';
 import StudyMaterial from './components/Teacher/StudyMaterial';
 import Finance from './components/Teacher/Finance';
 import Notice from './components/Teacher/Notice';
 import Settings from './components/Teacher/Settings';
 import Profile from './components/Teacher/Profile';
 
+// Direct Academic Sub-Pages
+import StudentInfo from './components/Teacher/StudentInfo';
+import Attendance from './components/Teacher/Attendance';
+import SyllabusSetup from './components/Teacher/SyllabusSetup';
+import ExamEvaluation from './components/Teacher/ExamEvaluation';
+import DoubtCorner from './components/Teacher/DoubtCorner';
+import DppManagement from './components/Teacher/DppManagement';
+import ClassTestNotice from './components/Teacher/ClassTestNotice';
+
 const tabToRoute = {
   dashboard: '/',
-  academics: '/academics',
+  academics: '/academics/student-info',
+  'student-info': '/academics/student-info',
+  attendance: '/academics/attendance',
+  'syllabus-setup': '/academics/syllabus-setup',
+  syllabus: '/academics/syllabus-setup',
+  'exam-evaluation': '/academics/exam-evaluation',
+  exams: '/academics/exam-evaluation',
+  'doubt-corner': '/academics/doubt-corner',
+  'dpp-management': '/academics/dpp-management',
+  'class-test-notice': '/academics/class-test-notice',
   'study-material': '/study-material',
   finance: '/finance',
   notice: '/notice',
@@ -23,7 +40,17 @@ const tabToRoute = {
 
 const routeToTab = {
   '/': 'dashboard',
-  '/academics': 'academics',
+  '/academics': 'student-info',
+  '/academics/students': 'student-info',
+  '/academics/student-info': 'student-info',
+  '/academics/attendance': 'attendance',
+  '/academics/syllabus': 'syllabus-setup',
+  '/academics/syllabus-setup': 'syllabus-setup',
+  '/academics/exams': 'exam-evaluation',
+  '/academics/exam-evaluation': 'exam-evaluation',
+  '/academics/doubt-corner': 'doubt-corner',
+  '/academics/dpp-management': 'dpp-management',
+  '/academics/class-test-notice': 'class-test-notice',
   '/study-material': 'study-material',
   '/finance': 'finance',
   '/notice': 'notice',
@@ -68,11 +95,17 @@ export function TeacherPanel({ onBackToLanding }) {
 
   const handleTabChange = (tab, state = null) => {
     setIsSidebarOpen(false);
-    const route = tabToRoute[tab];
+    let targetTab = tab;
+    if (tab === 'academics') {
+      targetTab = state?.section || 'student-info';
+    }
+    const route = tabToRoute[targetTab] || tabToRoute[tab];
     if (route) {
       navigate(route, { state });
     }
   };
+
+  const navParams = location.state || {};
 
   return (
     <div className="app-layout">
@@ -103,7 +136,86 @@ export function TeacherPanel({ onBackToLanding }) {
         <main className="app-main-content">
           <Routes>
             <Route path="/" element={<Dashboard onNavigate={handleTabChange} user={currentUser} />} />
-            <Route path="/academics" element={<Academics onNavigate={handleTabChange} />} />
+
+            {/* Direct Academic Sub-Routes */}
+            <Route path="/academics" element={<Navigate to="/academics/student-info" replace />} />
+            <Route path="/academics/students" element={<Navigate to="/academics/student-info" replace />} />
+            <Route path="/academics/syllabus" element={<Navigate to="/academics/syllabus-setup" replace />} />
+            <Route path="/academics/exams" element={<Navigate to="/academics/exam-evaluation" replace />} />
+
+            <Route 
+              path="/academics/student-info" 
+              element={
+                <div className="dt-academics-page dt-subpage">
+                  <StudentInfo onBack={() => handleTabChange('dashboard')} />
+                </div>
+              } 
+            />
+            <Route 
+              path="/academics/attendance" 
+              element={
+                <div className="dt-academics-page dt-subpage">
+                  <Attendance 
+                    onBack={() => handleTabChange('dashboard')} 
+                    onNavigate={handleTabChange} 
+                    initialBatch={navParams.batch} 
+                    initialSubject={navParams.subject} 
+                  />
+                </div>
+              } 
+            />
+            <Route 
+              path="/academics/syllabus-setup" 
+              element={
+                <div className="dt-academics-page dt-subpage">
+                  <SyllabusSetup onBack={() => handleTabChange('dashboard')} />
+                </div>
+              } 
+            />
+            <Route 
+              path="/academics/exam-evaluation" 
+              element={
+                <div className="dt-academics-page dt-subpage">
+                  <ExamEvaluation 
+                    onBack={() => handleTabChange('dashboard')} 
+                    onNavigateToStudentInfo={() => handleTabChange('student-info')} 
+                  />
+                </div>
+              } 
+            />
+            <Route 
+              path="/academics/doubt-corner" 
+              element={
+                <div className="dt-academics-page dt-subpage">
+                  <DoubtCorner 
+                    onBack={() => handleTabChange('dashboard')} 
+                    initialBatch={navParams.batch} 
+                    initialSubject={navParams.subject} 
+                  />
+                </div>
+              } 
+            />
+            <Route 
+              path="/academics/dpp-management" 
+              element={
+                <div className="dt-academics-page dt-subpage">
+                  <DppManagement 
+                    onBack={() => handleTabChange('dashboard')} 
+                    initialBatch={navParams.batch} 
+                    initialSubject={navParams.subject} 
+                  />
+                </div>
+              } 
+            />
+            <Route 
+              path="/academics/class-test-notice" 
+              element={
+                <div className="dt-academics-page dt-subpage">
+                  <ClassTestNotice onBack={() => handleTabChange('dashboard')} />
+                </div>
+              } 
+            />
+
             <Route path="/study-material" element={<StudyMaterial onNavigate={handleTabChange} />} />
             <Route path="/finance" element={<Finance onNavigate={handleTabChange} />} />
             <Route path="/notice" element={<Notice onNavigate={handleTabChange} />} />

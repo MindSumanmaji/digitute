@@ -263,45 +263,14 @@ export function SyllabusSetup({ onBack }) {
   return (
     <div className="ss-wrapper">
 
-      {/* ── HEADER BAR ── */}
-      <div className="ss-header-bar">
-        <button type="button" className="ss-back-btn" onClick={onBack} aria-label="Back to Academics">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"
-            strokeLinecap="round" strokeLinejoin="round">
-            <line x1="19" y1="12" x2="5" y2="12" />
-            <polyline points="12 19 5 12 12 5" />
-          </svg>
-          <span>Back to Academics</span>
-        </button>
-
-        {lastSaved && (
+      {lastSaved && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '8px' }}>
           <div className="ss-saved-badge" title={`Last saved at ${formattedSavedTime}`}>
             <span className="ss-saved-dot" />
             <span>Saved ({formattedSavedTime})</span>
           </div>
-        )}
-      </div>
-
-      {/* ── TITLE BANNER ── */}
-      <div className="ss-title-card">
-        <div className="ss-title-left">
-          <div className="ss-title-icon-wrap" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"
-              strokeLinecap="round" strokeLinejoin="round">
-              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-              <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-              <line x1="9" y1="7" x2="15" y2="7" />
-              <line x1="9" y1="11" x2="15" y2="11" />
-            </svg>
-          </div>
-          <div className="ss-title-text-group">
-            <h1 className="ss-title-heading">Syllabus Setup</h1>
-            <p className="ss-title-sub">
-              Configure curriculum chapters, customize titles, and track topic completion.
-            </p>
-          </div>
         </div>
-      </div>
+      )}
 
       {/* ── SELECTORS CARD (Batch, Subject & Chapter Count) ── */}
       <section className="ss-selector-card" aria-label="Syllabus Selectors">

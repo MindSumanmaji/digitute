@@ -75,6 +75,20 @@ export function Header({
         return 'Dashboard';
       case 'academics':
         return 'Academics';
+      case 'student-info':
+        return 'Student Info';
+      case 'attendance':
+        return 'Attendance';
+      case 'syllabus-setup':
+        return 'Syllabus Setup';
+      case 'exam-evaluation':
+        return 'Exam Evaluation';
+      case 'doubt-corner':
+        return 'Doubt Corner';
+      case 'dpp-management':
+        return 'DPP Management';
+      case 'class-test-notice':
+        return 'Class Test Notice';
       case 'study-material':
         return 'Study Materials';
       case 'finance':

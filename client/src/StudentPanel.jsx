@@ -17,7 +17,7 @@ import { apiRequest } from './api';
 export default function StudentPanel({ onBackToLanding }) {
   // Navigation active tab: 'dashboard' | 'classes' | 'materials' | 'assignments' | 'tests' | 'results' | 'performance' | 'fees' | 'doubts' | 'announcements' | 'settings' | 'profile'
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [testsMenuOpen, setTestsMenuOpen] = useState(true);
+  const [testsMenuOpen, setTestsMenuOpen] = useState(false);
   const [testSubTab, setTestSubTab] = useState('performance'); // 'performance' | 'results'
 
   // Current logged in student user
@@ -83,7 +83,7 @@ export default function StudentPanel({ onBackToLanding }) {
     session: '2026 (July - Dec)',
     phone: currentUser.phone || '+91 98301 11222',
     email: currentUser.email || 'suman.maji@digitute.app',
-    photo: currentUser.photo || '/student-avatar.jpg'
+    photo: currentUser.avatar_url || currentUser.photo || null
   } : undefined;
 
   return (

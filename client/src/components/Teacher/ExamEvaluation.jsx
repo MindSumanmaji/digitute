@@ -249,56 +249,6 @@ export function ExamEvaluation({ onBack, onNavigateToStudentInfo }) {
 
   return (
     <div className="ee-container">
-      {/* ── TOP NAV BAR ── */}
-      <div className="ee-top-nav">
-        <button
-          type="button"
-          className="ee-back-btn"
-          onClick={onBack}
-          aria-label="Back to Academics"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="19" y1="12" x2="5" y2="12" />
-            <polyline points="12 19 5 12 12 5" />
-          </svg>
-          <span>Back to Academics</span>
-        </button>
-
-        <button
-          type="button"
-          className="ee-grade-rules-toggle"
-          onClick={() => setShowConfigRules(!showConfigRules)}
-          aria-expanded={showConfigRules}
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="10" />
-            <line x1="12" y1="16" x2="12" y2="12" />
-            <line x1="12" y1="8" x2="12.01" y2="8" />
-          </svg>
-          <span>Grade Conversion Scale</span>
-        </button>
-      </div>
-
-      {/* ── HERO BANNER ── */}
-      <header className="ee-hero-header">
-        <div className="ee-hero-icon-box">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-            <polyline points="14 2 14 8 20 8" />
-            <path d="M8 17l2-5 2 5" strokeWidth="2" />
-            <line x1="9" y1="15" x2="11" y2="15" strokeWidth="2" />
-            <path d="M14 13h2" strokeWidth="2" />
-            <line x1="15" y1="12" x2="15" y2="14" strokeWidth="2" />
-          </svg>
-        </div>
-        <div className="ee-hero-text">
-          <h1 className="ee-hero-title">Exam Evaluation &amp; Grading</h1>
-          <p className="ee-hero-subtitle">
-            Enter student marks and calculate grades automatically.
-          </p>
-        </div>
-      </header>
-
       {/* ── GRADE CONVERSION SYSTEM CONFIGURATION COLLAPSIBLE ── */}
       {showConfigRules && (
         <section className="ee-config-scale-card" aria-label="Grade Conversion Scale">
@@ -327,9 +277,24 @@ export function ExamEvaluation({ onBack, onNavigateToStudentInfo }) {
 
       {/* ── EXAM SETUP INPUTS (BATCH, SUBJECT, EXAM DATE, TOTAL EXAM MARKS) ── */}
       <section className="ee-setup-card" aria-label="Exam Parameters">
-        <div className="ee-setup-header">
-          <div className="ee-step-badge">Step 1</div>
-          <h2 className="ee-setup-heading">Exam Setup &amp; Configuration</h2>
+        <div className="ee-setup-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div className="ee-step-badge">Step 1</div>
+            <h2 className="ee-setup-heading">Exam Setup &amp; Configuration</h2>
+          </div>
+          <button
+            type="button"
+            className="ee-grade-rules-toggle"
+            onClick={() => setShowConfigRules(!showConfigRules)}
+            aria-expanded={showConfigRules}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="16" x2="12" y2="12" />
+              <line x1="12" y1="8" x2="12.01" y2="8" />
+            </svg>
+            <span>Grade Conversion Scale</span>
+          </button>
         </div>
 
         <div className="ee-setup-grid">
