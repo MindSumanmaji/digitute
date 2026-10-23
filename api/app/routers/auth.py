@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends
-from app.db import get_supabase_client
+from app.db import get_supabase_client, get_supabase_auth_client
 from app.core.dependencies import get_current_user
 from app.models import (
     LoginRequest,
@@ -16,10 +16,11 @@ router = APIRouter(prefix="/api/auth", tags=["Authentication & User Management"]
 @router.post("/login")
 def login(req: LoginRequest):
     try:
+        auth_client = get_supabase_auth_client()
         supabase = get_supabase_client()
         
-        # Authenticate with Supabase Auth
-        auth_res = supabase.auth.sign_in_with_password({
+        # Authenticate with Supabase Auth using isolated auth client
+        auth_res = auth_client.auth.sign_in_with_password({
             "email": req.email.strip().lower(),
             "password": req.password
         })
@@ -67,8 +68,9 @@ def refresh_session(req: RefreshTokenRequest):
     Prevents 401 Unauthorized errors and maintains persistent user sessions like a mobile app.
     """
     try:
+        auth_client = get_supabase_auth_client()
         supabase = get_supabase_client()
-        auth_res = supabase.auth.refresh_session(req.refresh_token.strip())
+        auth_res = auth_client.auth.refresh_session(req.refresh_token.strip())
 
         if not auth_res or not auth_res.session or not auth_res.user:
             raise HTTPException(

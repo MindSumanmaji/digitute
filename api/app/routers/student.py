@@ -116,7 +116,44 @@ def get_my_materials(current_user: dict = Depends(get_current_user)):
         res = supabase.table("study_materials").select(
             "*, users!study_materials_teacher_id_fkey(full_name)"
         ).eq("batch_id", batch_id).order("created_at", desc=True).execute()
-        return res.data or []
+
+        materials = res.data or []
+        for item in materials:
+            file_path = item.get("file_url")
+            if file_path:
+                try:
+                    signed = supabase.storage.from_("digitute").create_signed_url(file_path, 3600)
+                    item["signed_url"] = signed.get("signedURL") or signed.get("signedUrl")
+                except Exception:
+                    item["signed_url"] = None
+        return materials
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/study-materials/{material_id}/access-url", summary="Get Fresh Signed URL for Student Material")
+def get_student_material_access_url(material_id: str, current_user: dict = Depends(get_current_user)):
+    try:
+        supabase = get_supabase_client()
+        student_batch_id = current_user.get("batch_id")
+        user_role = current_user.get("role")
+
+        res = supabase.table("study_materials").select("*").eq("id", material_id).execute()
+        if not res.data:
+            raise HTTPException(status_code=404, detail="Study material not found")
+
+        material = res.data[0]
+        if user_role != "ADMIN" and material.get("batch_id") != student_batch_id:
+            raise HTTPException(status_code=403, detail="You are not authorized to access study materials for another batch")
+
+        file_path = material.get("file_url")
+        if not file_path:
+            raise HTTPException(status_code=400, detail="No file path associated with this material")
+
+        signed = supabase.storage.from_("digitute").create_signed_url(file_path, 3600)
+        signed_url = signed.get("signedURL") or signed.get("signedUrl")
+        return {"signed_url": signed_url, "expires_in": 3600}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

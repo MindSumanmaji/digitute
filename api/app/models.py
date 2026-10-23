@@ -193,6 +193,17 @@ class StudyMaterialCreate(BaseModel):
     description: Optional[str] = None
     file_url: str
 
+class StudyMaterialResponse(BaseModel):
+    id: str
+    batch_id: str
+    teacher_id: Optional[str] = None
+    subject: str
+    title: str
+    description: Optional[str] = None
+    file_url: str
+    signed_url: Optional[str] = None
+    created_at: Optional[str] = None
+
 class DoubtCreate(BaseModel):
     batch_id: str
     student_id: str
