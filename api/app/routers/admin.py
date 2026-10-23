@@ -13,6 +13,7 @@ from app.models import (
 from datetime import date, datetime
 import uuid
 import re
+import traceback
 
 def _normalize_phone(raw: str) -> str:
     digits = re.sub(r'\D', '', raw)  # keep only digits
@@ -20,6 +21,23 @@ def _normalize_phone(raw: str) -> str:
     if len(digits) == 12 and digits.startswith('91'):
         digits = digits[2:]
     return digits
+
+def _generate_default_password(name: str) -> str:
+    """
+    Generates default password in format #{initials}@123
+    Examples:
+      - 'Pritam Sahoo' -> '#ps@123'
+      - 'Suman Kumar Maji' -> '#skm@123'
+    """
+    words = [w for w in re.split(r'\s+', (name or '').strip()) if w]
+    initials = ""
+    for w in words:
+        match = re.search(r'[a-zA-Z0-9]', w)
+        if match:
+            initials += match.group(0).lower()
+    if not initials:
+        initials = "user"
+    return f"#{initials}@123"
 
 # Protect all /api/admin endpoints with ADMIN role check
 router = APIRouter(
@@ -245,7 +263,7 @@ def delete_batch(batch_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 # ==============================================================================
-# 4. STUDENTS & ADMISSIONS (Default Password = Phone Number)
+# 4. STUDENTS & ADMISSIONS (Default Password = #{initials}@123)
 # ==============================================================================
 @router.get("/students", summary="List All Enrolled Students")
 def list_students(batch_id: str = None):
@@ -277,7 +295,7 @@ def list_students(batch_id: str = None):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/students/admit", summary="New Student Admission (Default Password = Phone Number)")
+@router.post("/students/admit", summary="New Student Admission (Default Password = #{initials}@123)")
 def admit_student(req: StudentCreate):
     try:
         supabase = get_supabase_client()
@@ -291,8 +309,8 @@ def admit_student(req: StudentCreate):
                 detail=f"Phone number must be at least 6 digits. Received: '{req.phone.strip()}' → normalized: '{clean_phone}'"
             )
 
-        # Default login password is the normalized digits-only phone number
-        default_password = clean_phone
+        # Default login password is in format #{initials}@123 (e.g. 'Pritam Sahoo' -> '#ps@123')
+        default_password = _generate_default_password(req.full_name)
         
         # Check duplicate in public.users
         existing = supabase.table("users").select("id").eq("email", clean_email).execute()
@@ -343,6 +361,17 @@ def admit_student(req: StudentCreate):
                         if u_email and u_email.lower() == clean_email:
                             user_id = getattr(u, 'id', None) or u.get('id')
                             break
+                    if user_id:
+                        try:
+                            supabase.auth.admin.update_user_by_id(
+                                user_id,
+                                {
+                                    "password": default_password,
+                                    "user_metadata": {"full_name": req.full_name, "role": "STUDENT"}
+                                }
+                            )
+                        except Exception:
+                            pass
                 except Exception:
                     pass
             if not user_id:
@@ -365,7 +394,7 @@ def admit_student(req: StudentCreate):
             "address": req.address.strip() if req.address else None,
             "is_active": True
         }
-        res = supabase.table("users").insert(record).execute()
+        res = supabase.table("users").upsert(record).execute()
         
         batch_name = None
         if batch_id:
@@ -384,11 +413,12 @@ def admit_student(req: StudentCreate):
             "message": "Student registered successfully",
             "student": student_data,
             "default_password": default_password,
-            "login_instructions": f"Login with Email: {clean_email} and Default Password (Phone): {clean_phone}"
+            "login_instructions": f"Login with Email: {clean_email} and Default Password: {default_password}"
         }
     except HTTPException:
         raise
     except Exception as e:
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/students/{student_id}", summary="Get Student Details")
@@ -538,7 +568,7 @@ def update_student(student_id: str, req: StudentUpdate):
         raise HTTPException(status_code=500, detail=str(e))
 
 # ==============================================================================
-# 5. TEACHERS & FACULTY (Default Password = Phone Number)
+# 5. TEACHERS & FACULTY (Default Password = #{initials}@123)
 # ==============================================================================
 @router.get("/teachers", summary="List All Faculty Members")
 def list_teachers():
@@ -549,7 +579,7 @@ def list_teachers():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/teachers/onboard", summary="Onboard Faculty Member (Default Password = Phone Number)")
+@router.post("/teachers/onboard", summary="Onboard Faculty Member (Default Password = #{initials}@123)")
 def onboard_teacher(req: TeacherCreate):
     try:
         supabase = get_supabase_client()
@@ -563,27 +593,57 @@ def onboard_teacher(req: TeacherCreate):
                 detail=f"Phone number must be at least 6 digits. Received: '{req.phone.strip()}' → normalized: '{clean_phone}'"
             )
 
-        # Default login password is the normalized digits-only phone number
-        default_password = clean_phone
+        # Default login password is in format #{initials}@123 (e.g. 'Suman Kumar Maji' -> '#skm@123')
+        default_password = _generate_default_password(req.full_name)
         
         existing = supabase.table("users").select("id").eq("email", clean_email).execute()
         if existing.data:
             raise HTTPException(status_code=400, detail=f"Faculty member with email {clean_email} already exists.")
             
-        # 1. Create in Supabase Auth (email_confirm=True for instant access without email verification)
-        auth_user = supabase.auth.admin.create_user({
-            "email": clean_email,
-            "password": default_password,
-            "email_confirm": True,
-            "user_metadata": {
-                "full_name": req.full_name,
-                "role": "TEACHER"
-            }
-        })
+        # 1. Create or link in Supabase Auth (email_confirm=True for instant access without email verification)
+        user_id = None
+        try:
+            auth_user = supabase.auth.admin.create_user({
+                "email": clean_email,
+                "password": default_password,
+                "email_confirm": True,
+                "user_metadata": {
+                    "full_name": req.full_name,
+                    "role": "TEACHER"
+                }
+            })
+            user_id = auth_user.user.id
+        except Exception as auth_err:
+            err_str = str(auth_err).lower()
+            if "already" in err_str or "exists" in err_str:
+                # User already registered in Auth: locate their ID and update password/metadata
+                try:
+                    list_u = supabase.auth.admin.list_users()
+                    users_list = getattr(list_u, 'users', list_u) if not isinstance(list_u, list) else list_u
+                    for u in users_list:
+                        u_email = getattr(u, 'email', None) or (u.get('email') if isinstance(u, dict) else None)
+                        if u_email and u_email.lower() == clean_email:
+                            user_id = getattr(u, 'id', None) or u.get('id')
+                            break
+                    if user_id:
+                        try:
+                            supabase.auth.admin.update_user_by_id(
+                                user_id,
+                                {
+                                    "password": default_password,
+                                    "user_metadata": {"full_name": req.full_name, "role": "TEACHER"}
+                                }
+                            )
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+            if not user_id:
+                raise HTTPException(status_code=400, detail=f"Auth creation failed: {str(auth_err)}")
         
-        # 2. Insert into public.users strictly matching schema.sql
+        # 2. Insert or update in public.users strictly matching schema.sql
         record = {
-            "id": auth_user.user.id,
+            "id": user_id,
             "full_name": req.full_name.strip(),
             "email": clean_email,
             "phone": clean_phone,
@@ -592,18 +652,19 @@ def onboard_teacher(req: TeacherCreate):
             "specialization": req.specialization.strip() if req.specialization else None,
             "is_active": True
         }
-        res = supabase.table("users").insert(record).execute()
+        res = supabase.table("users").upsert(record).execute()
         rec = res.data[0] if (res.data and len(res.data) > 0) else record
         
         return {
             "message": "Faculty member onboarded successfully",
             "teacher": rec,
             "default_password": default_password,
-            "login_instructions": f"Login with Email: {clean_email} and Default Password (Phone): {clean_phone}"
+            "login_instructions": f"Login with Email: {clean_email} and Default Password: {default_password}"
         }
     except HTTPException:
         raise
     except Exception as e:
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/teachers/{teacher_id}", summary="Get Faculty Member Details")
