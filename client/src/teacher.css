@@ -4204,7 +4204,31 @@ textarea.input-field {
   align-items: center;
 }
 
-.att-date-input,
+.att-date-input {
+  width: 100%;
+  padding: 9px 12px;
+  background: #F8FAFC;
+  border: 1.5px solid #E2E8F0;
+  border-radius: 10px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #1E293B;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+}
+
+.att-date-input::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.75;
+  transition: opacity 0.2s ease;
+  padding: 4px;
+}
+
+.att-date-input::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+}
+
 .att-select {
   width: 100%;
   padding: 9px 36px 9px 12px;
@@ -4255,6 +4279,198 @@ textarea.input-field {
   border-radius: 5px;
   white-space: nowrap;
 }
+
+/* Session Chips & Selection */
+.att-sessions-strip {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px dashed #E2E8F0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.att-sessions-strip-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #64748B;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.att-session-chips-container {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 2px 2px 6px;
+  scrollbar-width: thin;
+}
+
+.att-session-chip {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: #F8FAFC;
+  border: 1.5px solid #E2E8F0;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  min-width: 175px;
+  flex-shrink: 0;
+  text-align: left;
+}
+
+.att-session-chip:hover {
+  background: #FFFFFF;
+  border-color: #6366F1;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.1);
+}
+
+.att-session-chip.selected {
+  background: #EEF2FF;
+  border-color: #6366F1;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+}
+
+.att-session-chip-time {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #4338CA;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.att-session-chip-title {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #1E293B;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.att-session-chip-badge {
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  display: inline-block;
+  align-self: flex-start;
+}
+
+.att-session-chip-badge.completed {
+  background: #DCFCE7;
+  color: #15803D;
+}
+
+.att-session-chip-badge.scheduled {
+  background: #FEF3C7;
+  color: #92400E;
+}
+
+/* Previously Marked Banner */
+.att-previously-marked-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px;
+  background: #F0FDF4;
+  border: 1px solid #86EFAC;
+  border-radius: 12px;
+  margin-bottom: 12px;
+  font-size: 0.82rem;
+  color: #166534;
+  flex-wrap: wrap;
+}
+
+.att-previously-marked-banner-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.att-previously-marked-banner svg {
+  width: 18px;
+  height: 18px;
+  color: #16A34A;
+  flex-shrink: 0;
+}
+
+/* Topic Covered Input Box */
+.att-topic-box {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.att-topic-input {
+  width: 100%;
+  padding: 9px 12px;
+  background: #F8FAFC;
+  border: 1.5px solid #E2E8F0;
+  border-radius: 10px;
+  font-size: 0.84rem;
+  color: #1E293B;
+  outline: none;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+}
+
+.att-topic-input:focus {
+  background: #FFFFFF;
+  border-color: #6366F1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+}
+
+/* Extra Session Modal / Form */
+.att-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-bottom: 12px;
+}
+
+.att-form-label {
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.att-form-input,
+.att-form-select {
+  width: 100%;
+  padding: 9px 12px;
+  background: #F8FAFC;
+  border: 1.5px solid #CBD5E1;
+  border-radius: 9px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #1E293B;
+  box-sizing: border-box;
+}
+
+.att-form-input:focus,
+.att-form-select:focus {
+  outline: none;
+  background: #FFFFFF;
+  border-color: #6366F1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+}
+
+.att-form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
 
 /* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
    LIVE STATS & QUICK ACTIONS BAR
@@ -5089,7 +5305,7 @@ textarea.input-field {
 /* â”€â”€â”€ Tablet landscape / small desktop: 640px+ â”€â”€â”€ */
 @media (min-width: 640px) {
   .att-container { padding: 16px 20px calc(var(--bottom-nav-height, 68px) + 24px); }
-  .att-meta-grid { grid-template-columns: repeat(3, 1fr); }
+  .att-meta-grid { grid-template-columns: 1fr 1fr; gap: 12px; }
   .att-hero-icon-box { width: 52px; height: 52px; }
   .att-hero-icon-box svg { width: 26px; height: 26px; }
   .att-hero-title { font-size: 1.25rem; }
@@ -5116,7 +5332,7 @@ textarea.input-field {
 /* â”€â”€â”€ Small desktop: 1024px+ â”€â”€â”€ */
 @media (min-width: 1024px) {
   .att-container { padding: 20px 28px 48px; }
-  .att-meta-grid { grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .att-meta-grid { grid-template-columns: 1fr 1fr; gap: 16px; }
   .att-student-grid { grid-template-columns: repeat(3, 1fr); gap: 10px; }
   .att-meta-item { gap: 6px; }
   .att-hero-header { padding: 20px 24px; }

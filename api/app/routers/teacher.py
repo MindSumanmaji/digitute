@@ -99,16 +99,21 @@ def get_my_batches(current_user: dict = Depends(get_current_user)):
         teacher_id = current_user.get("id")
         teacher_name = current_user.get("full_name", "").lower()
         
+        role = current_user.get("role")
+        
         # Batches where this teacher is mapped in subjects
         all_batches = supabase.table("batches").select("*").eq("is_active", True).execute()
         assigned = []
         
         for b in all_batches.data or []:
             subjects = b.get("subjects") or []
-            matches = [
-                s for s in subjects
-                if s.get("teacher_id") == teacher_id or s.get("teacher", "").lower() == teacher_name
-            ]
+            if role == "ADMIN":
+                matches = subjects
+            else:
+                matches = [
+                    s for s in subjects
+                    if s.get("teacher_id") == teacher_id or s.get("teacher", "").lower() == teacher_name
+                ]
             if matches:
                 assigned.append({
                     "batch_id": b.get("id"),
@@ -122,19 +127,56 @@ def get_my_batches(current_user: dict = Depends(get_current_user)):
 # ==============================================================================
 # 2. CLASS SESSIONS & ATTENDANCE
 # ==============================================================================
-@router.get("/sessions/today", summary="Get Today's Sessions for This Teacher")
-def get_today_sessions(current_user: dict = Depends(get_current_user)):
+@router.get("/sessions", summary="Get Sessions for Teacher (by date or all)")
+def get_teacher_sessions(
+    session_date: Optional[str] = None,
+    batch_id: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)
+):
     try:
         supabase = get_supabase_client()
+        role = current_user.get("role")
         teacher_id = current_user.get("id")
-        today_str = date.today().isoformat()
         
-        res = supabase.table("class_sessions").select(
-            "*, batches(name)"
-        ).eq("teacher_id", teacher_id).eq("session_date", today_str).order("start_time").execute()
-        return res.data or []
+        query = supabase.table("class_sessions").select("*, batches(name)").neq("status", "CANCELLED")
+        
+        if role == "TEACHER":
+            query = query.eq("teacher_id", teacher_id)
+            
+        if session_date:
+            query = query.eq("session_date", session_date)
+            
+        if batch_id:
+            query = query.eq("batch_id", batch_id)
+            
+        res = query.order("start_time").execute()
+        sessions = res.data or []
+        
+        if sessions:
+            session_ids = [s["id"] for s in sessions]
+            att_res = supabase.table("attendance").select("session_id, status").in_("session_id", session_ids).execute()
+            att_counts = {}
+            for a in att_res.data or []:
+                sid = a["session_id"]
+                if sid not in att_counts:
+                    att_counts[sid] = {"present": 0, "absent": 0, "total": 0}
+                att_counts[sid]["total"] += 1
+                if a.get("status") == "PRESENT":
+                    att_counts[sid]["present"] += 1
+                elif a.get("status") == "ABSENT":
+                    att_counts[sid]["absent"] += 1
+                    
+            for s in sessions:
+                s["attendance_summary"] = att_counts.get(s["id"], None)
+                
+        return sessions
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/sessions/today", summary="Get Today's Sessions for This Teacher")
+def get_today_sessions(current_user: dict = Depends(get_current_user)):
+    today_str = date.today().isoformat()
+    return get_teacher_sessions(session_date=today_str, batch_id=None, current_user=current_user)
 
 @router.post("/sessions/create", summary="Create or Start a Class Session")
 def create_session(session: SessionCreate, current_user: dict = Depends(get_current_user)):
@@ -157,21 +199,23 @@ def get_session_students(session_id: str):
     try:
         supabase = get_supabase_client()
         
-        # Get session's batch_id
-        s_res = supabase.table("class_sessions").select("batch_id").eq("id", session_id).execute()
+        # Get session details & batch_id
+        s_res = supabase.table("class_sessions").select("*, batches(name)").eq("id", session_id).execute()
         if not s_res.data:
             raise HTTPException(status_code=404, detail="Class session not found")
             
-        batch_id = s_res.data[0].get("batch_id")
+        session_info = s_res.data[0]
+        batch_id = session_info.get("batch_id")
         
         # Fetch enrolled students in this batch
         st_res = supabase.table("users").select(
-            "id, full_name, email, phone"
+            "id, full_name, email, phone, avatar_url"
         ).eq("role", "STUDENT").eq("batch_id", batch_id).eq("is_active", True).order("full_name").execute()
         
         # Fetch existing marked attendance for this session if any
         att_res = supabase.table("attendance").select("student_id, status").eq("session_id", session_id).execute()
         status_map = {a.get("student_id"): a.get("status") for a in att_res.data or []}
+        has_marked = len(att_res.data or []) > 0
         
         students = []
         for s in st_res.data or []:
@@ -180,7 +224,11 @@ def get_session_students(session_id: str):
                 "attendance_status": status_map.get(s.get("id"), "PRESENT")
             })
             
-        return students
+        return {
+            "session": session_info,
+            "has_marked": has_marked,
+            "students": students
+        }
     except HTTPException:
         raise
     except Exception as e:
@@ -202,12 +250,17 @@ def mark_attendance(req: MarkAttendanceRequest, current_user: dict = Depends(get
             })
             
         # Upsert into attendance ledger
-        res = supabase.table("attendance").upsert(
-            records, on_conflict="session_id, student_id"
-        ).execute()
+        if records:
+            supabase.table("attendance").upsert(
+                records, on_conflict="session_id, student_id"
+            ).execute()
         
-        # Update session status to COMPLETED
-        supabase.table("class_sessions").update({"status": "COMPLETED"}).eq("id", req.session_id).execute()
+        # Update session status to COMPLETED and topic_covered if provided
+        update_data = {"status": "COMPLETED"}
+        if req.topic_covered is not None:
+            update_data["topic_covered"] = req.topic_covered.strip()
+            
+        supabase.table("class_sessions").update(update_data).eq("id", req.session_id).execute()
         
         return {
             "message": "Attendance marked successfully",
