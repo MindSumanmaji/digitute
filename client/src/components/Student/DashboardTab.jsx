@@ -1,13 +1,58 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { apiRequest } from '../../api';
+
+// Helper to format 24h time to 12h AM/PM
+const formatTime = (timeStr) => {
+  if (!timeStr) return '';
+  const parts = String(timeStr).split(':');
+  if (parts.length < 2) return timeStr;
+  let hour = parseInt(parts[0], 10);
+  const min = parts[1];
+  const ampm = hour >= 12 ? 'PM' : 'AM';
+  hour = hour % 12 || 12;
+  return `${hour < 10 ? '0' + hour : hour}:${min} ${ampm}`;
+};
+
+// Helper for subject theme styles
+const getSubjectSquircleClass = (subject = '') => {
+  const s = subject.toLowerCase();
+  if (s.includes('phys')) return 'squircle-physics';
+  if (s.includes('chem')) return 'squircle-chem';
+  if (s.includes('math')) return 'squircle-math';
+  return 'squircle-physics';
+};
 
 export default function DashboardTab({ setActiveTab, user }) {
   const [time, setTime] = useState(new Date());
   const [monthOffset, setMonthOffset] = useState(0);
 
-  const displayName = user?.full_name || 'Suman Maji';
+  const displayName = user?.full_name || 'Student';
   const batchSubtitle = (Array.isArray(user?.batches) ? user.batches[0]?.name : user?.batches?.name)
     || user?.batch
-    || 'Class XII - Science • Batch A';
+    || 'Enrolled Batch';
+
+  // Live Backend Data
+  const [dashboardSummary, setDashboardSummary] = useState(null);
+  const [attendanceData, setAttendanceData] = useState(null);
+  const [routinesList, setRoutinesList] = useState([]);
+
+  useEffect(() => {
+    let isMounted = true;
+    Promise.all([
+      apiRequest('/api/student/dashboard-summary').catch(() => null),
+      apiRequest('/api/student/my-attendance').catch(() => null),
+      apiRequest('/api/student/my-classes').catch(() => [])
+    ]).then(([summary, att, routines]) => {
+      if (!isMounted) return;
+      if (summary) setDashboardSummary(summary);
+      if (att) setAttendanceData(att);
+      if (Array.isArray(routines)) setRoutinesList(routines);
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -40,46 +85,95 @@ export default function DashboardTab({ setActiveTab, user }) {
     year: 'numeric'
   });
 
-  const [selectedDate, setSelectedDate] = useState(14);
+  // Selected date in calendar
+  const todayDateNum = new Date().getDate();
+  const [selectedDate, setSelectedDate] = useState(todayDateNum);
 
-  const monthsData = {
-    '-1': {
-      name: 'September 2026',
-      prevDays: [30, 31],
-      totalDays: 30,
-      presentDays: [1, 2, 4, 7, 8, 9, 11, 14, 15, 16, 18, 21, 22, 23, 25, 28, 29, 30],
-      absentDays: [5, 12, 19],
-      presentCount: 24,
-      absentCount: 3
-    },
-    '0': {
-      name: 'October 2026',
-      prevDays: [27, 28, 29, 30],
-      totalDays: 31,
-      presentDays: [1, 3, 5, 6, 7, 10, 13, 14],
-      absentDays: [8, 12],
-      presentCount: 22,
-      absentCount: 3
-    },
-    '1': {
-      name: 'November 2026',
-      prevDays: [],
-      totalDays: 30,
-      presentDays: [],
-      absentDays: [],
-      presentCount: 0,
-      absentCount: 0
+  // Dynamic Today's classes from summary or routines
+  const todayClasses = useMemo(() => {
+    if (dashboardSummary?.today_sessions && dashboardSummary.today_sessions.length > 0) {
+      return dashboardSummary.today_sessions.map((s) => ({
+        id: s.id,
+        timeStart: formatTime(s.start_time),
+        timeEnd: formatTime(s.end_time),
+        subject: s.subject,
+        topic: s.topic_covered || `Curriculum Module - ${s.subject}`,
+        teacher: s.teacher_name || 'Faculty',
+        status: s.attendance_status === 'PRESENT' ? 'Attended' : s.attendance_status === 'ABSENT' ? 'Absent' : s.status === 'COMPLETED' ? 'Attended' : 'Upcoming'
+      }));
     }
-  };
 
-  const activeMonth = monthsData[String(monthOffset)] || monthsData['0'];
-  const currentMonthName = activeMonth.name;
+    // Fallback: routines for today's weekday (1=Mon ... 7=Sun)
+    const todayDow = (new Date().getDay() + 6) % 7 + 1;
+    const matching = routinesList.filter((r) => r.day_of_week === todayDow);
+    return matching.map((r) => ({
+      id: r.id,
+      timeStart: formatTime(r.start_time),
+      timeEnd: formatTime(r.end_time),
+      subject: r.subject,
+      topic: `Curriculum Module - ${r.subject}`,
+      teacher: r.users?.full_name || 'Faculty',
+      status: 'Upcoming'
+    }));
+  }, [dashboardSummary, routinesList]);
+
+  // Attendance metrics
+  const attendanceRate = dashboardSummary?.attendance_percentage ?? attendanceData?.attendance_percentage ?? 100;
+  const totalClasses = dashboardSummary?.total_classes ?? attendanceData?.total_classes ?? 0;
+  const presentClasses = dashboardSummary?.present_classes ?? attendanceData?.present_classes ?? 0;
+
+  // Fee due
+  const totalDue = dashboardSummary?.total_due != null ? dashboardSummary.total_due : 0;
+  // Upcoming tests
+  const upcomingTestsCount = dashboardSummary?.upcoming_tests_count ?? 0;
+
+  // Dynamic Monthly Attendance Calendar
+  const targetMonthDate = useMemo(() => {
+    const d = new Date();
+    d.setMonth(d.getMonth() + monthOffset);
+    return d;
+  }, [monthOffset]);
+
+  const currentMonthName = useMemo(() => {
+    return targetMonthDate.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+  }, [targetMonthDate]);
+
   const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  const prevDays = activeMonth.prevDays;
-  const currentDays = Array.from({ length: activeMonth.totalDays }, (_, i) => i + 1);
-  const presentDays = activeMonth.presentDays;
-  const absentDays = activeMonth.absentDays;
-  const today = 14;
+
+  const { prevDays, currentDays, presentDays, absentDays, presentCount, absentCount } = useMemo(() => {
+    const year = targetMonthDate.getFullYear();
+    const month = targetMonthDate.getMonth();
+    const totalDays = new Date(year, month + 1, 0).getDate();
+    const firstDayIndex = new Date(year, month, 1).getDay(); // 0=Sun ... 6=Sat
+
+    const pDays = [];
+    const prevMonthTotalDays = new Date(year, month, 0).getDate();
+    for (let i = firstDayIndex - 1; i >= 0; i--) {
+      pDays.push(prevMonthTotalDays - i);
+    }
+
+    const cDays = Array.from({ length: totalDays }, (_, i) => i + 1);
+
+    const presDays = [];
+    const absDays = [];
+    const calDates = attendanceData?.calendar_dates || {};
+
+    cDays.forEach((d) => {
+      const dateKey = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      const status = calDates[dateKey];
+      if (status === 'PRESENT') presDays.push(d);
+      else if (status === 'ABSENT') absDays.push(d);
+    });
+
+    return {
+      prevDays: pDays,
+      currentDays: cDays,
+      presentDays: presDays,
+      absentDays: absDays,
+      presentCount: presDays.length,
+      absentCount: absDays.length
+    };
+  }, [targetMonthDate, attendanceData]);
 
   const quickActions = [
     {
@@ -162,32 +256,14 @@ export default function DashboardTab({ setActiveTab, user }) {
 
   return (
     <div className="sp-view-container sp-dash-exact-page">
-
-      {/* ══════════════════════════════════════════════════════════════════
-          1. TOP ROW: WELCOME BANNER & NIGHT SUNSET LIVE TIME WIDGET
-         ══════════════════════════════════════════════════════════════════ */}
+      {/* 1. TOP ROW: WELCOME BANNER & NIGHT SUNSET LIVE TIME WIDGET */}
       <div className="sp-dash-top-hero-row">
-
-        {/* Left: Welcome Banner Card with Mountain Watermark & Quote */}
         <div className="sp-dash-exact-welcome-card">
-          {/* Subtle Mountain Hills Watermark Background */}
           <div className="sp-dash-welcome-watermark">
             <svg viewBox="0 0 500 160" preserveAspectRatio="none" className="sp-dash-watermark-svg">
-              <path
-                d="M0 160 L0 120 Q 80 70 160 110 T 320 80 T 500 130 L 500 160 Z"
-                fill="#e0f2fe"
-                opacity="0.45"
-              />
-              <path
-                d="M120 160 L120 100 Q 220 50 320 90 T 500 70 L 500 160 Z"
-                fill="#bae6fd"
-                opacity="0.3"
-              />
-              <path
-                d="M240 160 L240 85 Q 350 45 440 80 T 500 65 L 500 160 Z"
-                fill="#93c5fd"
-                opacity="0.25"
-              />
+              <path d="M0 160 L0 120 Q 80 70 160 110 T 320 80 T 500 130 L 500 160 Z" fill="#e0f2fe" opacity="0.45" />
+              <path d="M120 160 L120 100 Q 220 50 320 90 T 500 70 L 500 160 Z" fill="#bae6fd" opacity="0.3" />
+              <path d="M240 160 L240 85 Q 350 45 440 80 T 500 65 L 500 160 Z" fill="#93c5fd" opacity="0.25" />
             </svg>
           </div>
 
@@ -195,12 +271,9 @@ export default function DashboardTab({ setActiveTab, user }) {
             <div className="sp-dash-welcome-text-col">
               <span className="sp-dash-welcome-greeting">{greeting}</span>
               <h1 className="sp-dash-welcome-title">{displayName}</h1>
-              <p className="sp-dash-welcome-subtitle">
-                {batchSubtitle}
-              </p>
+              <p className="sp-dash-welcome-subtitle">{batchSubtitle}</p>
             </div>
 
-            {/* Motivational Quote on the right */}
             <div className="sp-dash-quote-block">
               <span className="sp-dash-quote-mark">❝</span>
               <p className="sp-dash-quote-text">
@@ -210,9 +283,7 @@ export default function DashboardTab({ setActiveTab, user }) {
           </div>
         </div>
 
-        {/* Right: Night Sunset Live Time Widget */}
         <div className="sp-dash-exact-night-card">
-          {/* Sunset Horizon with Mountains SVG */}
           <div className="sp-dash-night-art">
             <svg viewBox="0 0 240 150" className="sp-dash-night-svg" preserveAspectRatio="xMidYMid meet">
               <defs>
@@ -231,31 +302,20 @@ export default function DashboardTab({ setActiveTab, user }) {
                 </linearGradient>
                 <linearGradient id="mountNear" x1="0%" y1="0%" x2="0%" y2="100%">
                   <stop offset="0%" stopColor="#0f172a" />
-                  <stop offset="100%" stopColor="#020617" />
+                  <stop offset="0%" stopColor="#020617" />
                 </linearGradient>
               </defs>
 
-              {/* Tiny Stars in the sky */}
               <circle cx="20" cy="18" r="0.8" fill="#ffffff" opacity="0.8" />
               <circle cx="55" cy="12" r="1.1" fill="#ffffff" opacity="0.9" />
               <circle cx="95" cy="22" r="0.9" fill="#ffffff" opacity="0.75" />
               <circle cx="140" cy="14" r="1" fill="#ffffff" opacity="0.85" />
               <circle cx="180" cy="24" r="1.2" fill="#ffffff" opacity="0.9" />
               <circle cx="215" cy="16" r="0.8" fill="#ffffff" opacity="0.7" />
-
-              {/* Glowing Sun setting behind mountain */}
               <circle cx="195" cy="98" r="30" fill="url(#sunGlow)" />
-
-              {/* Distant Mountain Range */}
               <path d="M120 150 Q 165 72 205 102 T 250 150 Z" fill="url(#mountFar)" />
-
-              {/* Middle Mountain Range */}
               <path d="M80 150 Q 135 88 185 118 T 250 150 Z" fill="url(#mountMid)" />
-
-              {/* Near Mountain Ridge with Tree Silhouettes */}
               <path d="M60 150 Q 115 106 170 126 T 250 150 Z" fill="url(#mountNear)" />
-
-              {/* Stylized pine tree silhouettes on the ridge */}
               <polygon points="175,122 178,132 172,132" fill="#020617" />
               <polygon points="185,118 189,130 181,130" fill="#020617" />
               <polygon points="205,116 209,128 201,128" fill="#020617" />
@@ -274,15 +334,10 @@ export default function DashboardTab({ setActiveTab, user }) {
             <div className="sp-dash-night-tz">IST (UTC+5:30)</div>
           </div>
         </div>
-
       </div>
 
-
-      {/* ══════════════════════════════════════════════════════════════════
-          2. 4 METRIC CARDS ROW (Exact Colors, Badges & Mini Bar Graphs)
-         ══════════════════════════════════════════════════════════════════ */}
+      {/* 2. 4 METRIC CARDS ROW */}
       <div className="sp-dash-exact-stats-grid">
-
         {/* 1. Attendance Card */}
         <div
           className="sp-dash-exact-stat-card sp-stat-attendance"
@@ -301,18 +356,19 @@ export default function DashboardTab({ setActiveTab, user }) {
           </div>
           <div className="sp-dash-stat-body">
             <span className="sp-dash-stat-label">Attendance</span>
-            <div className="sp-dash-stat-val">87%</div>
-            <span className="sp-dash-stat-sub">42 of 48 classes</span>
+            <div className="sp-dash-stat-val">{attendanceRate}%</div>
+            <span className="sp-dash-stat-sub">{presentClasses} of {totalClasses} classes</span>
           </div>
           <div className="sp-dash-stat-footer">
-            <span className="sp-dash-stat-trend trend-green">↑ +4% this month</span>
-            {/* Mini 5-bar vertical chart */}
+            <span className={`sp-dash-stat-trend ${attendanceRate >= 75 ? 'trend-green' : 'trend-red'}`}>
+              {attendanceRate >= 75 ? '↑ On track' : '↓ Below 75% target'}
+            </span>
             <div className="sp-dash-mini-bars bars-green">
               <span style={{ height: '35%' }} />
               <span style={{ height: '50%' }} />
               <span style={{ height: '65%' }} />
               <span style={{ height: '80%' }} />
-              <span style={{ height: '100%' }} />
+              <span style={{ height: `${Math.min(100, attendanceRate)}%` }} />
             </div>
           </div>
         </div>
@@ -333,11 +389,10 @@ export default function DashboardTab({ setActiveTab, user }) {
           <div className="sp-dash-stat-body">
             <span className="sp-dash-stat-label">Avg. Score</span>
             <div className="sp-dash-stat-val">78%</div>
-            <span className="sp-dash-stat-sub">Across 5 tests</span>
+            <span className="sp-dash-stat-sub">Across academic tests</span>
           </div>
           <div className="sp-dash-stat-footer">
-            <span className="sp-dash-stat-trend trend-green">↑ +12% growth</span>
-            {/* Mini 5-bar vertical chart */}
+            <span className="sp-dash-stat-trend trend-green">↑ Growth Track</span>
             <div className="sp-dash-mini-bars bars-blue">
               <span style={{ height: '40%' }} />
               <span style={{ height: '55%' }} />
@@ -364,12 +419,13 @@ export default function DashboardTab({ setActiveTab, user }) {
           </div>
           <div className="sp-dash-stat-body">
             <span className="sp-dash-stat-label">Fee Due</span>
-            <div className="sp-dash-stat-val stat-val-red">₹600</div>
-            <span className="sp-dash-stat-sub">Due: 10 Sep 2026</span>
+            <div className="sp-dash-stat-val stat-val-red">₹{totalDue}</div>
+            <span className="sp-dash-stat-sub">{totalDue > 0 ? 'Pending Payment' : 'All Dues Cleared'}</span>
           </div>
           <div className="sp-dash-stat-footer">
-            <span className="sp-dash-stat-badge-red">! Pending Payment</span>
-            {/* Watermark Card Icon */}
+            <span className={totalDue > 0 ? 'sp-dash-stat-badge-red' : 'sp-dash-stat-trend trend-green'}>
+              {totalDue > 0 ? '! Pending Payment' : '✓ Cleared'}
+            </span>
             <div className="sp-dash-watermark-icon watermark-red">
               <svg width="34" height="24" viewBox="0 0 24 24" fill="currentColor">
                 <rect width="20" height="14" x="2" y="5" rx="2"/>
@@ -396,12 +452,11 @@ export default function DashboardTab({ setActiveTab, user }) {
           </div>
           <div className="sp-dash-stat-body">
             <span className="sp-dash-stat-label">Upcoming Tests</span>
-            <div className="sp-dash-stat-val">3</div>
-            <span className="sp-dash-stat-sub">Next: 12 Oct 2026</span>
+            <div className="sp-dash-stat-val">{upcomingTestsCount}</div>
+            <span className="sp-dash-stat-sub">Scheduled for this term</span>
           </div>
           <div className="sp-dash-stat-footer">
-            <span className="sp-dash-stat-sub-note">→ Physics Chapter Test</span>
-            {/* Watermark Calendar Icon */}
+            <span className="sp-dash-stat-sub-note">→ View Schedule</span>
             <div className="sp-dash-watermark-icon watermark-purple">
               <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
                 <rect width="18" height="18" x="3" y="4" rx="2"/>
@@ -409,16 +464,11 @@ export default function DashboardTab({ setActiveTab, user }) {
             </div>
           </div>
         </div>
-
       </div>
 
-
-      {/* ══════════════════════════════════════════════════════════════════
-          3. MAIN STACK (Sequence: Quick Access -> Latest Notice -> Timetable -> Calendar)
-         ══════════════════════════════════════════════════════════════════ */}
+      {/* 3. MAIN VERTICAL STACK */}
       <div className="sp-dash-exact-vertical-stack">
-
-        {/* 1. Quick Access Row */}
+        {/* Quick Access */}
         <div className="sp-dash-exact-card sp-dash-exact-qa-card">
           <div className="sp-dash-qa-title-row">
             <span className="sp-dash-qa-bolt">⚡</span>
@@ -438,45 +488,6 @@ export default function DashboardTab({ setActiveTab, user }) {
                 <span className="sp-dash-exact-qa-label">{qa.label}</span>
               </button>
             ))}
-          </div>
-        </div>
-
-        {/* 2. Latest Notice Box */}
-        <div className="sp-dash-exact-card sp-dash-exact-notice-card">
-          <div className="sp-dash-notice-header">
-            <div className="sp-dash-notice-title-row">
-              <span className="sp-dash-notice-horn">📢</span>
-              <h3 className="sp-dash-notice-title">Latest Notice</h3>
-            </div>
-            <button
-              className="sp-dash-notice-view-all"
-              onClick={() => setActiveTab('announcements')}
-            >
-              View All →
-            </button>
-          </div>
-
-          {/* Notice Bubble */}
-          <div
-            className="sp-dash-notice-body"
-            onClick={() => setActiveTab('announcements')}
-          >
-            <div className="sp-dash-notice-top">
-              <span className="sp-dash-notice-new-badge">New</span>
-              <h4 className="sp-dash-notice-headline">
-                Special Physics Problem-Solving Session this Sunday
-              </h4>
-            </div>
-            <p className="sp-dash-notice-snippet">
-              R. Sharma Sir will conduct an intensive 2-hour session on Gauss's Law this Sunday, 08:30 – 10:30 AM, Room 204.
-            </p>
-            <div className="sp-dash-notice-meta">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="10"/>
-                <polyline points="12 6 12 12 16 14"/>
-              </svg>
-              <span>Posted by Academic Head • Yesterday</span>
-            </div>
           </div>
         </div>
 
@@ -503,140 +514,68 @@ export default function DashboardTab({ setActiveTab, user }) {
             </button>
           </div>
 
-          {/* Timetable Items with Timeline Nodes */}
           <div className="sp-dash-timeline-list">
+            {todayClasses.length > 0 ? (
+              todayClasses.map((cls, idx, arr) => (
+                <div key={cls.id || idx} className={`sp-dash-timeline-row ${idx === arr.length - 1 ? 'last-row' : ''}`}>
+                  <div className="sp-dash-time-col">
+                    <strong>{cls.timeStart}</strong>
+                    <span>- {cls.timeEnd}</span>
+                  </div>
 
-            {/* Row 1: Physics */}
-            <div className="sp-dash-timeline-row">
-              <div className="sp-dash-time-col">
-                <strong>07:00 AM</strong>
-                <span>- 08:00 AM</span>
-              </div>
+                  <div className="sp-dash-node-col">
+                    <span className={`sp-dash-node-dot ${cls.status === 'Attended' ? 'dot-green' : 'dot-orange'}`} />
+                    {idx !== arr.length - 1 && <span className="sp-dash-node-stem" />}
+                  </div>
 
-              <div className="sp-dash-node-col">
-                <span className="sp-dash-node-dot dot-green" />
-                <span className="sp-dash-node-stem" />
-              </div>
+                  <div className={`sp-dash-subject-squircle ${getSubjectSquircleClass(cls.subject)}`}>
+                    <span style={{ fontSize: '18px', fontWeight: 700 }}>{cls.subject[0]}</span>
+                  </div>
 
-              <div className="sp-dash-subject-squircle squircle-physics">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0284c7" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="12" r="2.5" fill="#0284c7"/>
-                  <ellipse cx="12" cy="12" rx="9" ry="4" transform="rotate(30 12 12)"/>
-                  <ellipse cx="12" cy="12" rx="9" ry="4" transform="rotate(-30 12 12)"/>
-                </svg>
-              </div>
+                  <div className="sp-dash-schedule-details">
+                    <h4 className="sp-dash-schedule-title">{cls.subject}</h4>
+                    <p className="sp-dash-schedule-topic">{cls.topic}</p>
+                    <div className="sp-dash-schedule-meta">
+                      <span>👤 {cls.teacher}</span>
+                    </div>
+                  </div>
 
-              <div className="sp-dash-schedule-details">
-                <h4 className="sp-dash-schedule-title">Physics</h4>
-                <p className="sp-dash-schedule-topic">Electrostatics - Gauss's Law</p>
-                <div className="sp-dash-schedule-meta">
-                  <span>👤 R. Sharma Sir</span>
-                  <span>📍 Room 102</span>
+                  <div className="sp-dash-schedule-action">
+                    {cls.status === 'Attended' ? (
+                      <span className="sp-dash-status-badge badge-attended">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                          <polyline points="20 6 9 17 4 12"/>
+                        </svg>
+                        Attended
+                      </span>
+                    ) : (
+                      <span className="sp-dash-status-badge badge-upcoming">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                          <circle cx="12" cy="12" r="10"/>
+                          <polyline points="12 6 12 12 16 14"/>
+                        </svg>
+                        Upcoming
+                      </span>
+                    )}
+                    <span className="sp-dash-schedule-chevron">›</span>
+                  </div>
                 </div>
+              ))
+            ) : (
+              <div style={{ padding: '24px 16px', textAlign: 'center', color: '#64748b' }}>
+                <p style={{ margin: 0 }}>No classes scheduled for today.</p>
               </div>
-
-              <div className="sp-dash-schedule-action">
-                <span className="sp-dash-status-badge badge-attended">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="20 6 9 17 4 12"/>
-                  </svg>
-                  Attended
-                </span>
-                <span className="sp-dash-schedule-chevron">›</span>
-              </div>
-            </div>
-
-            {/* Row 2: Chemistry */}
-            <div className="sp-dash-timeline-row">
-              <div className="sp-dash-time-col">
-                <strong>08:15 AM</strong>
-                <span>- 09:15 AM</span>
-              </div>
-
-              <div className="sp-dash-node-col">
-                <span className="sp-dash-node-dot dot-green" />
-                <span className="sp-dash-node-stem" />
-              </div>
-
-              <div className="sp-dash-subject-squircle squircle-chem">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9333ea" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M10 2v5.5L4.5 18a2 2 0 0 0 1.8 3h11.4a2 2 0 0 0 1.8-3L14 7.5V2"/>
-                  <line x1="8.5" x2="15.5" y1="2" y2="2"/>
-                  <line x1="6.8" x2="17.2" y1="15" y2="15"/>
-                </svg>
-              </div>
-
-              <div className="sp-dash-schedule-details">
-                <h4 className="sp-dash-schedule-title">Chemistry</h4>
-                <p className="sp-dash-schedule-topic">Aldehydes & Ketones</p>
-                <div className="sp-dash-schedule-meta">
-                  <span>👤 P. Das Sir</span>
-                  <span>📍 Room 101</span>
-                </div>
-              </div>
-
-              <div className="sp-dash-schedule-action">
-                <span className="sp-dash-status-badge badge-attended">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="20 6 9 17 4 12"/>
-                  </svg>
-                  Attended
-                </span>
-                <span className="sp-dash-schedule-chevron">›</span>
-              </div>
-            </div>
-
-            {/* Row 3: Mathematics */}
-            <div className="sp-dash-timeline-row last-row">
-              <div className="sp-dash-time-col">
-                <strong>04:30 PM</strong>
-                <span>- 05:30 PM</span>
-              </div>
-
-              <div className="sp-dash-node-col">
-                <span className="sp-dash-node-dot dot-orange" />
-              </div>
-
-              <div className="sp-dash-subject-squircle squircle-math">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect width="16" height="20" x="4" y="2" rx="2"/>
-                  <line x1="8" x2="16" y1="6" y2="6"/>
-                  <line x1="16" x2="16" y1="14" y2="18"/>
-                  <path d="M8 10h.01M12 10h.01M16 10h.01M8 14h.01M12 14h.01M8 18h.01M12 18h.01"/>
-                </svg>
-              </div>
-
-              <div className="sp-dash-schedule-details">
-                <h4 className="sp-dash-schedule-title">Mathematics</h4>
-                <p className="sp-dash-schedule-topic">Matrices - Important Questions</p>
-                <div className="sp-dash-schedule-meta">
-                  <span>👤 S. Roy Sir</span>
-                  <span>📍 Room 103</span>
-                </div>
-              </div>
-
-              <div className="sp-dash-schedule-action">
-                <span className="sp-dash-status-badge badge-upcoming">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="12" cy="12" r="10"/>
-                    <polyline points="12 6 12 12 16 14"/>
-                  </svg>
-                  Upcoming
-                </span>
-                <span className="sp-dash-schedule-chevron">›</span>
-              </div>
-            </div>
-
+            )}
           </div>
         </div>
 
-        {/* 4. October 2026 Mini Calendar */}
+        {/* 4. Monthly Attendance Calendar */}
         <div className="sp-dash-exact-card sp-dash-exact-calendar-card">
           <div className="sp-dash-exact-cal-header">
             <div className="sp-dash-card-title-group">
               <div className="sp-dash-icon-circle-blue">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect width="18" height="18" x="3" y="4" rx="2" ry="2"/>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2.2">
+                  <rect width="18" height="18" x="3" y="4" rx="2"/>
                   <line x1="16" x2="16" y1="2" y2="6"/>
                   <line x1="8" x2="8" y1="2" y2="6"/>
                   <line x1="3" x2="21" y1="10" y2="10"/>
@@ -659,7 +598,7 @@ export default function DashboardTab({ setActiveTab, user }) {
               <div className="sp-dash-exact-cal-arrows">
                 <button
                   className="sp-dash-cal-btn"
-                  onClick={() => setMonthOffset((prev) => Math.max(-1, prev - 1))}
+                  onClick={() => setMonthOffset((prev) => Math.max(-2, prev - 1))}
                   aria-label="Previous Month"
                   title="Previous Month"
                 >
@@ -667,7 +606,7 @@ export default function DashboardTab({ setActiveTab, user }) {
                 </button>
                 <button
                   className="sp-dash-cal-btn"
-                  onClick={() => setMonthOffset((prev) => Math.min(1, prev + 1))}
+                  onClick={() => setMonthOffset((prev) => Math.min(2, prev + 1))}
                   aria-label="Next Month"
                   title="Next Month"
                 >
@@ -678,14 +617,12 @@ export default function DashboardTab({ setActiveTab, user }) {
           </div>
 
           <div className="sp-dash-cal-inner-box">
-            {/* Weekdays Row: Sun Mon Tue Wed Thu Fri Sat */}
             <div className="sp-dash-exact-cal-weekdays">
               {daysOfWeek.map((day) => (
                 <span key={day}>{day}</span>
               ))}
             </div>
 
-            {/* Days Grid */}
             <div className="sp-dash-exact-cal-grid">
               {prevDays.map((d) => (
                 <div key={`p-${d}`} className="sp-dash-cal-num-cell muted-prev">
@@ -695,7 +632,7 @@ export default function DashboardTab({ setActiveTab, user }) {
               {currentDays.map((d) => {
                 const isPresent = presentDays.includes(d);
                 const isAbsent = absentDays.includes(d);
-                const isToday = d === today && monthOffset === 0;
+                const isToday = d === todayDateNum && monthOffset === 0;
                 const isSelected = selectedDate === d;
 
                 return (
@@ -713,7 +650,6 @@ export default function DashboardTab({ setActiveTab, user }) {
               })}
             </div>
 
-            {/* Interactive Day Status Strip */}
             {selectedDate && (
               <div
                 className="sp-dash-cal-selected-strip"
@@ -725,22 +661,19 @@ export default function DashboardTab({ setActiveTab, user }) {
                     {selectedDate} {currentMonthName.split(' ')[0]}
                   </span>
                   <span className="sp-dash-cal-selected-text">
-                    {selectedDate === 14 && monthOffset === 0
-                      ? '✓ 2 Classes Attended (Today)'
-                      : presentDays.includes(selectedDate)
-                      ? '✓ Present · 2 Classes'
+                    {presentDays.includes(selectedDate)
+                      ? '✓ Attended Classes'
                       : absentDays.includes(selectedDate)
-                      ? '✗ Absent · 0 Attended'
-                      : selectedDate > 14 && monthOffset >= 0
+                      ? '✗ Absent'
+                      : selectedDate >= todayDateNum && monthOffset === 0
                       ? '⏰ Scheduled Classes'
-                      : 'No classes on this day'}
+                      : 'No class record'}
                   </span>
                 </div>
                 <span className="sp-dash-cal-selected-arrow">Open Timetable →</span>
               </div>
             )}
 
-            {/* Footer Legend: Present and Absent */}
             <div className="sp-dash-exact-cal-footer">
               <div
                 className="sp-dash-legend-badge clickable-legend"
@@ -748,7 +681,7 @@ export default function DashboardTab({ setActiveTab, user }) {
                 title="View present classes in Attendance page"
               >
                 <span className="sp-dash-cal-dot dot-present" />
-                <span>Present ({activeMonth.presentCount})</span>
+                <span>Present ({presentCount})</span>
               </div>
               <div
                 className="sp-dash-legend-badge clickable-legend"
@@ -756,14 +689,12 @@ export default function DashboardTab({ setActiveTab, user }) {
                 title="View absent records in Attendance page"
               >
                 <span className="sp-dash-cal-dot dot-absent" />
-                <span>Absent ({activeMonth.absentCount})</span>
+                <span>Absent ({absentCount})</span>
               </div>
             </div>
           </div>
         </div>
-
       </div>
-
     </div>
   );
 }

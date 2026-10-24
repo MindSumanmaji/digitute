@@ -350,7 +350,7 @@ export default function TestsTab({
                   </div>
                   <div className="sp-test-info-block">
                     <h5>Physics - Chapter Test</h5>
-                    <span className="sp-test-batch-label">Class XII - Science · Room 101</span>
+                    <span className="sp-test-batch-label">Class XII - Science</span>
                     <div className="sp-test-submeta">
                       <span>📄 100 Marks</span>
                       <span>·</span>
@@ -369,7 +369,7 @@ export default function TestsTab({
                   </div>
                   <div className="sp-test-info-block">
                     <h5>Chemistry - Unit Test 2</h5>
-                    <span className="sp-test-batch-label">Class XII - Science · Room 102</span>
+                    <span className="sp-test-batch-label">Class XII - Science</span>
                     <div className="sp-test-submeta">
                       <span>📄 100 Marks</span>
                       <span>·</span>
@@ -388,7 +388,7 @@ export default function TestsTab({
                   </div>
                   <div className="sp-test-info-block">
                     <h5>Mathematics - Part Test</h5>
-                    <span className="sp-test-batch-label">Class XII - Science · Room 101</span>
+                    <span className="sp-test-batch-label">Class XII - Science</span>
                     <div className="sp-test-submeta">
                       <span>📄 100 Marks</span>
                       <span>·</span>

@@ -1,5 +1,40 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import AttendanceAnalysis from './AttendanceAnalysis';
+import { apiRequest } from '../../api';
+
+// Helper to format 24h time to 12h AM/PM
+const formatTime = (timeStr) => {
+  if (!timeStr) return '';
+  const parts = String(timeStr).split(':');
+  if (parts.length < 2) return timeStr;
+  let hour = parseInt(parts[0], 10);
+  const min = parts[1];
+  const ampm = hour >= 12 ? 'PM' : 'AM';
+  hour = hour % 12 || 12;
+  return `${hour < 10 ? '0' + hour : hour}:${min} ${ampm}`;
+};
+
+// Helper to map subject to theme bar color
+const getSubjectBarColor = (subject = '') => {
+  const s = subject.toLowerCase();
+  if (s.includes('math')) return 'sp-bar-blue';
+  if (s.includes('phys')) return 'sp-bar-mint';
+  if (s.includes('chem')) return 'sp-bar-purple';
+  if (s.includes('bio')) return 'sp-bar-amber';
+  if (s.includes('comp')) return 'sp-bar-slate';
+  return 'sp-bar-blue';
+};
+
+// Subject meta helper (supports any subject name variation)
+const getSubjectMeta = (subject = '') => {
+  const s = String(subject || '').toLowerCase();
+  if (s.includes('phys')) return { icon: '⚡', color: '#10b981', lightBg: '#ecfdf5', badgeBg: '#dcfce7', code: 'PHY-102' };
+  if (s.includes('math')) return { icon: '📐', color: '#2563eb', lightBg: '#eff6ff', badgeBg: '#dbeafe', code: 'MTH-101' };
+  if (s.includes('chem')) return { icon: '🧪', color: '#9333ea', lightBg: '#faf5ff', badgeBg: '#f3e8ff', code: 'CHM-103' };
+  if (s.includes('bio')) return { icon: '🧬', color: '#ea580c', lightBg: '#fff7ed', badgeBg: '#ffedd5', code: 'BIO-104' };
+  if (s.includes('comp') || s.includes('cs') || s.includes('it')) return { icon: '💻', color: '#0284c7', lightBg: '#f0f9ff', badgeBg: '#e0f2fe', code: 'CS-105' };
+  return { icon: '📖', color: '#2563eb', lightBg: '#eff6ff', badgeBg: '#dbeafe', code: `${(subject || 'SUB').slice(0, 3).toUpperCase()}-101` };
+};
 
 export default function ClassesTab({ showToast }) {
   const [classesPeriod, setClassesPeriod] = useState('Today');
@@ -7,627 +42,355 @@ export default function ClassesTab({ showToast }) {
   const [enteredMonthDate, setEnteredMonthDate] = useState(null);
   const [showAnalysisView, setShowAnalysisView] = useState(false);
 
+  // Date navigation offsets for Today, This Week, and This Month
+  const [dayOffset, setDayOffset] = useState(0);
+  const [weekOffset, setWeekOffset] = useState(0);
+  const [monthOffset, setMonthOffset] = useState(0);
+
   // Subject-wise attendance section states
-  const [selectedAttSubject, setSelectedAttSubject] = useState('Physics');
-  const [selectedAttDate, setSelectedAttDate] = useState(null);
+  const [selectedAttSubject, setSelectedAttSubject] = useState('');
+  const [selectedAttIso, setSelectedAttIso] = useState(null);
+  const [subCalMonthOffset, setSubCalMonthOffset] = useState(0);
   const [attStatusFilter, setAttStatusFilter] = useState('All');
 
-  // Week Days Data (Monday 12 Oct to Sunday 18 Oct 2026)
-  const weekDaysData = [
-    {
-      day: 'Monday',
-      short: 'Mon',
-      date: '12 Oct 2026',
-      dateNum: 12,
-      isToday: false,
-      statusText: '2 Attended · 3 Completed',
-      classesCount: 5,
-      classes: [
-        {
-          timeStart: '09:00 AM',
-          timeEnd: '10:00 AM',
-          barColor: 'sp-bar-blue',
-          subject: 'Mathematics',
-          topic: 'Algebra & Trigonometry - Problem Solving Session',
-          teacher: 'S. Roy Sir',
-          room: 'Room 101',
-          avatar: 'S',
-          avatarBg: '#eff6ff',
-          avatarColor: '#2563eb',
-          status: 'Attended'
-        },
-        {
-          timeStart: '10:15 AM',
-          timeEnd: '11:15 AM',
-          barColor: 'sp-bar-mint',
-          subject: 'Physics',
-          topic: 'Kirchhoff’s Laws & Wheatstone Bridge Analysis',
-          teacher: 'P. Das Sir',
-          room: 'Room 102',
-          avatar: 'P',
-          avatarBg: '#dcfce7',
-          avatarColor: '#16a34a',
-          status: 'Attended'
-        },
-        {
-          timeStart: '02:00 PM',
-          timeEnd: '03:00 PM',
-          barColor: 'sp-bar-slate',
-          subject: 'Computer',
-          topic: 'TCP/IP Model & Network Security Essentials',
-          teacher: 'K. Gupta Sir',
-          room: 'Lab 2',
-          avatar: 'K',
-          avatarBg: '#e0f2fe',
-          avatarColor: '#0284c7',
-          status: 'Attended'
-        },
-        {
-          timeStart: '04:00 PM',
-          timeEnd: '05:00 PM',
-          barColor: 'sp-bar-purple',
-          subject: 'Chemistry',
-          topic: 'Chemical Bonding & Hybridization Theory',
-          teacher: 'A. Sen Sir',
-          room: 'Room 101',
-          avatar: 'A',
-          avatarBg: '#f3e8ff',
-          avatarColor: '#9333ea',
-          status: 'Attended'
-        },
-        {
-          timeStart: '05:15 PM',
-          timeEnd: '06:15 PM',
-          barColor: 'sp-bar-amber',
-          subject: 'Biology',
-          topic: 'Cell Structure & Function - Revision Class',
-          teacher: 'M. Khan Ma\'am',
-          room: 'Room 103',
-          avatar: 'M',
-          avatarBg: '#ffedd5',
-          avatarColor: '#ea580c',
-          status: 'Attended'
-        }
-      ]
-    },
-    {
-      day: 'Tuesday',
-      short: 'Tue',
-      date: '13 Oct 2026',
-      dateNum: 13,
-      isToday: false,
-      statusText: '3 Attended · 1 Missed',
-      classesCount: 4,
-      classes: [
-        {
-          timeStart: '10:15 AM',
-          timeEnd: '11:15 AM',
-          barColor: 'sp-bar-mint',
-          subject: 'Physics',
-          topic: 'Potentiometer & Meter Bridge Practical Problems',
-          teacher: 'P. Das Sir',
-          room: 'Room 102',
-          avatar: 'P',
-          avatarBg: '#dcfce7',
-          avatarColor: '#16a34a',
-          status: 'Attended'
-        },
-        {
-          timeStart: '04:00 PM',
-          timeEnd: '05:00 PM',
-          barColor: 'sp-bar-purple',
-          subject: 'Chemistry',
-          topic: 'Molecular Orbital Theory & Bond Order',
-          teacher: 'A. Sen Sir',
-          room: 'Room 101',
-          avatar: 'A',
-          avatarBg: '#f3e8ff',
-          avatarColor: '#9333ea',
-          status: 'Absent'
-        },
-        {
-          timeStart: '05:15 PM',
-          timeEnd: '06:15 PM',
-          barColor: 'sp-bar-amber',
-          subject: 'Biology',
-          topic: 'Biomolecules - Structure of Proteins & Enzymes',
-          teacher: 'M. Khan Ma\'am',
-          room: 'Room 103',
-          avatar: 'M',
-          avatarBg: '#ffedd5',
-          avatarColor: '#ea580c',
-          status: 'Attended'
-        },
-        {
-          timeStart: '06:30 PM',
-          timeEnd: '07:30 PM',
-          barColor: 'sp-bar-slate',
-          subject: 'Computer',
-          topic: 'Python Object-Oriented Programming & Classes',
-          teacher: 'K. Gupta Sir',
-          room: 'Lab 2',
-          avatar: 'K',
-          avatarBg: '#e0f2fe',
-          avatarColor: '#0284c7',
-          status: 'Attended'
-        }
-      ]
-    },
-    {
-      day: 'Wednesday',
-      short: 'Wed',
-      date: '14 Oct 2026',
-      dateNum: 14,
-      isToday: true,
-      statusText: '4 Classes Scheduled (Today)',
-      classesCount: 4,
-      classes: [
-        {
-          timeStart: '09:00 AM',
-          timeEnd: '10:00 AM',
-          barColor: 'sp-bar-blue',
-          subject: 'Mathematics',
-          topic: 'Determinants Properties & Minors Cofactors',
-          teacher: 'S. Roy Sir',
-          room: 'Room 101',
-          avatar: 'S',
-          avatarBg: '#eff6ff',
-          avatarColor: '#2563eb',
-          status: 'Attended'
-        },
-        {
-          timeStart: '10:15 AM',
-          timeEnd: '11:15 AM',
-          barColor: 'sp-bar-mint',
-          subject: 'Physics',
-          topic: 'Magnetic Effects of Current & Ampere’s Law',
-          teacher: 'P. Das Sir',
-          room: 'Room 102',
-          avatar: 'P',
-          avatarBg: '#dcfce7',
-          avatarColor: '#16a34a',
-          status: 'Live'
-        },
-        {
-          timeStart: '04:00 PM',
-          timeEnd: '05:00 PM',
-          barColor: 'sp-bar-purple',
-          subject: 'Chemistry',
-          topic: 'Electrochemistry - Nernst Equation Numerical',
-          teacher: 'A. Sen Sir',
-          room: 'Room 101',
-          avatar: 'A',
-          avatarBg: '#f3e8ff',
-          avatarColor: '#9333ea',
-          status: 'Upcoming'
-        },
-        {
-          timeStart: '05:15 PM',
-          timeEnd: '06:15 PM',
-          barColor: 'sp-bar-amber',
-          subject: 'Biology',
-          topic: 'Photosynthesis - Light & Dark Reactions',
-          teacher: 'M. Khan Ma\'am',
-          room: 'Room 103',
-          avatar: 'M',
-          avatarBg: '#ffedd5',
-          avatarColor: '#ea580c',
-          status: 'Upcoming'
-        }
-      ]
-    },
-    {
-      day: 'Thursday',
-      short: 'Thu',
-      date: '15 Oct 2026',
-      dateNum: 15,
-      isToday: false,
-      statusText: '4 Classes Scheduled',
-      classesCount: 4,
-      classes: [
-        {
-          timeStart: '09:00 AM',
-          timeEnd: '10:00 AM',
-          barColor: 'sp-bar-blue',
-          subject: 'Mathematics',
-          topic: 'Matrices Inversion & Solution of Linear Systems',
-          teacher: 'S. Roy Sir',
-          room: 'Room 101',
-          avatar: 'S',
-          avatarBg: '#eff6ff',
-          avatarColor: '#2563eb',
-          status: 'Upcoming'
-        },
-        {
-          timeStart: '10:15 AM',
-          timeEnd: '11:15 AM',
-          barColor: 'sp-bar-mint',
-          subject: 'Physics',
-          topic: 'Moving Coil Galvanometer Sensitivity',
-          teacher: 'P. Das Sir',
-          room: 'Room 102',
-          avatar: 'P',
-          avatarBg: '#dcfce7',
-          avatarColor: '#16a34a',
-          status: 'Upcoming'
-        },
-        {
-          timeStart: '02:00 PM',
-          timeEnd: '03:00 PM',
-          barColor: 'sp-bar-slate',
-          subject: 'Computer',
-          topic: 'SQL Joins & Group By Aggregations',
-          teacher: 'K. Gupta Sir',
-          room: 'Lab 2',
-          avatar: 'K',
-          avatarBg: '#e0f2fe',
-          avatarColor: '#0284c7',
-          status: 'Upcoming'
-        },
-        {
-          timeStart: '04:00 PM',
-          timeEnd: '05:00 PM',
-          barColor: 'sp-bar-purple',
-          subject: 'Chemistry',
-          topic: 'Chemical Kinetics - Rate Law & Integrated Equations',
-          teacher: 'A. Sen Sir',
-          room: 'Room 101',
-          avatar: 'A',
-          avatarBg: '#f3e8ff',
-          avatarColor: '#9333ea',
-          status: 'Upcoming'
-        }
-      ]
-    },
-    {
-      day: 'Friday',
-      short: 'Fri',
-      date: '16 Oct 2026',
-      dateNum: 16,
-      isToday: false,
-      statusText: '4 Classes Scheduled',
-      classesCount: 4,
-      classes: [
-        {
-          timeStart: '09:00 AM',
-          timeEnd: '10:00 AM',
-          barColor: 'sp-bar-blue',
-          subject: 'Mathematics',
-          topic: 'Continuity & Differentiability Core Concepts',
-          teacher: 'S. Roy Sir',
-          room: 'Room 101',
-          avatar: 'S',
-          avatarBg: '#eff6ff',
-          avatarColor: '#2563eb',
-          status: 'Upcoming'
-        },
-        {
-          timeStart: '10:15 AM',
-          timeEnd: '11:15 AM',
-          barColor: 'sp-bar-mint',
-          subject: 'Physics',
-          topic: 'Electromagnetic Induction & Faraday’s Laws',
-          teacher: 'P. Das Sir',
-          room: 'Room 102',
-          avatar: 'P',
-          avatarBg: '#dcfce7',
-          avatarColor: '#16a34a',
-          status: 'Upcoming'
-        },
-        {
-          timeStart: '04:00 PM',
-          timeEnd: '05:00 PM',
-          barColor: 'sp-bar-purple',
-          subject: 'Chemistry',
-          topic: 'Surface Chemistry & Colloids Classification',
-          teacher: 'A. Sen Sir',
-          room: 'Room 101',
-          avatar: 'A',
-          avatarBg: '#f3e8ff',
-          avatarColor: '#9333ea',
-          status: 'Upcoming'
-        },
-        {
-          timeStart: '05:15 PM',
-          timeEnd: '06:15 PM',
-          barColor: 'sp-bar-amber',
-          subject: 'Biology',
-          topic: 'Plant Growth & Hormones Auxin Cytokinin',
-          teacher: 'M. Khan Ma\'am',
-          room: 'Room 103',
-          avatar: 'M',
-          avatarBg: '#ffedd5',
-          avatarColor: '#ea580c',
-          status: 'Upcoming'
-        }
-      ]
-    },
-    {
-      day: 'Saturday',
-      short: 'Sat',
-      date: '17 Oct 2026',
-      dateNum: 17,
-      isToday: false,
-      statusText: '3 Classes & Practical Session',
-      classesCount: 3,
-      classes: [
-        {
-          timeStart: '10:15 AM',
-          timeEnd: '11:45 AM',
-          barColor: 'sp-bar-mint',
-          subject: 'Physics',
-          topic: 'Optics Lab Practical - Convex Lens & Focal Length',
-          teacher: 'P. Das Sir',
-          room: 'Physics Lab',
-          avatar: 'P',
-          avatarBg: '#dcfce7',
-          avatarColor: '#16a34a',
-          status: 'Upcoming'
-        },
-        {
-          timeStart: '02:00 PM',
-          timeEnd: '03:30 PM',
-          barColor: 'sp-bar-slate',
-          subject: 'Computer',
-          topic: 'Python Lab - Data Structures & File Handling',
-          teacher: 'K. Gupta Sir',
-          room: 'Lab 2',
-          avatar: 'K',
-          avatarBg: '#e0f2fe',
-          avatarColor: '#0284c7',
-          status: 'Upcoming'
-        },
-        {
-          timeStart: '04:00 PM',
-          timeEnd: '05:30 PM',
-          barColor: 'sp-bar-purple',
-          subject: 'Chemistry',
-          topic: 'Qualitative Salt Analysis Practical Session',
-          teacher: 'A. Sen Sir',
-          room: 'Chem Lab',
-          avatar: 'A',
-          avatarBg: '#f3e8ff',
-          avatarColor: '#9333ea',
-          status: 'Upcoming'
-        }
-      ]
-    },
-    {
-      day: 'Sunday',
-      short: 'Sun',
-      date: '18 Oct 2026',
-      dateNum: 18,
-      isToday: false,
-      statusText: 'Unit Test 2 & Special Workshop',
-      classesCount: 2,
-      classes: [
-        {
-          timeStart: '10:00 AM',
-          timeEnd: '12:00 PM',
-          barColor: 'sp-bar-blue',
-          subject: 'Mathematics',
-          topic: 'Unit Test 2: Algebra, Matrices & Determinants',
-          teacher: 'S. Roy Sir',
-          room: 'Exam Hall A',
-          avatar: 'S',
-          avatarBg: '#eff6ff',
-          avatarColor: '#2563eb',
-          status: 'Upcoming'
-        },
-        {
-          timeStart: '03:00 PM',
-          timeEnd: '05:00 PM',
-          barColor: 'sp-bar-amber',
-          subject: 'Special Workshop',
-          topic: 'JEE & Board Problem Solving Masterclass',
-          teacher: 'P. Das & A. Sen Sir',
-          room: 'Auditorium',
-          avatar: 'W',
-          avatarBg: '#ffedd5',
-          avatarColor: '#ea580c',
-          status: 'Upcoming'
-        }
-      ]
-    }
-  ];
+  // Live Backend Data States
+  const [attendanceData, setAttendanceData] = useState(null);
+  const [sessionsList, setSessionsList] = useState([]);
+  const [routinesList, setRoutinesList] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  // Helper to get day name for October 2026 (Oct 1 is Thursday)
-  const getDayNameForDate = (dateNum) => {
-    const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-    const idx = (dateNum - 1 + 3) % 7;
-    return dayNames[idx];
+  // 1. Fetch live data from backend
+  useEffect(() => {
+    let isMounted = true;
+    setLoading(true);
+
+    Promise.all([
+      apiRequest('/api/student/my-attendance').catch(() => null),
+      apiRequest('/api/student/my-sessions').catch(() => []),
+      apiRequest('/api/student/my-classes').catch(() => [])
+    ])
+      .then(([att, sessions, routines]) => {
+        if (!isMounted) return;
+        if (att) setAttendanceData(att);
+        if (Array.isArray(sessions)) setSessionsList(sessions);
+        if (Array.isArray(routines)) setRoutinesList(routines);
+
+        // Auto select first available subject
+        if (att?.subject_wise && Object.keys(att.subject_wise).length > 0) {
+          setSelectedAttSubject(Object.keys(att.subject_wise)[0]);
+        } else if (Array.isArray(routines) && routines.length > 0) {
+          setSelectedAttSubject(routines[0].subject || 'Physics');
+        }
+
+        // Align mini calendar month to active attendance records if current month has no records
+        if (att?.subject_wise) {
+          let latestDateStr = null;
+          Object.values(att.subject_wise).forEach((s) => {
+            (s.records || []).forEach((r) => {
+              if (r.date && (!latestDateStr || r.date > latestDateStr)) {
+                latestDateStr = r.date;
+              }
+            });
+          });
+          if (latestDateStr) {
+            const recDate = new Date(latestDateStr);
+            const diff = (recDate.getFullYear() - realTodayObj.getFullYear()) * 12 + (recDate.getMonth() - realTodayObj.getMonth());
+            setSubCalMonthOffset(diff);
+          }
+        }
+      })
+      .finally(() => {
+        if (isMounted) setLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // 2. Local ISO date formatter (avoiding UTC timezone shifting bugs)
+  const formatToIso = (d) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
   };
 
-  // Helper to generate full class timetable for any date in October 2026
-  const getMonthClassesForDate = (dateNum) => {
-    // If it matches one of our week days
-    const foundWeekDay = weekDaysData.find((w) => w.dateNum === dateNum);
-    if (foundWeekDay) {
-      return foundWeekDay.classes;
+  const realTodayObj = useMemo(() => new Date(), []);
+  const realTodayIso = useMemo(() => formatToIso(realTodayObj), [realTodayObj]);
+  const todayDateNum = useMemo(() => realTodayObj.getDate(), [realTodayObj]);
+
+  // View Day for 'Today' tab (allows +/- days)
+  const viewDayObj = useMemo(() => {
+    const d = new Date(realTodayObj);
+    d.setDate(d.getDate() + dayOffset);
+    return d;
+  }, [dayOffset, realTodayObj]);
+  const viewDayIso = useMemo(() => formatToIso(viewDayObj), [viewDayObj]);
+  const isViewDayRealToday = dayOffset === 0;
+
+  // View Week Monday for 'This Week' tab (allows +/- weeks)
+  const viewWeekMonday = useMemo(() => {
+    const d = new Date(realTodayObj);
+    const dayOfWeek = (d.getDay() + 6) % 7; // 0=Mon ... 6=Sun
+    d.setDate(d.getDate() - dayOfWeek + weekOffset * 7);
+    return d;
+  }, [weekOffset, realTodayObj]);
+
+  // View Month for 'This Month' tab (allows +/- months)
+  const viewMonthObj = useMemo(() => {
+    const d = new Date(realTodayObj.getFullYear(), realTodayObj.getMonth() + monthOffset, 1);
+    return d;
+  }, [monthOffset, realTodayObj]);
+
+  // Unified class resolver for any concrete date (Strictly from real database class_sessions)
+  const getDayClasses = (targetDate, targetIso) => {
+    // Match concrete sessions from class_sessions table
+    const daySessions = sessionsList.filter((s) => s.session_date === targetIso);
+    if (daySessions.length > 0) {
+      return daySessions.map((s) => ({
+        id: s.id,
+        timeStart: formatTime(s.start_time),
+        timeEnd: formatTime(s.end_time),
+        barColor: getSubjectBarColor(s.subject),
+        subject: s.subject,
+        topic: s.topic_covered || `Curriculum Module - ${s.subject}`,
+        teacher: s.teacher_name || 'Faculty',
+        avatar: (s.teacher_name || s.subject)[0].toUpperCase(),
+        avatarBg: '#eff6ff',
+        avatarColor: '#2563eb',
+        status: s.student_attendance_status || (s.status === 'COMPLETED' ? 'Attended' : 'Upcoming')
+      }));
     }
 
-    const dayName = getDayNameForDate(dateNum);
-    const dayIndex = (dateNum - 1 + 3) % 7;
-    const baseDay = weekDaysData[dayIndex];
+    return [];
+  };
 
-    return baseDay.classes.map((c) => {
-      let status = 'Upcoming';
-      if (dateNum < 14) {
-        // past dates: mostly attended, occasional absent
-        const isAbsentDay = [8, 11, 13].includes(dateNum) && (c.subject === 'Chemistry' || c.subject === 'Physics');
-        status = isAbsentDay ? 'Absent' : 'Attended';
-      } else if (dateNum === 14) {
-        status = c.status;
-      }
+  // 3. Dynamic 7-day data for active week
+  const weekDaysData = useMemo(() => {
+    const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    const shortDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+
+    return days.map((dayName, idx) => {
+      const curDate = new Date(viewWeekMonday);
+      curDate.setDate(viewWeekMonday.getDate() + idx);
+      const isoDate = formatToIso(curDate);
+      const dateNum = curDate.getDate();
+      const dateFormatted = curDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+      const isToday = isoDate === realTodayIso;
+
+      const classes = getDayClasses(curDate, isoDate);
+      const attendedCount = classes.filter((c) => c.status === 'Attended').length;
+
+      let statusText = isToday
+        ? `${classes.length} Classes Scheduled (Today)`
+        : classes.length > 0
+        ? `${attendedCount} Attended · ${classes.length} Total`
+        : 'No classes scheduled';
+
       return {
-        ...c,
-        status
+        day: dayName,
+        short: shortDays[idx],
+        date: dateFormatted,
+        dateNum,
+        isoDate,
+        isToday,
+        statusText,
+        classesCount: classes.length,
+        classes
       };
     });
-  };
+  }, [viewWeekMonday, realTodayIso, sessionsList, routinesList]);
 
-  // Month Calendar Cells (35 cells: Sep 28-30 muted, Oct 1-31, Nov 1 muted)
-  const monthCalendarCells = [
-    { num: 28, isCurrentMonth: false, monthName: 'Sep' },
-    { num: 29, isCurrentMonth: false, monthName: 'Sep' },
-    { num: 30, isCurrentMonth: false, monthName: 'Sep' },
-    ...Array.from({ length: 31 }, (_, i) => ({
-      num: i + 1,
-      isCurrentMonth: true,
-      monthName: 'Oct'
-    })),
-    { num: 1, isCurrentMonth: false, monthName: 'Nov' }
-  ];
+  // Active week day item for drill-down view
+  const activeWeekDayObj = useMemo(() => {
+    return weekDaysData.find((w) => w.day === enteredWeekDay) || weekDaysData.find((w) => w.isToday) || weekDaysData[0];
+  }, [weekDaysData, enteredWeekDay]);
 
-  // Subject-wise attendance records data
-  const subjectAttendanceData = {
-    'Physics': {
-      name: 'Physics',
-      code: 'PHY-102',
-      icon: '⚡',
-      color: '#10b981',
-      lightBg: '#ecfdf5',
-      badgeBg: '#dcfce7',
-      teacher: 'P. Das Sir',
-      room: 'Room 102',
-      totalClasses: 25,
-      attended: 22,
-      missed: 3,
-      percentage: 88,
-      records: [
-        { date: 1, day: 'Thu', topic: 'Electric Charges & Coulomb’s Law', time: '10:15 AM - 11:15 AM', status: 'Present', remark: 'Attended Class & Submitted Assignment' },
-        { date: 3, day: 'Sat', topic: 'Electric Field & Field Lines Vector Analysis', time: '10:15 AM - 11:15 AM', status: 'Present', remark: 'Attended Class' },
-        { date: 5, day: 'Mon', topic: 'Gauss’s Law & Continuous Charge Distribution', time: '10:15 AM - 11:15 AM', status: 'Present', remark: 'Attended Class & Solved DPP' },
-        { date: 6, day: 'Tue', topic: 'Electric Potential & Equipotential Surfaces', time: '10:15 AM - 11:15 AM', status: 'Present', remark: 'Attended Class' },
-        { date: 7, day: 'Wed', topic: 'Capacitance & Dielectrics in Parallel Plates', time: '10:15 AM - 11:15 AM', status: 'Present', remark: 'Attended Class' },
-        { date: 8, day: 'Thu', topic: 'Energy Stored in Capacitor & Combinations', time: '10:15 AM - 11:15 AM', status: 'Absent', remark: 'Absent (Medical Leave - Notified)' },
-        { date: 10, day: 'Sat', topic: 'Current Electricity - Drift Velocity & Ohm’s Law', time: '10:15 AM - 11:15 AM', status: 'Present', remark: 'Attended Class' },
-        { date: 11, day: 'Sun', topic: 'Resistance, Resistivity & Temperature Effect', time: '10:15 AM - 11:15 AM', status: 'Absent', remark: 'Absent (Missed Class)' },
-        { date: 12, day: 'Mon', topic: 'Kirchhoff’s Laws & Wheatstone Bridge Analysis', time: '10:15 AM - 11:15 AM', status: 'Present', remark: 'Attended Class' },
-        { date: 13, day: 'Tue', topic: 'Potentiometer & Meter Bridge Practical Problems', time: '10:15 AM - 11:15 AM', status: 'Present', remark: 'Attended Class' },
-        { date: 14, day: 'Wed', topic: 'Magnetic Effects of Current & Ampere’s Law', time: '10:15 AM - 11:15 AM', status: 'Present', remark: 'Ongoing / Today' },
-      ]
-    },
-    'Mathematics': {
-      name: 'Mathematics',
-      code: 'MTH-101',
-      icon: '📐',
-      color: '#2563eb',
-      lightBg: '#eff6ff',
-      badgeBg: '#dbeafe',
-      teacher: 'S. Roy Sir',
-      room: 'Room 101',
-      totalClasses: 25,
-      attended: 23,
-      missed: 2,
-      percentage: 92,
-      records: [
-        { date: 1, day: 'Thu', topic: 'Relations & Functions - Types & Domain Range', time: '09:00 AM - 10:00 AM', status: 'Present', remark: 'Attended Class' },
-        { date: 2, day: 'Fri', topic: 'Equivalence Relations & Bijective Functions', time: '09:00 AM - 10:00 AM', status: 'Present', remark: 'Attended Class' },
-        { date: 5, day: 'Mon', topic: 'Inverse Trigonometric Functions Properties', time: '09:00 AM - 10:00 AM', status: 'Present', remark: 'Attended Class & Solved DPP' },
-        { date: 7, day: 'Wed', topic: 'Matrices - Multiplication & Symmetric Matrices', time: '09:00 AM - 10:00 AM', status: 'Present', remark: 'Attended Class' },
-        { date: 8, day: 'Thu', topic: 'Determinants Properties & Minors Cofactors', time: '09:00 AM - 10:00 AM', status: 'Absent', remark: 'Absent (Medical Leave)' },
-        { date: 9, day: 'Fri', topic: 'Cramer’s Rule & Matrix Inversion Method', time: '09:00 AM - 10:00 AM', status: 'Absent', remark: 'Absent (Family Event)' },
-        { date: 10, day: 'Sat', topic: 'Adjoint & Inverse of 3x3 Matrices', time: '09:00 AM - 10:00 AM', status: 'Present', remark: 'Attended Class' },
-        { date: 12, day: 'Mon', topic: 'Algebra & Trigonometry - Problem Solving Session', time: '09:00 AM - 10:00 AM', status: 'Present', remark: 'Attended Class' },
-        { date: 14, day: 'Wed', topic: 'Determinants Properties & Minors Cofactors', time: '09:00 AM - 10:00 AM', status: 'Present', remark: 'Attended Class (Today)' },
-      ]
-    },
-    'Chemistry': {
-      name: 'Chemistry',
-      code: 'CHM-103',
-      icon: '🧪',
-      color: '#9333ea',
-      lightBg: '#faf5ff',
-      badgeBg: '#f3e8ff',
-      teacher: 'A. Sen Sir',
-      room: 'Room 101',
-      totalClasses: 20,
-      attended: 17,
-      missed: 3,
-      percentage: 85,
-      records: [
-        { date: 2, day: 'Fri', topic: 'Solutions - Raoult’s Law & Ideal Solutions', time: '04:00 PM - 05:00 PM', status: 'Present', remark: 'Attended Class' },
-        { date: 4, day: 'Sun', topic: 'Colligative Properties & Osmotic Pressure', time: '04:00 PM - 05:00 PM', status: 'Present', remark: 'Attended Class' },
-        { date: 6, day: 'Tue', topic: 'Electrochemistry - Galvanic & Electrolytic Cells', time: '04:00 PM - 05:00 PM', status: 'Present', remark: 'Attended Class' },
-        { date: 7, day: 'Wed', topic: 'Nernst Equation & Kohlrausch’s Law Calculations', time: '04:00 PM - 05:00 PM', status: 'Absent', remark: 'Absent (Unwell)' },
-        { date: 9, day: 'Fri', topic: 'Chemical Kinetics - Order & Molecularity of Reaction', time: '04:00 PM - 05:00 PM', status: 'Present', remark: 'Attended Class' },
-        { date: 11, day: 'Sun', topic: 'Arrhenius Equation & Activation Energy Curves', time: '04:00 PM - 05:00 PM', status: 'Absent', remark: 'Absent (Bus Breakdown)' },
-        { date: 12, day: 'Mon', topic: 'Chemical Bonding & Hybridization Theory', time: '04:00 PM - 05:00 PM', status: 'Present', remark: 'Attended Class' },
-        { date: 13, day: 'Tue', topic: 'Molecular Orbital Theory & Bond Order', time: '04:00 PM - 05:00 PM', status: 'Absent', remark: 'Absent (Special Leave)' },
-      ]
-    },
-    'Biology': {
-      name: 'Biology',
-      code: 'BIO-104',
-      icon: '🧬',
-      color: '#ea580c',
-      lightBg: '#fff7ed',
-      badgeBg: '#ffedd5',
-      teacher: 'M. Khan Ma\'am',
-      room: 'Room 103',
-      totalClasses: 20,
-      attended: 19,
-      missed: 1,
-      percentage: 95,
-      records: [
-        { date: 2, day: 'Fri', topic: 'Cell: The Unit of Life - Fluid Mosaic Model', time: '05:15 PM - 06:15 PM', status: 'Present', remark: 'Attended Class' },
-        { date: 4, day: 'Sun', topic: 'Cell Division - Mitosis Stages & Cytokinesis', time: '05:15 PM - 06:15 PM', status: 'Present', remark: 'Attended Class' },
-        { date: 6, day: 'Tue', topic: 'Biomolecules - Structure of Proteins & Enzymes', time: '05:15 PM - 06:15 PM', status: 'Present', remark: 'Attended Class' },
-        { date: 8, day: 'Thu', topic: 'Photosynthesis - Pigment Systems & Light Reaction', time: '05:15 PM - 06:15 PM', status: 'Present', remark: 'Attended Class' },
-        { date: 9, day: 'Fri', topic: 'Calvin Cycle & C4 Plant Pathways', time: '05:15 PM - 06:15 PM', status: 'Absent', remark: 'Absent (Late Entry Not Allowed)' },
-        { date: 10, day: 'Sat', topic: 'Cell Organelles - Mitochondria & Chloroplast', time: '05:15 PM - 06:15 PM', status: 'Present', remark: 'Attended Class' },
-        { date: 12, day: 'Mon', topic: 'Cell Structure & Function - Revision Class', time: '05:15 PM - 06:15 PM', status: 'Present', remark: 'Attended Class' },
-        { date: 13, day: 'Tue', topic: 'Biomolecules - Structure of Proteins & Enzymes', time: '05:15 PM - 06:15 PM', status: 'Present', remark: 'Attended Class' },
-      ]
-    },
-    'Computer': {
-      name: 'Computer',
-      code: 'CS-105',
-      icon: '💻',
-      color: '#0284c7',
-      lightBg: '#f0f9ff',
-      badgeBg: '#e0f2fe',
-      teacher: 'K. Gupta Sir',
-      room: 'Lab 2',
-      totalClasses: 20,
-      attended: 18,
-      missed: 2,
-      percentage: 90,
-      records: [
-        { date: 1, day: 'Thu', topic: 'Python Data Structures - Lists, Tuples & Slicing', time: '02:00 PM - 03:00 PM', status: 'Present', remark: 'Attended Class & Lab' },
-        { date: 3, day: 'Sat', topic: 'Dictionary Comprehension & Custom Functions', time: '02:00 PM - 03:00 PM', status: 'Present', remark: 'Attended Class' },
-        { date: 5, day: 'Mon', topic: 'File Handling - Working with CSV & Text Files', time: '02:00 PM - 03:00 PM', status: 'Present', remark: 'Attended Class' },
-        { date: 7, day: 'Wed', topic: 'Relational Database Concepts & SQL SELECT Queries', time: '02:00 PM - 03:00 PM', status: 'Absent', remark: 'Absent (Medical Checkup)' },
-        { date: 8, day: 'Thu', topic: 'SQL Aggregate Functions & GROUP BY Clause', time: '02:00 PM - 03:00 PM', status: 'Present', remark: 'Attended Class' },
-        { date: 10, day: 'Sat', topic: 'Database Normalization - 1NF, 2NF & 3NF Rules', time: '02:00 PM - 03:00 PM', status: 'Present', remark: 'Attended Class' },
-        { date: 11, day: 'Sun', topic: 'Computer Networks - OSI Reference Model Layers', time: '02:00 PM - 03:00 PM', status: 'Absent', remark: 'Absent (Network Outage)' },
-        { date: 12, day: 'Mon', topic: 'TCP/IP Model & Network Security Essentials', time: '02:00 PM - 03:00 PM', status: 'Present', remark: 'Attended Class' },
-        { date: 13, day: 'Tue', topic: 'Python Object-Oriented Programming & Classes', time: '06:30 PM - 07:30 PM', status: 'Present', remark: 'Attended Class' },
-      ]
+  // Classes for active navigated day in 'Today' tab
+  const todayClassesData = useMemo(() => {
+    return getDayClasses(viewDayObj, viewDayIso);
+  }, [viewDayObj, viewDayIso, sessionsList, routinesList]);
+
+  // 4. Month Calendar Cells (Dynamic Navigated Month)
+  const monthData = useMemo(() => {
+    const year = viewMonthObj.getFullYear();
+    const month = viewMonthObj.getMonth();
+    const totalDays = new Date(year, month + 1, 0).getDate();
+    const firstDayIndex = (new Date(year, month, 1).getDay() + 6) % 7; // 0=Mon ... 6=Sun
+    const monthName = viewMonthObj.toLocaleDateString('en-GB', { month: 'short' });
+    const fullMonthName = viewMonthObj.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+
+    const cells = [];
+    const prevMonthTotalDays = new Date(year, month, 0).getDate();
+    for (let i = firstDayIndex - 1; i >= 0; i--) {
+      cells.push({ num: prevMonthTotalDays - i, isCurrentMonth: false, monthName: '' });
     }
+    for (let d = 1; d <= totalDays; d++) {
+      const curIso = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      cells.push({ num: d, isCurrentMonth: true, monthName, isoDate: curIso });
+    }
+    const remaining = (7 - (cells.length % 7)) % 7;
+    for (let i = 1; i <= remaining; i++) {
+      cells.push({ num: i, isCurrentMonth: false, monthName: '' });
+    }
+
+    return { cells, fullMonthName, totalDays, year, month };
+  }, [viewMonthObj]);
+
+  // Helper to get classes for a specific date in active month
+  const getClassesForDate = (dateNum) => {
+    const year = monthData.year;
+    const month = monthData.month;
+    const targetIso = `${year}-${String(month + 1).padStart(2, '0')}-${String(dateNum).padStart(2, '0')}`;
+    const targetDate = new Date(year, month, dateNum);
+    return getDayClasses(targetDate, targetIso);
   };
 
-  const currentSubj = subjectAttendanceData[selectedAttSubject] || subjectAttendanceData['Physics'];
-  const recordsByDate = {};
-  currentSubj.records.forEach((r) => {
-    recordsByDate[r.date] = r;
-  });
+  // 4. Subject-wise attendance calculation from live backend
+  const subjectAttendanceList = useMemo(() => {
+    const map = {};
 
-  let filteredRecords = currentSubj.records;
+    // First populate from routines
+    routinesList.forEach((r) => {
+      const s = r.subject;
+      if (!map[s]) {
+        const meta = getSubjectMeta(s);
+        map[s] = {
+          name: s,
+          code: meta.code,
+          icon: meta.icon,
+          color: meta.color,
+          lightBg: meta.lightBg,
+          badgeBg: meta.badgeBg,
+          teacher: r.users?.full_name || 'Faculty',
+          totalClasses: 0,
+          attended: 0,
+          missed: 0,
+          percentage: 0,
+          records: []
+        };
+      }
+    });
+
+    // Merge backend subject_wise data
+    if (attendanceData?.subject_wise) {
+      Object.entries(attendanceData.subject_wise).forEach(([sName, sInfo]) => {
+        const meta = getSubjectMeta(sName);
+        const resolvedTeacher = (sInfo.teacher && sInfo.teacher !== 'Faculty') ? sInfo.teacher : (map[sName]?.teacher || 'Faculty');
+        const sTotal = sInfo.total || 0;
+        const sPresent = sInfo.present || 0;
+        const sAbsent = sInfo.absent || 0;
+        const sRate = sTotal > 0 ? (sInfo.percentage ?? Math.round((sPresent / sTotal) * 100)) : 0;
+        map[sName] = {
+          name: sName,
+          code: meta.code,
+          icon: meta.icon,
+          color: meta.color,
+          lightBg: meta.lightBg,
+          badgeBg: meta.badgeBg,
+          teacher: resolvedTeacher,
+          totalClasses: sTotal,
+          attended: sPresent,
+          missed: sAbsent,
+          percentage: sRate,
+          records: (sInfo.records || []).map((rec, i) => {
+            const dObj = rec.date ? new Date(rec.date) : null;
+            return {
+              id: i,
+              date: dObj ? dObj.getDate() : i + 1,
+              monthShort: dObj ? dObj.toLocaleDateString('en-GB', { month: 'short' }) : '',
+              fullDate: rec.date,
+              day: dObj ? dObj.toLocaleDateString('en-GB', { weekday: 'short' }) : 'Day',
+              topic: rec.topic || `${sName} Session`,
+              time: rec.time || '10:00 AM - 11:30 AM',
+              status: rec.status,
+              teacher: rec.teacher || resolvedTeacher,
+              remark: rec.status === 'Present' ? 'Attended Class' : 'Absent (Missed Class)'
+            };
+          })
+        };
+      });
+    }
+
+    return map;
+  }, [routinesList, attendanceData]);
+
+  const currentSubj = subjectAttendanceList[selectedAttSubject] || Object.values(subjectAttendanceList)[0] || {
+    name: selectedAttSubject || 'General',
+    code: 'GEN-101',
+    icon: '📖',
+    color: '#2563eb',
+    lightBg: '#eff6ff',
+    badgeBg: '#dbeafe',
+    teacher: 'Faculty',
+    totalClasses: 0,
+    attended: 0,
+    missed: 0,
+    percentage: 100,
+    records: []
+  };
+
+  const recordsByIso = useMemo(() => {
+    const map = {};
+    (currentSubj?.records || []).forEach((r) => {
+      if (r.fullDate) {
+        map[r.fullDate] = r;
+      }
+    });
+    return map;
+  }, [currentSubj]);
+
+  // Mini Calendar month object for Subject Attendance box
+  const subCalMonthObj = useMemo(() => {
+    const d = new Date(realTodayObj);
+    d.setDate(1);
+    d.setMonth(d.getMonth() + subCalMonthOffset);
+    return d;
+  }, [realTodayObj, subCalMonthOffset]);
+
+  // Mini Calendar grid cells for Subject Attendance box (Clean 7-col layout)
+  const subCalCells = useMemo(() => {
+    const year = subCalMonthObj.getFullYear();
+    const month = subCalMonthObj.getMonth();
+    const totalDays = new Date(year, month + 1, 0).getDate();
+    const firstDayIndex = new Date(year, month, 1).getDay(); // 0=Sun ... 6=Sat
+    const prevMonthTotalDays = new Date(year, month, 0).getDate();
+
+    const prev = [];
+    for (let i = firstDayIndex - 1; i >= 0; i--) {
+      prev.push(prevMonthTotalDays - i);
+    }
+    const days = Array.from({ length: totalDays }, (_, i) => {
+      const dayNum = i + 1;
+      const iso = `${year}-${String(month + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+      return { num: dayNum, iso };
+    });
+    return {
+      prev,
+      days,
+      fullMonthName: subCalMonthObj.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }),
+      year,
+      month
+    };
+  }, [subCalMonthObj]);
+
+  let filteredRecords = currentSubj.records || [];
   if (attStatusFilter !== 'All') {
     filteredRecords = filteredRecords.filter((r) => r.status === attStatusFilter);
   }
-  if (selectedAttDate) {
-    filteredRecords = filteredRecords.filter((r) => r.date === selectedAttDate);
+  if (selectedAttIso) {
+    filteredRecords = filteredRecords.filter((r) => r.fullDate === selectedAttIso);
   }
 
-  // Active week day item for drill-down view
-  const activeWeekDayObj = weekDaysData.find((w) => w.day === enteredWeekDay) || weekDaysData[2];
+  // Top metric numbers
+  const attendedCount = attendanceData?.month_summary?.attended ?? attendanceData?.present_classes ?? 0;
+  const missedCount = attendanceData?.month_summary?.missed ?? attendanceData?.absent_classes ?? 0;
+  const attendanceRate = attendanceData?.month_summary?.rate ?? attendanceData?.attendance_percentage ?? 100;
 
-  // Helper to render individual class rows cleanly
+  // Render individual class row
   const renderClassRow = (cls, idx, isLast) => (
-    <div key={idx} className={`sp-class-v2-row ${isLast ? 'last-row' : ''}`}>
+    <div key={cls.id || idx} className={`sp-class-v2-row ${isLast ? 'last-row' : ''}`}>
       <div className="sp-c2-time-col">
         <strong>{cls.timeStart}</strong>
         <span>{cls.timeEnd}</span>
@@ -646,7 +409,6 @@ export default function ClassesTab({ showToast }) {
         </div>
         <div>
           <strong>{cls.teacher}</strong>
-          <span>{cls.room}</span>
         </div>
       </div>
       <div className="sp-c2-status-col">
@@ -665,9 +427,9 @@ export default function ClassesTab({ showToast }) {
             ● Live Now
           </span>
         )}
-        {cls.status === 'Upcoming' && (
+        {(cls.status === 'Upcoming' || cls.status === 'Completed') && (
           <span className="sp-badge-upcoming">
-            🕒 Upcoming
+            🕒 {cls.status}
           </span>
         )}
       </div>
@@ -679,6 +441,9 @@ export default function ClassesTab({ showToast }) {
       <AttendanceAnalysis
         onBack={() => setShowAnalysisView(false)}
         showToast={showToast}
+        attendanceData={attendanceData}
+        routinesList={routinesList}
+        sessionsList={sessionsList}
       />
     );
   }
@@ -698,7 +463,7 @@ export default function ClassesTab({ showToast }) {
           </div>
           <div>
             <h1 className="sp-page-title">Classes & Attendance</h1>
-            <p className="sp-page-subtitle">View your class schedule and track your attendance.</p>
+            <p className="sp-page-subtitle">View your real-time class schedule and track attendance records.</p>
           </div>
         </div>
 
@@ -725,9 +490,9 @@ export default function ClassesTab({ showToast }) {
             </svg>
           </div>
           <div className="sp-metric-info">
-            <strong className="sp-metric-value">18</strong>
+            <strong className="sp-metric-value">{attendedCount}</strong>
             <span className="sp-metric-label">Classes Attended</span>
-            <span className="sp-metric-sub">This Month</span>
+            <span className="sp-metric-sub">{attendanceData?.month_summary?.month_name || 'This Month'}</span>
           </div>
         </div>
 
@@ -743,13 +508,13 @@ export default function ClassesTab({ showToast }) {
             </svg>
           </div>
           <div className="sp-metric-info">
-            <strong className="sp-metric-value">2</strong>
+            <strong className="sp-metric-value">{missedCount}</strong>
             <span className="sp-metric-label">Classes Missed</span>
-            <span className="sp-metric-sub">This Month</span>
+            <span className="sp-metric-sub">{attendanceData?.month_summary?.month_name || 'This Month'}</span>
           </div>
         </div>
 
-        {/* 3. Attendance Rate (Clickable to open Full Analysis) */}
+        {/* 3. Attendance Rate */}
         <div
           className="sp-metric-card sp-metric-card-clickable"
           onClick={() => setShowAnalysisView(true)}
@@ -768,14 +533,14 @@ export default function ClassesTab({ showToast }) {
                 fill="none"
                 stroke="#10b981"
                 strokeWidth="4"
-                strokeDasharray="90, 100"
+                strokeDasharray={`${Math.min(100, attendanceRate)}, 100`}
                 strokeLinecap="round"
               />
             </svg>
           </div>
           <div className="sp-metric-info" style={{ width: '100%' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-              <strong className="sp-metric-value">90%</strong>
+              <strong className="sp-metric-value">{attendanceRate}%</strong>
               <span className="sp-metric-action-tag">Analysis ↗</span>
             </div>
             <span className="sp-metric-label">Attendance Rate</span>
@@ -796,6 +561,9 @@ export default function ClassesTab({ showToast }) {
                 setClassesPeriod(tab);
                 setEnteredWeekDay(null);
                 setEnteredMonthDate(null);
+                if (tab === 'Today') setDayOffset(0);
+                if (tab === 'This Week') setWeekOffset(0);
+                if (tab === 'This Month') setMonthOffset(0);
               }}
             >
               {tab}
@@ -803,34 +571,111 @@ export default function ClassesTab({ showToast }) {
           ))}
         </div>
 
-        {/* Dynamic Context Header for Current Selection */}
+        {/* Dynamic Context Header for Current Selection with < > Navigation */}
         <div className="sp-date-navigator">
           {classesPeriod === 'Today' && (
             <>
-              <button className="sp-date-nav-btn" onClick={() => showToast('Viewing Wed, 14 Oct 2026')}>⟨</button>
-              <strong className="sp-date-nav-text">Wed, 14 Oct 2026 (Today)</strong>
-              <button className="sp-date-nav-btn" onClick={() => showToast('Viewing Wed, 14 Oct 2026')}>⟩</button>
+              <button
+                className="sp-date-nav-btn"
+                onClick={() => setDayOffset((prev) => prev - 1)}
+                title="Previous Day"
+                aria-label="Previous Day"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="15 18 9 12 15 6" />
+                </svg>
+              </button>
+              <strong className="sp-date-nav-text">
+                {viewDayObj.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
+                {isViewDayRealToday ? ' (Today)' : ''}
+              </strong>
+              <button
+                className="sp-date-nav-btn"
+                onClick={() => setDayOffset((prev) => prev + 1)}
+                title="Next Day"
+                aria-label="Next Day"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="9 18 15 12 9 6" />
+                </svg>
+              </button>
             </>
           )}
+
           {classesPeriod === 'This Week' && (
             <>
-              <strong className="sp-date-nav-text" style={{ padding: '0 8px' }}>
-                {enteredWeekDay ? `Viewing: ${enteredWeekDay}` : 'Current Week: 12 Oct – 18 Oct 2026'}
+              <button
+                className="sp-date-nav-btn"
+                onClick={() => setWeekOffset((prev) => prev - 1)}
+                title="Previous Week"
+                aria-label="Previous Week"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="15 18 9 12 15 6" />
+                </svg>
+              </button>
+              <strong className="sp-date-nav-text" style={{ padding: '0 4px' }}>
+                {enteredWeekDay
+                  ? `Viewing: ${enteredWeekDay}`
+                  : weekOffset === 0
+                  ? `Current Week (${weekDaysData[0]?.short} - ${weekDaysData[6]?.short})`
+                  : `${weekDaysData[0]?.date.split(' ').slice(0, 2).join(' ')} - ${weekDaysData[6]?.date}`}
               </strong>
+              <button
+                className="sp-date-nav-btn"
+                onClick={() => setWeekOffset((prev) => prev + 1)}
+                title="Next Week"
+                aria-label="Next Week"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="9 18 15 12 9 6" />
+                </svg>
+              </button>
             </>
           )}
+
           {classesPeriod === 'This Month' && (
             <>
-              <strong className="sp-date-nav-text" style={{ padding: '0 8px' }}>
-                {enteredMonthDate ? `Viewing: ${enteredMonthDate} Oct 2026` : 'October 2026'}
+              <button
+                className="sp-date-nav-btn"
+                onClick={() => {
+                  setMonthOffset((prev) => prev - 1);
+                  setEnteredMonthDate(null);
+                }}
+                title="Previous Month"
+                aria-label="Previous Month"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="15 18 9 12 15 6" />
+                </svg>
+              </button>
+              <strong className="sp-date-nav-text" style={{ padding: '0 4px' }}>
+                {enteredMonthDate
+                  ? `Viewing: ${enteredMonthDate} ${monthData.fullMonthName}`
+                  : monthOffset === 0
+                  ? `${monthData.fullMonthName} (Current)`
+                  : monthData.fullMonthName}
               </strong>
+              <button
+                className="sp-date-nav-btn"
+                onClick={() => {
+                  setMonthOffset((prev) => prev + 1);
+                  setEnteredMonthDate(null);
+                }}
+                title="Next Month"
+                aria-label="Next Month"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="9 18 15 12 9 6" />
+                </svg>
+              </button>
             </>
           )}
         </div>
       </div>
 
       {/* ========================================================================= */}
-      {/* 1. PERIOD VIEW (IN-PLACE REPLACEMENT FOR WEEK & MONTH)                   */}
+      {/* 1. PERIOD VIEW (TODAY / WEEK / MONTH)                                     */}
       {/* ========================================================================= */}
 
       {/* A. TODAY'S VIEW */}
@@ -847,16 +692,31 @@ export default function ClassesTab({ showToast }) {
                 </svg>
               </div>
               <div>
-                <h3>Today's Classes</h3>
-                <span className="sp-card-subtitle-small">4 scheduled sessions for Wednesday, 14 Oct 2026</span>
+                <h3>{isViewDayRealToday ? "Today's Classes" : `Classes for ${viewDayObj.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}`}</h3>
+                <span className="sp-card-subtitle-small">
+                  {todayClassesData.length} scheduled session{todayClassesData.length === 1 ? '' : 's'} {isViewDayRealToday ? 'for today' : 'on this date'}
+                </span>
               </div>
             </div>
-            <span className="sp-live-badge-pulse">● 1 Completed, 1 Live, 2 Upcoming</span>
+            {todayClassesData.length > 0 && (
+              <span className="sp-live-badge-pulse">
+                ● {todayClassesData.filter((c) => c.status === 'Attended').length} Attended, {todayClassesData.filter((c) => c.status === 'Upcoming' || c.status === 'Live').length} Remaining
+              </span>
+            )}
           </div>
 
           <div className="sp-classes-v2-list">
-            {weekDaysData[2].classes.map((cls, idx, arr) =>
-              renderClassRow(cls, idx, idx === arr.length - 1)
+            {todayClassesData.length > 0 ? (
+              todayClassesData.map((cls, idx, arr) =>
+                renderClassRow(cls, idx, idx === arr.length - 1)
+              )
+            ) : (
+              <div style={{ padding: '36px 20px', textAlign: 'center', color: '#64748b' }}>
+                <p style={{ margin: 0, fontSize: '15px', fontWeight: 500 }}>
+                  {isViewDayRealToday ? "No classes scheduled for today." : `No classes scheduled for ${viewDayObj.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' })}.`}
+                </p>
+                <small style={{ color: '#94a3b8' }}>Use the navigation buttons or check the 'This Week' tab to view upcoming timetable sessions.</small>
+              </div>
             )}
           </div>
         </div>
@@ -865,7 +725,6 @@ export default function ClassesTab({ showToast }) {
       {/* B. THIS WEEK VIEW */}
       {classesPeriod === 'This Week' && (
         <>
-          {/* If NOT entered into a day: Show the 7 Day Boxes in a Grid */}
           {!enteredWeekDay ? (
             <div className="sp-week-view-wrapper">
               <div className="sp-week-days-grid">
@@ -889,16 +748,13 @@ export default function ClassesTab({ showToast }) {
 
                     <div className="sp-wd-footer-row">
                       <span className="sp-wd-class-badge">📚 {d.classesCount} Classes</span>
-                      <span className="sp-wd-enter-link">
-                        Enter Day →
-                      </span>
+                      <span className="sp-wd-enter-link">Enter Day →</span>
                     </div>
                   </div>
                 ))}
               </div>
             </div>
           ) : (
-            /* When clicked Enter Day: Show That Day's Timetable IN THE SAME PLACE */
             <div className="sp-card sp-todays-classes-box" style={{ marginBottom: '24px' }}>
               <div className="sp-box-title-row" style={{ flexWrap: 'wrap', gap: '14px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -922,7 +778,6 @@ export default function ClassesTab({ showToast }) {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                   <span className="sp-live-badge-pulse">● {activeWeekDayObj.statusText}</span>
 
-                  {/* Mini Switcher to quickly jump to another day */}
                   <div className="sp-days-mini-switcher">
                     {weekDaysData.map((d) => (
                       <button
@@ -939,8 +794,14 @@ export default function ClassesTab({ showToast }) {
               </div>
 
               <div className="sp-classes-v2-list">
-                {activeWeekDayObj.classes.map((cls, idx, arr) =>
-                  renderClassRow(cls, idx, idx === arr.length - 1)
+                {activeWeekDayObj.classes.length > 0 ? (
+                  activeWeekDayObj.classes.map((cls, idx, arr) =>
+                    renderClassRow(cls, idx, idx === arr.length - 1)
+                  )
+                ) : (
+                  <div style={{ padding: '32px 16px', textAlign: 'center', color: '#64748b' }}>
+                    <p style={{ margin: 0 }}>No classes scheduled for this day.</p>
+                  </div>
                 )}
               </div>
             </div>
@@ -951,13 +812,12 @@ export default function ClassesTab({ showToast }) {
       {/* C. THIS MONTH VIEW */}
       {classesPeriod === 'This Month' && (
         <>
-          {/* If NOT entered into a date: Show the 35-Day Month Calendar Grid */}
           {!enteredMonthDate ? (
             <div className="sp-month-calendar-box">
               <div className="sp-mcal-top-bar">
                 <div className="sp-mcal-title-wrap">
-                  <h3>October 2026 Academic Calendar</h3>
-                  <p>Click on any date to inspect its class timetable</p>
+                  <h3>{monthData.fullMonthName} Academic Calendar</h3>
+                  <p>Click on any date to inspect its live class timetable</p>
                 </div>
                 <div className="sp-mcal-legend">
                   <div className="sp-mcal-legend-item">
@@ -980,7 +840,7 @@ export default function ClassesTab({ showToast }) {
                 </div>
 
                 <div className="sp-mcal-days-grid">
-                  {monthCalendarCells.map((cell, idx) => {
+                  {monthData.cells.map((cell, idx) => {
                     if (!cell.isCurrentMonth) {
                       return (
                         <div key={idx} className="sp-mcal-day-cell muted">
@@ -991,10 +851,12 @@ export default function ClassesTab({ showToast }) {
                       );
                     }
 
-                    const isToday = cell.num === 14;
-                    const classes = getMonthClassesForDate(cell.num);
-                    const hasAttended = classes.some((c) => c.status === 'Attended');
-                    const hasAbsent = classes.some((c) => c.status === 'Absent');
+                    const isToday = cell.isoDate === realTodayIso;
+                    const classes = getClassesForDate(cell.num);
+                    const attRecord = attendanceData?.calendar_dates?.[cell.isoDate];
+
+                    const hasAttended = attRecord === 'PRESENT' || classes.some((c) => c.status === 'Attended');
+                    const hasAbsent = attRecord === 'ABSENT' || classes.some((c) => c.status === 'Absent');
                     const hasUpcoming = classes.some((c) => c.status === 'Upcoming' || c.status === 'Live');
 
                     return (
@@ -1015,12 +877,9 @@ export default function ClassesTab({ showToast }) {
                         </div>
 
                         <div className="sp-mcal-day-classes-preview">
-                          <span className="sp-mcal-mini-badge" style={{ background: '#eff6ff', color: '#2563eb' }}>
-                            {classes.length} Classes
-                          </span>
-                          {cell.num === 18 && (
-                            <span className="sp-mcal-mini-badge" style={{ background: '#fef3c7', color: '#b45309' }}>
-                              Unit Test 2
+                          {classes.length > 0 && (
+                            <span className="sp-mcal-mini-badge" style={{ background: '#eff6ff', color: '#2563eb' }}>
+                              {classes.length} Class{classes.length > 1 ? 'es' : ''}
                             </span>
                           )}
                         </div>
@@ -1037,7 +896,6 @@ export default function ClassesTab({ showToast }) {
               </div>
             </div>
           ) : (
-            /* When clicked any date: Show That Date's Timetable IN THE SAME PLACE */
             <div className="sp-card sp-todays-classes-box" style={{ marginBottom: '24px' }}>
               <div className="sp-box-title-row" style={{ flexWrap: 'wrap', gap: '14px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -1050,10 +908,10 @@ export default function ClassesTab({ showToast }) {
                   </button>
                   <div>
                     <h3 style={{ margin: 0, fontSize: '18px', color: '#0f172a' }}>
-                      {getDayNameForDate(enteredMonthDate)} Timetable ({enteredMonthDate} Oct 2026)
+                      Date Timetable ({enteredMonthDate} {monthData.fullMonthName})
                     </h3>
                     <span className="sp-card-subtitle-small">
-                      {getMonthClassesForDate(enteredMonthDate).length} scheduled sessions for this date
+                      {getClassesForDate(enteredMonthDate).length} scheduled sessions for this date
                     </span>
                   </div>
                 </div>
@@ -1068,12 +926,12 @@ export default function ClassesTab({ showToast }) {
                     ⟨
                   </button>
                   <strong className="sp-date-nav-text" style={{ minWidth: '90px', textAlign: 'center' }}>
-                    {enteredMonthDate} Oct 2026
+                    {enteredMonthDate} {monthData.fullMonthName}
                   </strong>
                   <button
                     className="sp-date-nav-btn"
-                    disabled={enteredMonthDate >= 31}
-                    onClick={() => setEnteredMonthDate((prev) => Math.min(31, prev + 1))}
+                    disabled={enteredMonthDate >= monthData.totalDays}
+                    onClick={() => setEnteredMonthDate((prev) => Math.min(monthData.totalDays, prev + 1))}
                     title="Next Date"
                   >
                     ⟩
@@ -1082,8 +940,14 @@ export default function ClassesTab({ showToast }) {
               </div>
 
               <div className="sp-classes-v2-list">
-                {getMonthClassesForDate(enteredMonthDate).map((cls, idx, arr) =>
-                  renderClassRow(cls, idx, idx === arr.length - 1)
+                {getClassesForDate(enteredMonthDate).length > 0 ? (
+                  getClassesForDate(enteredMonthDate).map((cls, idx, arr) =>
+                    renderClassRow(cls, idx, idx === arr.length - 1)
+                  )
+                ) : (
+                  <div style={{ padding: '32px 16px', textAlign: 'center', color: '#64748b' }}>
+                    <p style={{ margin: 0 }}>No classes scheduled on this date.</p>
+                  </div>
                 )}
               </div>
             </div>
@@ -1092,7 +956,7 @@ export default function ClassesTab({ showToast }) {
       )}
 
       {/* ========================================================================= */}
-      {/* 2. SUBJECT-WISE ATTENDANCE & DATE RECORDS (CLEAN & MINIMALIST)             */}
+      {/* 2. SUBJECT-WISE ATTENDANCE & DATE RECORDS (CLEAN 2-COLUMN SPLIT)           */}
       {/* ========================================================================= */}
       <div className="sp-card sp-subject-att-card">
         <div className="sp-sub-att-header-simple">
@@ -1103,14 +967,14 @@ export default function ClassesTab({ showToast }) {
           <div className="sp-sub-att-stat-inline">
             <span className="sp-stat-inline-item text-green">● {currentSubj.attended} Present</span>
             <span className="sp-stat-inline-item text-red">● {currentSubj.missed} Absent</span>
-            <span className="sp-stat-inline-item text-dark"><strong>{currentSubj.percentage}%</strong> Rate</span>
+            <span className="sp-stat-inline-item text-dark"><strong>{currentSubj.totalClasses > 0 ? `${currentSubj.percentage}%` : '0%'}</strong> Rate</span>
           </div>
         </div>
 
         {/* Minimalist Subject Selector Pills */}
         <div className="sp-sub-pills-bar">
-          {Object.keys(subjectAttendanceData).map((subjKey) => {
-            const subj = subjectAttendanceData[subjKey];
+          {Object.keys(subjectAttendanceList).map((subjKey) => {
+            const subj = subjectAttendanceList[subjKey];
             const isActive = selectedAttSubject === subjKey;
             return (
               <button
@@ -1118,11 +982,11 @@ export default function ClassesTab({ showToast }) {
                 className={`sp-sub-simple-pill ${isActive ? 'active' : ''}`}
                 onClick={() => {
                   setSelectedAttSubject(subjKey);
-                  setSelectedAttDate(null);
+                  setSelectedAttIso(null);
                 }}
               >
                 <span className="sp-pill-label">{subj.name}</span>
-                <span className="sp-pill-rate">{subj.percentage}%</span>
+                <span className="sp-pill-rate">{subj.totalClasses > 0 ? `${subj.percentage}%` : '0%'}</span>
               </button>
             );
           })}
@@ -1133,10 +997,10 @@ export default function ClassesTab({ showToast }) {
           {/* Left: Minimal Calendar */}
           <div className="sp-cal-box-clean">
             <div className="sp-cal-nav-row">
-              <strong className="sp-cal-month-title">October 2026</strong>
+              <strong className="sp-cal-month-title">{subCalCells.fullMonthName}</strong>
               <div className="sp-cal-arrows">
-                <button className="sp-cal-btn-mini" onClick={() => showToast('September 2026 loaded')}>⟨</button>
-                <button className="sp-cal-btn-mini" onClick={() => showToast('November 2026 loaded')}>⟩</button>
+                <button className="sp-cal-btn-mini" onClick={() => setSubCalMonthOffset((prev) => prev - 1)} title="Previous Month">⟨</button>
+                <button className="sp-cal-btn-mini" onClick={() => setSubCalMonthOffset((prev) => prev + 1)} title="Next Month">⟩</button>
               </div>
             </div>
 
@@ -1146,18 +1010,18 @@ export default function ClassesTab({ showToast }) {
                 <div key={i} className="sp-cal-clean-weekday">{dayChar}</div>
               ))}
 
-              {/* Sep 27-30 muted */}
-              {[27, 28, 29, 30].map((d) => (
+              {/* Prev days muted */}
+              {subCalCells.prev.map((d) => (
                 <div key={`prev-${d}`} className="sp-cal-clean-cell muted">{d}</div>
               ))}
 
-              {/* Oct 1-31 */}
-              {Array.from({ length: 31 }, (_, i) => i + 1).map((day) => {
-                const rec = recordsByDate[day];
-                const isSelected = selectedAttDate === day;
+              {/* Month days */}
+              {subCalCells.days.map((cell) => {
+                const rec = recordsByIso[cell.iso];
+                const isSelected = selectedAttIso === cell.iso;
                 const isPresent = rec?.status === 'Present';
                 const isAbsent = rec?.status === 'Absent';
-                const isToday = day === 14;
+                const isToday = cell.iso === realTodayIso;
 
                 let cellClass = 'sp-cal-clean-cell';
                 if (isSelected) cellClass += ' is-selected';
@@ -1165,17 +1029,17 @@ export default function ClassesTab({ showToast }) {
 
                 return (
                   <button
-                    key={`oct-${day}`}
+                    key={`cal-${cell.iso}`}
                     className={cellClass}
                     onClick={() => {
-                      if (selectedAttDate === day) {
-                        setSelectedAttDate(null);
+                      if (selectedAttIso === cell.iso) {
+                        setSelectedAttIso(null);
                       } else {
-                        setSelectedAttDate(day);
+                        setSelectedAttIso(cell.iso);
                       }
                     }}
                   >
-                    <span className="sp-cal-cell-num">{day}</span>
+                    <span className="sp-cal-cell-num">{cell.num}</span>
                     {isPresent && <span className="sp-cal-clean-dot dot-present" />}
                     {isAbsent && <span className="sp-cal-clean-dot dot-absent" />}
                   </button>
@@ -1199,7 +1063,7 @@ export default function ClassesTab({ showToast }) {
             <div className="sp-log-nav-row">
               <div className="sp-log-nav-title">
                 <h4>{currentSubj.name} Classes</h4>
-                <span className="sp-log-teacher-sub">{currentSubj.teacher} · {currentSubj.room}</span>
+                <span className="sp-log-teacher-sub">{currentSubj.teacher}</span>
               </div>
 
               {/* Clean Status Pills */}
@@ -1225,10 +1089,10 @@ export default function ClassesTab({ showToast }) {
               </div>
             </div>
 
-            {selectedAttDate && (
+            {selectedAttIso && (
               <div className="sp-date-filter-chip">
-                <span>Showing: {selectedAttDate} Oct 2026</span>
-                <button onClick={() => setSelectedAttDate(null)}>✕ Reset</button>
+                <span>Showing: {selectedAttIso}</span>
+                <button onClick={() => setSelectedAttIso(null)}>✕ Reset</button>
               </div>
             )}
 
@@ -1237,7 +1101,7 @@ export default function ClassesTab({ showToast }) {
               {filteredRecords.length === 0 ? (
                 <div className="sp-log-empty-clean">
                   No class records for this selection.
-                  <button onClick={() => { setAttStatusFilter('All'); setSelectedAttDate(null); }}>
+                  <button onClick={() => { setAttStatusFilter('All'); setSelectedAttIso(null); }}>
                     Show all
                   </button>
                 </div>
@@ -1247,7 +1111,7 @@ export default function ClassesTab({ showToast }) {
                   return (
                     <div key={idx} className="sp-log-row-clean">
                       <div className="sp-log-date-col">
-                        <strong>{item.date} Oct</strong>
+                        <strong>{item.date} {item.monthShort || ''}</strong>
                         <span>{item.day}</span>
                       </div>
                       <div className="sp-log-info-col">

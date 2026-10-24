@@ -1,13 +1,28 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { apiRequest } from '../../api';
 
-export default function AttendanceAnalysis({ onBack, showToast }) {
+export default function AttendanceAnalysis({ onBack, showToast, attendanceData: initialAttendanceData, routinesList = [], sessionsList = [] }) {
   const [timeframe, setTimeframe] = useState('month'); // 'week' | 'month' | 'year'
-  const [selectedSubject, setSelectedSubject] = useState('All'); // 'All' | 'Physics' | 'Mathematics' | 'Chemistry' | 'Biology' | 'Computer'
+  const [selectedSubject, setSelectedSubject] = useState('All');
   const [subjectDropdownOpen, setSubjectDropdownOpen] = useState(false);
   const [hoveredSlice, setHoveredSlice] = useState(null);
   const [hoveredBar, setHoveredBar] = useState(null);
 
+  const [liveAttendance, setLiveAttendance] = useState(initialAttendanceData || null);
   const dropdownRef = useRef(null);
+
+  // Fetch live attendance if not provided
+  useEffect(() => {
+    if (!initialAttendanceData) {
+      apiRequest('/api/student/my-attendance')
+        .then((data) => {
+          if (data) setLiveAttendance(data);
+        })
+        .catch((err) => console.warn('AttendanceAnalysis fetch error:', err));
+    } else {
+      setLiveAttendance(initialAttendanceData);
+    }
+  }, [initialAttendanceData]);
 
   // Close dropdown on click outside
   useEffect(() => {
@@ -20,207 +35,410 @@ export default function AttendanceAnalysis({ onBack, showToast }) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Subject Metadata
-  const subjectMeta = {
-    'All': { name: 'All Subjects (Overall)', icon: '📊', color: '#2563eb', bg: '#eff6ff' },
-    'Physics': { name: 'Physics', icon: '⚡', color: '#10b981', bg: '#ecfdf5', teacher: 'P. Das Sir', code: 'PHY-102', room: 'Room 102' },
-    'Mathematics': { name: 'Mathematics', icon: '📐', color: '#2563eb', bg: '#eff6ff', teacher: 'S. Roy Sir', code: 'MTH-101', room: 'Room 101' },
-    'Chemistry': { name: 'Chemistry', icon: '🧪', color: '#9333ea', bg: '#faf5ff', teacher: 'A. Sen Sir', code: 'CHM-103', room: 'Room 101' },
-    'Biology': { name: 'Biology', icon: '🧬', color: '#ea580c', bg: '#fff7ed', teacher: 'M. Khan Ma\'am', code: 'BIO-104', room: 'Room 103' },
-    'Computer': { name: 'Computer', icon: '💻', color: '#0284c7', bg: '#f0f9ff', teacher: 'K. Gupta Sir', code: 'CS-105', room: 'Lab 2' },
+  // 1. Dynamic Teacher resolver from routines, sessions, and attendance
+  const resolvedTeachers = useMemo(() => {
+    const map = {};
+    (routinesList || []).forEach((r) => {
+      if (r.subject && r.users?.full_name) {
+        map[r.subject] = r.users.full_name;
+      }
+    });
+    (sessionsList || []).forEach((s) => {
+      if (s.subject && s.teacher_name) {
+        map[s.subject] = s.teacher_name;
+      }
+    });
+    if (liveAttendance?.subject_wise) {
+      Object.entries(liveAttendance.subject_wise).forEach(([sName, sInfo]) => {
+        if (sInfo.teacher && sInfo.teacher !== 'Faculty') {
+          map[sName] = sInfo.teacher;
+        }
+      });
+    }
+    return map;
+  }, [routinesList, sessionsList, liveAttendance]);
+
+  // 2. Dynamic Unique subjects enrolled by student (NO dummy subjects)
+  const availableSubjects = useMemo(() => {
+    const set = new Set();
+    (routinesList || []).forEach((r) => { if (r.subject) set.add(r.subject); });
+    (sessionsList || []).forEach((s) => { if (s.subject) set.add(s.subject); });
+    if (liveAttendance?.subject_wise) {
+      Object.keys(liveAttendance.subject_wise).forEach((s) => set.add(s));
+    }
+    return Array.from(set);
+  }, [routinesList, sessionsList, liveAttendance]);
+
+  // 3. Dynamic Subject Metadata helper
+  const getSubjectMeta = (subjName) => {
+    if (subjName === 'All') {
+      return { name: 'All Subjects', icon: '📊', color: '#2563eb', bg: '#eff6ff', teacher: 'All Faculty', code: 'ALL-00' };
+    }
+    const s = (subjName || '').toLowerCase();
+    let icon = '📖';
+    let color = '#2563eb';
+    let bg = '#eff6ff';
+    let code = `${subjName.slice(0, 3).toUpperCase()}-101`;
+
+    if (s.includes('phys')) {
+      icon = '⚡';
+      color = '#10b981';
+      bg = '#ecfdf5';
+      code = 'PHY-102';
+    } else if (s.includes('math')) {
+      icon = '📐';
+      color = '#2563eb';
+      bg = '#eff6ff';
+      code = 'MTH-101';
+    } else if (s.includes('chem')) {
+      icon = '🧪';
+      color = '#9333ea';
+      bg = '#faf5ff';
+      code = 'CHM-103';
+    } else if (s.includes('bio')) {
+      icon = '🧬';
+      color = '#ea580c';
+      bg = '#fff7ed';
+      code = 'BIO-104';
+    } else if (s.includes('comp') || s.includes('cs') || s.includes('it')) {
+      icon = '💻';
+      color = '#0284c7';
+      bg = '#f0f9ff';
+      code = 'CS-105';
+    }
+
+    return {
+      name: subjName,
+      icon,
+      color,
+      bg,
+      code,
+      teacher: resolvedTeachers[subjName] || 'Faculty'
+    };
   };
 
-  // Detailed Overall Data by Timeframe (Week, Month, Year)
-  const overallDataByTimeframe = {
-    week: {
-      title: 'Current Week (12 Oct – 18 Oct 2026)',
-      overallRate: 92,
-      totalClasses: 26,
-      attended: 24,
-      missed: 2,
-      topSubject: {
-        name: 'Biology & Mathematics',
-        rate: 100,
-        attended: 9,
-        total: 9,
-        teacher: 'M. Khan Ma\'am & S. Roy Sir',
-        note: 'Perfect 100% attendance recorded throughout this week'
-      },
-      lessSubject: {
-        name: 'Chemistry',
-        rate: 75,
-        attended: 3,
-        total: 4,
-        missed: 1,
-        teacher: 'A. Sen Sir',
-        note: '1 missed class on Tuesday (Molecular Orbital Theory session)'
-      },
-      pieSlices: [
-        { name: 'Physics', value: 6, rate: 100, color: '#10b981' },
-        { name: 'Mathematics', value: 5, rate: 100, color: '#2563eb' },
-        { name: 'Biology', value: 4, rate: 100, color: '#ea580c' },
-        { name: 'Computer', value: 4, rate: 100, color: '#0284c7' },
-        { name: 'Chemistry', value: 3, rate: 75, color: '#9333ea' },
-        { name: 'Tests & Labs', value: 2, rate: 100, color: '#f59e0b' },
-      ]
-    },
-    month: {
-      title: 'October 2026 (Monthly Progression)',
-      overallRate: 90,
-      totalClasses: 110,
-      attended: 99,
-      missed: 11,
-      topSubject: {
-        name: 'Biology',
-        rate: 95,
-        attended: 19,
-        total: 20,
-        teacher: 'M. Khan Ma\'am',
-        note: 'Outstanding consistency with only 1 absence during the entire month'
-      },
-      lessSubject: {
-        name: 'Chemistry',
-        rate: 85,
-        attended: 17,
-        total: 20,
-        missed: 3,
-        teacher: 'A. Sen Sir',
-        note: 'Lowest attendance rate this month · Attend next 2 classes to reach 90%'
-      },
-      pieSlices: [
-        { name: 'Mathematics', value: 23, rate: 92, color: '#2563eb' },
-        { name: 'Physics', value: 22, rate: 88, color: '#10b981' },
-        { name: 'Biology', value: 19, rate: 95, color: '#ea580c' },
-        { name: 'Computer', value: 18, rate: 90, color: '#0284c7' },
-        { name: 'Chemistry', value: 17, rate: 85, color: '#9333ea' },
-      ]
-    },
-    year: {
-      title: 'Academic Year 2026 (Annual Progression)',
-      overallRate: 89,
-      totalClasses: 940,
-      attended: 836,
-      missed: 104,
-      topSubject: {
-        name: 'Biology',
-        rate: 95.3,
-        attended: 162,
-        total: 170,
-        teacher: 'M. Khan Ma\'am',
-        note: 'Top subject performer consistently across all 3 academic terms'
-      },
-      lessSubject: {
-        name: 'Chemistry',
-        rate: 83.5,
-        attended: 142,
-        total: 170,
-        missed: 28,
-        teacher: 'A. Sen Sir',
-        note: 'Maintain attendance focus to ensure distinction exam clearance'
-      },
-      pieSlices: [
-        { name: 'Mathematics', value: 186, rate: 93, color: '#2563eb' },
-        { name: 'Physics', value: 174, rate: 87, color: '#10b981' },
-        { name: 'Biology', value: 162, rate: 95.3, color: '#ea580c' },
-        { name: 'Computer', value: 144, rate: 90, color: '#0284c7' },
-        { name: 'Chemistry', value: 142, rate: 83.5, color: '#9333ea' },
-        { name: 'Practical Labs', value: 28, rate: 70, color: '#f59e0b' },
-      ]
-    }
-  };
+  // Compute live slices and top/less subjects dynamically
+  const { pieSlices, topSubject, lessSubject, overallRate, totalClasses, attended, missed } = useMemo(() => {
+    const sw = liveAttendance?.subject_wise || {};
 
-  // Bar Graph Datasets for individual subjects when chosen from dropdown
-  const singleSubjectBarData = {
-    week: {
-      categories: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
-      fullLabels: ['Monday (12 Oct)', 'Tuesday (13 Oct)', 'Wednesday (14 Oct)', 'Thursday (15 Oct)', 'Friday (16 Oct)', 'Saturday (17 Oct)', 'Sunday (18 Oct)'],
-      Physics: [100, 100, 100, 100, 100, 100, 100],
-      Mathematics: [100, 100, 100, 100, 100, 100, 100],
-      Chemistry: [100, 0, 100, 100, 100, 100, 100],
-      Biology: [100, 100, 100, 100, 100, 100, 100],
-      Computer: [100, 100, 100, 100, 100, 100, 100],
-    },
-    month: {
-      categories: ['Week 1', 'Week 2', 'Week 3 (Current)', 'Week 4 (Est.)', 'Week 5 (Est.)'],
-      fullLabels: ['Week 1 (Oct 1 – 4)', 'Week 2 (Oct 5 – 11)', 'Week 3 (Oct 12 – 18)', 'Week 4 (Oct 19 – 25)', 'Week 5 (Oct 26 – 31)'],
-      Physics: [85, 83, 92, 90, 89],
-      Mathematics: [90, 88, 96, 92, 94],
-      Chemistry: [82, 78, 88, 86, 85],
-      Biology: [95, 92, 98, 95, 96],
-      Computer: [88, 86, 92, 90, 93],
-    },
-    year: {
-      categories: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
-      fullLabels: ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'],
-      Physics: [90, 85, 88, 92, 84, 87, 89, 86, 90, 88, 86, 89],
-      Mathematics: [93, 90, 92, 95, 87, 91, 93, 89, 94, 92, 90, 93],
-      Chemistry: [86, 82, 85, 90, 80, 84, 87, 82, 88, 85, 84, 87],
-      Biology: [96, 93, 95, 98, 91, 94, 96, 92, 96, 95, 93, 95],
-      Computer: [91, 87, 89, 93, 85, 88, 90, 86, 91, 90, 88, 90],
+    const slices = availableSubjects.map((sName) => {
+      const sInfo = sw[sName] || {};
+      const meta = getSubjectMeta(sName);
+      const sTotal = sInfo.total || 0;
+      const sRate = sTotal > 0 ? (sInfo.percentage ?? 0) : 0;
+      return {
+        name: sName,
+        value: sTotal, // Real count of classes held (0 if none)
+        rate: sRate,
+        color: meta.color
+      };
+    });
+
+    let top = null;
+    let less = null;
+
+    if (availableSubjects.length > 0) {
+      const activeWithClasses = availableSubjects.filter((s) => (sw[s]?.total || 0) > 0);
+
+      if (activeWithClasses.length > 0) {
+        const sorted = [...activeWithClasses].sort((a, b) => {
+          const rateA = sw[a]?.total > 0 ? (sw[a]?.percentage ?? 0) : 0;
+          const rateB = sw[b]?.total > 0 ? (sw[b]?.percentage ?? 0) : 0;
+          return rateB - rateA;
+        });
+        const topName = sorted[0];
+        const topInfo = sw[topName] || {};
+
+        top = {
+          name: topName,
+          rate: topInfo.total > 0 ? (topInfo.percentage ?? 0) : 0,
+          attended: topInfo.present || 0,
+          total: topInfo.total || 0,
+          teacher: resolvedTeachers[topName] || 'Faculty',
+          note: 'Outstanding consistency recorded across current curriculum classes'
+        };
+
+        // Only show lessSubject if there are at least 2 subjects with classes held
+        if (activeWithClasses.length >= 2) {
+          const lessName = sorted[sorted.length - 1];
+          const lessInfo = sw[lessName] || {};
+          less = {
+            name: lessName,
+            rate: lessInfo.total > 0 ? (lessInfo.percentage ?? 0) : 0,
+            attended: lessInfo.present || 0,
+            total: lessInfo.total || 0,
+            teacher: resolvedTeachers[lessName] || 'Faculty',
+            note: (lessInfo.total > 0 && (lessInfo.percentage ?? 0) < 75)
+              ? 'Attendance is below 75% center threshold. Focus on attending upcoming classes.'
+              : 'Good standing. Maintain attendance focus to ensure distinction criteria.'
+          };
+        } else {
+          less = null;
+        }
+      }
     }
-  };
+
+    const tClasses = liveAttendance?.total_classes || 0;
+    const pClasses = liveAttendance?.present_classes || 0;
+    const aClasses = liveAttendance?.absent_classes || 0;
+    const rate = liveAttendance?.attendance_percentage ?? 0;
+
+    return {
+      pieSlices: slices,
+      topSubject: top,
+      lessSubject: less,
+      overallRate: rate,
+      totalClasses: tClasses,
+      attended: pClasses,
+      missed: aClasses
+    };
+  }, [liveAttendance, availableSubjects, routinesList, resolvedTeachers]);
+
+  // Overall Data by Timeframe (Week, Month, Year)
+  const overallDataByTimeframe = useMemo(() => {
+    const monthSummary = liveAttendance?.month_summary || {};
+    const monthRate = monthSummary.rate ?? overallRate;
+    const hasMonthData = (monthSummary.total !== undefined && monthSummary.total > 0);
+    const monthTotal = hasMonthData ? monthSummary.total : (totalClasses || 0);
+    const monthAttended = hasMonthData ? monthSummary.attended : attended;
+    const monthMissed = hasMonthData ? monthSummary.missed : missed;
+
+    return {
+      week: {
+        title: 'Current Week',
+        overallRate,
+        totalClasses,
+        attended,
+        missed,
+        topSubject,
+        lessSubject,
+        pieSlices
+      },
+      month: {
+        title: `${monthSummary.month_name || 'Current Month'} (Monthly Progression)`,
+        overallRate: monthRate,
+        totalClasses: monthTotal,
+        attended: monthAttended,
+        missed: monthMissed,
+        topSubject,
+        lessSubject,
+        pieSlices
+      },
+      year: {
+        title: 'Academic Term (Annual Progression)',
+        overallRate,
+        totalClasses,
+        attended,
+        missed,
+        topSubject,
+        lessSubject,
+        pieSlices
+      }
+    };
+  }, [liveAttendance, overallRate, totalClasses, attended, missed, topSubject, lessSubject, pieSlices]);
+
+  // 4. Dynamic Single Subject Bar Data (Strictly calculated from real session records)
+  const singleSubjectBarData = useMemo(() => {
+    // Collect all unified session records with attendance status
+    const getSubjectSessions = (sName) => {
+      const recordsMap = {};
+
+      // 1. From sessionsList
+      (sessionsList || []).forEach((s) => {
+        if (!sName || sName === 'All' || (s.subject || '').toLowerCase() === sName.toLowerCase()) {
+          const isAttended = s.student_attendance_status === 'Attended';
+          const isAbsent = s.student_attendance_status === 'Absent' || (s.status === 'COMPLETED' && !isAttended);
+          const isHeld = isAttended || isAbsent;
+          if (s.session_date) {
+            recordsMap[s.id || s.session_date] = {
+              date: s.session_date,
+              isHeld,
+              isAttended
+            };
+          }
+        }
+      });
+
+      // 2. From liveAttendance history
+      const attHistory = liveAttendance?.history || [];
+      attHistory.forEach((h) => {
+        const subj = h.class_sessions?.subject || h.subject || '';
+        if (!sName || sName === 'All' || subj.toLowerCase() === sName.toLowerCase()) {
+          const sDate = h.class_sessions?.session_date || h.session_date;
+          const isAttended = h.status === 'PRESENT' || h.status === 'Attended';
+          if (sDate) {
+            recordsMap[h.session_id || sDate] = {
+              date: sDate,
+              isHeld: true,
+              isAttended
+            };
+          }
+        }
+      });
+
+      return Object.values(recordsMap);
+    };
+
+    const computeRateForItems = (items) => {
+      const held = items.filter((it) => it.isHeld);
+      if (held.length === 0) return 0;
+      const attended = held.filter((it) => it.isAttended).length;
+      return Math.round((attended / held.length) * 100);
+    };
+
+    const getBarValuesForSubject = (sName) => {
+      const items = getSubjectSessions(sName);
+
+      // Determine active month prefix for month breakdown
+      let activeMonthPrefix = '';
+      const latestHeld = items.filter((it) => it.isHeld).sort((a, b) => b.date.localeCompare(a.date))[0];
+      if (latestHeld && latestHeld.date) {
+        activeMonthPrefix = latestHeld.date.slice(0, 7);
+      } else if (items.length > 0 && items[0].date) {
+        activeMonthPrefix = items[0].date.slice(0, 7);
+      } else {
+        activeMonthPrefix = new Date().toISOString().slice(0, 7);
+      }
+
+      // WEEK (Mon - Sun: 1=Mon ... 7=Sun)
+      const weekVals = [1, 2, 3, 4, 5, 6, 7].map((dow) => {
+        const dayItems = items.filter((it) => {
+          if (!it.date) return false;
+          const d = new Date(it.date);
+          const rDow = (d.getDay() + 6) % 7 + 1;
+          return rDow === dow;
+        });
+        return computeRateForItems(dayItems);
+      });
+
+      // MONTH (Week 1 - 5 in active month)
+      const monthVals = [1, 2, 3, 4, 5].map((w) => {
+        const weekItems = items.filter((it) => {
+          if (!it.date || !it.date.startsWith(activeMonthPrefix)) return false;
+          const dayNum = parseInt(it.date.split('-')[2], 10);
+          const recWeek = Math.min(5, Math.ceil(dayNum / 7));
+          return recWeek === w;
+        });
+        return computeRateForItems(weekItems);
+      });
+
+      // YEAR (Jan - Dec: 0=Jan ... 11=Dec)
+      const yearVals = Array.from({ length: 12 }, (_, mIdx) => {
+        const monthItems = items.filter((it) => {
+          if (!it.date) return false;
+          const m = parseInt(it.date.split('-')[1], 10) - 1;
+          return m === mIdx;
+        });
+        return computeRateForItems(monthItems);
+      });
+
+      return {
+        week: weekVals,
+        month: monthVals,
+        year: yearVals
+      };
+    };
+
+    const subjectMap = {};
+    availableSubjects.forEach((sName) => {
+      subjectMap[sName] = getBarValuesForSubject(sName);
+    });
+    subjectMap['All'] = getBarValuesForSubject('All');
+
+    return {
+      categories: {
+        week: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+        month: ['Week 1', 'Week 2', 'Week 3', 'Week 4', 'Week 5'],
+        year: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+      },
+      fullLabels: {
+        week: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
+        month: ['Week 1', 'Week 2', 'Week 3', 'Week 4', 'Week 5'],
+        year: ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+      },
+      data: subjectMap
+    };
+  }, [liveAttendance, availableSubjects, sessionsList]);
 
   const currentOverview = overallDataByTimeframe[timeframe];
-  const activeColor = subjectMeta[selectedSubject]?.color || '#2563eb';
+  const activeMeta = getSubjectMeta(selectedSubject);
+  const activeColor = activeMeta.color;
 
   // Helper to render Donut Pie Chart with math-perfect SVG arcs
-  const renderDonutChart = (slices, overallRate) => {
+  const renderDonutChart = (slices, overallRateVal) => {
     const cx = 130;
     const cy = 130;
     const R = 98;
     const r = 62;
-    const totalValue = slices.reduce((sum, s) => sum + s.value, 0);
 
-    let currentAngle = -Math.PI / 2;
+    // Filter to only subjects with actual classes held (value > 0)
+    const activeSlices = (slices || []).filter((s) => (s.value || 0) > 0);
+    const totalValue = activeSlices.reduce((sum, s) => sum + s.value, 0);
 
-    const paths = slices.map((slice) => {
-      const angle = (slice.value / totalValue) * (2 * Math.PI);
-      const startAngle = currentAngle;
-      const endAngle = currentAngle + angle;
-      currentAngle = endAngle;
+    let paths = [];
+    if (activeSlices.length > 0 && totalValue > 0) {
+      let currentAngle = -Math.PI / 2;
 
-      const isHovered = hoveredSlice === slice.name;
-      const currentR = isHovered ? R + 5 : R;
+      paths = activeSlices.map((slice) => {
+        const angle = (slice.value / totalValue) * (2 * Math.PI);
+        const startAngle = currentAngle;
+        const endAngle = currentAngle + angle;
+        currentAngle = endAngle;
 
-      const x1 = cx + currentR * Math.cos(startAngle);
-      const y1 = cy + currentR * Math.sin(startAngle);
-      const x2 = cx + currentR * Math.cos(endAngle);
-      const y2 = cy + currentR * Math.sin(endAngle);
+        const isHovered = hoveredSlice === slice.name;
+        const currentR = isHovered ? R + 5 : R;
 
-      const x3 = cx + r * Math.cos(endAngle);
-      const y3 = cy + r * Math.sin(endAngle);
-      const x4 = cx + r * Math.cos(startAngle);
-      const y4 = cy + r * Math.sin(startAngle);
+        if (angle >= 2 * Math.PI - 0.001 || activeSlices.length === 1) {
+          const d = `M ${cx} ${cy - currentR} A ${currentR} ${currentR} 0 1 1 ${cx} ${cy + currentR} A ${currentR} ${currentR} 0 1 1 ${cx} ${cy - currentR} L ${cx} ${cy - r} A ${r} ${r} 0 1 0 ${cx} ${cy + r} A ${r} ${r} 0 1 0 ${cx} ${cy - r} Z`;
+          return {
+            ...slice,
+            d,
+            pct: 100
+          };
+        }
 
-      const largeArc = angle > Math.PI ? 1 : 0;
+        const x1 = cx + currentR * Math.cos(startAngle);
+        const y1 = cy + currentR * Math.sin(startAngle);
+        const x2 = cx + currentR * Math.cos(endAngle);
+        const y2 = cy + currentR * Math.sin(endAngle);
 
-      const d = `M ${x1} ${y1} A ${currentR} ${currentR} 0 ${largeArc} 1 ${x2} ${y2} L ${x3} ${y3} A ${r} ${r} 0 ${largeArc} 0 ${x4} ${y4} Z`;
+        const x3 = cx + r * Math.cos(endAngle);
+        const y3 = cy + r * Math.sin(endAngle);
+        const x4 = cx + r * Math.cos(startAngle);
+        const y4 = cy + r * Math.sin(startAngle);
 
-      return {
-        ...slice,
-        d,
-        pct: Math.round((slice.value / totalValue) * 100)
-      };
-    });
+        const largeArc = angle > Math.PI ? 1 : 0;
+        const d = `M ${x1} ${y1} A ${currentR} ${currentR} 0 ${largeArc} 1 ${x2} ${y2} L ${x3} ${y3} A ${r} ${r} 0 ${largeArc} 0 ${x4} ${y4} Z`;
+
+        return {
+          ...slice,
+          d,
+          pct: Math.round((slice.value / totalValue) * 100)
+        };
+      });
+    }
 
     return (
       <div className="sp-pie-chart-wrap">
         <svg viewBox="0 0 260 260" className="sp-pie-svg">
-          <g>
-            {paths.map((p, idx) => (
-              <path
-                key={idx}
-                d={p.d}
-                fill={p.color}
-                stroke="#ffffff"
-                strokeWidth="2.5"
-                style={{ cursor: 'pointer', transition: 'all 0.16s ease' }}
-                onMouseEnter={() => setHoveredSlice(p.name)}
-                onMouseLeave={() => setHoveredSlice(null)}
-              />
-            ))}
-          </g>
-          {/* Center Hole Information */}
+          {paths.length === 0 ? (
+            <circle cx={cx} cy={cy} r={(R + r) / 2} fill="none" stroke="#e2e8f0" strokeWidth={R - r} />
+          ) : (
+            <g>
+              {paths.map((p, idx) => (
+                <path
+                  key={idx}
+                  d={p.d}
+                  fill={p.color}
+                  stroke="#ffffff"
+                  strokeWidth="2.5"
+                  style={{ cursor: 'pointer', transition: 'all 0.16s ease' }}
+                  onMouseEnter={() => setHoveredSlice(p.name)}
+                  onMouseLeave={() => setHoveredSlice(null)}
+                />
+              ))}
+            </g>
+          )}
           <circle cx={cx} cy={cy} r={r - 4} fill="#ffffff" />
           <text
             x={cx}
@@ -230,7 +448,7 @@ export default function AttendanceAnalysis({ onBack, showToast }) {
             fontWeight="800"
             fill="#0f172a"
           >
-            {overallRate}%
+            {overallRateVal}%
           </text>
           <text
             x={cx}
@@ -253,10 +471,8 @@ export default function AttendanceAnalysis({ onBack, showToast }) {
               onMouseEnter={() => setHoveredSlice(s.name)}
               onMouseLeave={() => setHoveredSlice(null)}
               onClick={() => {
-                if (subjectMeta[s.name]) {
-                  setSelectedSubject(s.name);
-                  if (showToast) showToast(`Filtered to ${s.name}`);
-                }
+                setSelectedSubject(s.name);
+                if (showToast) showToast(`Filtered to ${s.name}`);
               }}
               title={`Click to analyze ${s.name}`}
             >
@@ -272,10 +488,9 @@ export default function AttendanceAnalysis({ onBack, showToast }) {
 
   // Helper to render Bar Chart for a specific subject
   const renderSingleSubjectBarChart = () => {
-    const barData = singleSubjectBarData[timeframe];
-    const values = barData[selectedSubject] || barData.Physics;
-    const categories = barData.categories;
-    const fullLabels = barData.fullLabels;
+    const categories = singleSubjectBarData.categories[timeframe];
+    const fullLabels = singleSubjectBarData.fullLabels[timeframe];
+    const values = singleSubjectBarData.data[selectedSubject]?.[timeframe] || Array(categories.length).fill(0);
 
     const svgWidth = 720;
     const svgHeight = 260;
@@ -287,7 +502,6 @@ export default function AttendanceAnalysis({ onBack, showToast }) {
     const plotHeight = svgHeight - paddingTop - paddingBottom;
 
     const getY = (val) => paddingTop + plotHeight - (val / 100) * plotHeight;
-    const is75Y = getY(75);
 
     return (
       <div className="sp-svg-chart-container">
@@ -439,7 +653,7 @@ export default function AttendanceAnalysis({ onBack, showToast }) {
   return (
     <div className="sp-view-container sp-analysis-page">
       {/* ========================================================================= */}
-      {/* 1. CONTROLS STRIP (ABOVE ATTENDANCE BOX): TIMEFRAME & SUBJECT DROPDOWN    */}
+      {/* 1. CONTROLS STRIP: TIMEFRAME & SUBJECT DROPDOWN                           */}
       {/* ========================================================================= */}
       <div className="sp-analysis-controls-strip">
         <button
@@ -483,7 +697,7 @@ export default function AttendanceAnalysis({ onBack, showToast }) {
               onClick={() => setSubjectDropdownOpen(!subjectDropdownOpen)}
               title="Click to Choose Subject"
             >
-              <span className="sp-sdb-icon">{subjectMeta[selectedSubject]?.icon || '📊'}</span>
+              <span className="sp-sdb-icon">{activeMeta.icon || '📊'}</span>
               <span className="sp-sdb-text">
                 {selectedSubject === 'All' ? 'All Subjects' : selectedSubject}
               </span>
@@ -495,8 +709,8 @@ export default function AttendanceAnalysis({ onBack, showToast }) {
             {subjectDropdownOpen && (
               <div className="sp-subject-dropdown-menu">
                 <div className="sp-sdm-header">Choose Subject</div>
-                {Object.keys(subjectMeta).map((subjKey) => {
-                  const meta = subjectMeta[subjKey];
+                {['All', ...availableSubjects].map((subjKey) => {
+                  const meta = getSubjectMeta(subjKey);
                   const isSelected = selectedSubject === subjKey;
                   return (
                     <button
@@ -549,46 +763,87 @@ export default function AttendanceAnalysis({ onBack, showToast }) {
             {/* Right Column: Top Attended & Less Attended Subjects */}
             <div className="sp-overall-stats-column">
               {/* Top Attended Subject */}
-              <div className="sp-spotlight-card sp-spotlight-green">
-                <div className="sp-spotlight-head">
-                  <div className="sp-spotlight-icon-box" style={{ background: '#dcfce7', color: '#16a34a' }}>
-                    🏆
+              {currentOverview.topSubject ? (
+                <div className="sp-spotlight-card sp-spotlight-green">
+                  <div className="sp-spotlight-head">
+                    <div className="sp-spotlight-icon-box" style={{ background: '#dcfce7', color: '#16a34a' }}>
+                      🏆
+                    </div>
+                    <div>
+                      <span className="sp-spotlight-badge green">TOP ATTENDED SUBJECT</span>
+                      <h4 className="sp-spotlight-title">
+                        {currentOverview.topSubject.name} — <span style={{ color: '#16a34a' }}>{currentOverview.topSubject.rate}%</span>
+                      </h4>
+                    </div>
                   </div>
-                  <div>
-                    <span className="sp-spotlight-badge green">TOP ATTENDED SUBJECT</span>
-                    <h4 className="sp-spotlight-title">
-                      {currentOverview.topSubject.name} — <span style={{ color: '#16a34a' }}>{currentOverview.topSubject.rate}%</span>
-                    </h4>
+                  <div className="sp-spotlight-body">
+                    <p className="sp-spotlight-meta">
+                      <strong>{currentOverview.topSubject.attended} of {currentOverview.topSubject.total}</strong> classes attended · {currentOverview.topSubject.teacher}
+                    </p>
+                    <span className="sp-spotlight-note">{currentOverview.topSubject.note}</span>
                   </div>
                 </div>
-                <div className="sp-spotlight-body">
-                  <p className="sp-spotlight-meta">
-                    <strong>{currentOverview.topSubject.attended} of {currentOverview.topSubject.total}</strong> classes attended · {currentOverview.topSubject.teacher}
-                  </p>
-                  <span className="sp-spotlight-note">{currentOverview.topSubject.note}</span>
+              ) : (
+                <div className="sp-spotlight-card" style={{ background: '#f8fafc', borderColor: '#e2e8f0' }}>
+                  <div className="sp-spotlight-head">
+                    <div className="sp-spotlight-icon-box" style={{ background: '#f1f5f9', color: '#64748b' }}>
+                      ℹ️
+                    </div>
+                    <div>
+                      <span className="sp-spotlight-badge" style={{ color: '#64748b' }}>TOP ATTENDED SUBJECT</span>
+                      <h4 className="sp-spotlight-title" style={{ color: '#64748b' }}>No Classes Held Yet</h4>
+                    </div>
+                  </div>
+                  <div className="sp-spotlight-body">
+                    <span className="sp-spotlight-note" style={{ color: '#94a3b8' }}>Classes have not commenced yet.</span>
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Less Attended Subject */}
-              <div className="sp-spotlight-card sp-spotlight-amber">
-                <div className="sp-spotlight-head">
-                  <div className="sp-spotlight-icon-box" style={{ background: '#fef3c7', color: '#d97706' }}>
-                    ⚠️
+              {currentOverview.lessSubject ? (
+                <div className="sp-spotlight-card sp-spotlight-amber">
+                  <div className="sp-spotlight-head">
+                    <div className="sp-spotlight-icon-box" style={{ background: '#fef3c7', color: '#d97706' }}>
+                      ⚠️
+                    </div>
+                    <div>
+                      <span className="sp-spotlight-badge amber">LESS ATTENDED SUBJECT</span>
+                      <h4 className="sp-spotlight-title">
+                        {currentOverview.lessSubject.name} — <span style={{ color: '#d97706' }}>{currentOverview.lessSubject.rate}%</span>
+                      </h4>
+                    </div>
                   </div>
-                  <div>
-                    <span className="sp-spotlight-badge amber">LESS ATTENDED SUBJECT</span>
-                    <h4 className="sp-spotlight-title">
-                      {currentOverview.lessSubject.name} — <span style={{ color: '#d97706' }}>{currentOverview.lessSubject.rate}%</span>
-                    </h4>
+                  <div className="sp-spotlight-body">
+                    <p className="sp-spotlight-meta">
+                      <strong>{currentOverview.lessSubject.attended} of {currentOverview.lessSubject.total}</strong> classes attended · {currentOverview.lessSubject.teacher}
+                    </p>
+                    <span className="sp-spotlight-note">{currentOverview.lessSubject.note}</span>
                   </div>
                 </div>
-                <div className="sp-spotlight-body">
-                  <p className="sp-spotlight-meta">
-                    <strong>{currentOverview.lessSubject.attended} of {currentOverview.lessSubject.total}</strong> classes attended · {currentOverview.lessSubject.teacher}
-                  </p>
-                  <span className="sp-spotlight-note">{currentOverview.lessSubject.note}</span>
+              ) : (
+                <div className="sp-spotlight-card" style={{ background: '#f8fafc', borderColor: '#e2e8f0' }}>
+                  <div className="sp-spotlight-head">
+                    <div className="sp-spotlight-icon-box" style={{ background: '#f1f5f9', color: '#64748b' }}>
+                      ℹ️
+                    </div>
+                    <div>
+                      <span className="sp-spotlight-badge" style={{ color: '#64748b' }}>LESS ATTENDED SUBJECT</span>
+                      <h4 className="sp-spotlight-title" style={{ color: '#64748b', fontSize: '15px' }}>
+                        No Comparative Subject Yet
+                      </h4>
+                    </div>
+                  </div>
+                  <div className="sp-spotlight-body">
+                    <p className="sp-spotlight-meta" style={{ color: '#94a3b8' }}>
+                      Awaiting classes in other subjects
+                    </p>
+                    <span className="sp-spotlight-note" style={{ color: '#94a3b8' }}>
+                      Once sessions across multiple subjects are conducted, the lowest attended subject will be highlighted here.
+                    </span>
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Quick Summary Numbers Strip */}
               <div className="sp-summary-mini-strip">
@@ -622,21 +877,21 @@ export default function AttendanceAnalysis({ onBack, showToast }) {
                   width: '38px',
                   height: '38px',
                   borderRadius: '10px',
-                  background: subjectMeta[selectedSubject]?.bg || '#eff6ff',
+                  background: activeMeta.bg || '#eff6ff',
                   color: activeColor,
                   display: 'grid',
                   placeItems: 'center',
                   fontSize: '18px'
                 }}
               >
-                {subjectMeta[selectedSubject]?.icon}
+                {activeMeta.icon}
               </div>
               <div>
                 <h3 style={{ margin: 0, fontSize: '18px', color: '#0f172a' }}>
                   {selectedSubject} Attendance ({timeframe.toUpperCase()})
                 </h3>
                 <span className="sp-card-subtitle-small">
-                  {subjectMeta[selectedSubject]?.teacher} · {subjectMeta[selectedSubject]?.room} · {subjectMeta[selectedSubject]?.code}
+                  {activeMeta.teacher} · {activeMeta.code}
                 </span>
               </div>
             </div>
