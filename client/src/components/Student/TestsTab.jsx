@@ -246,7 +246,7 @@ export default function TestsTab({
 
   return (
     <div className="sp-view-container sp-tests-view">
-      {/* Header with Title & Mode Switcher Pills */}
+      {/* Header with Title */}
       <div className="sp-title-header-bar">
         <div>
           <h1 className="sp-page-title">
@@ -257,22 +257,6 @@ export default function TestsTab({
               ? 'All subjects exam results, detailed scorecards and batch toppers leaderboard.'
               : 'View your upcoming test schedule, syllabus and subject-wise performance analysis.'}
           </p>
-        </div>
-
-        {/* Sub-tab Pill Switcher */}
-        <div className="sp-test-mode-toggle-bar">
-          <button 
-            className={`sp-mode-toggle-btn ${!isResultsView ? 'active' : ''}`}
-            onClick={() => { setActiveTab('tests'); setTestSubTab('performance'); }}
-          >
-            📊 1. Test & Performance
-          </button>
-          <button 
-            className={`sp-mode-toggle-btn ${isResultsView ? 'active' : ''}`}
-            onClick={() => { setActiveTab('tests'); setTestSubTab('results'); }}
-          >
-            🏆 2. Result
-          </button>
         </div>
       </div>
 

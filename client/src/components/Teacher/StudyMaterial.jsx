@@ -1,59 +1,16 @@
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import EducationIllustration from './EducationIllustration';
-const INITIAL_MATERIALS = [
-  {
-    id: 'mat-1',
-    name: 'Unit-1-Computer-Networks-Overview.pdf',
-    batch: 'B.Sc 6th Sem',
-    subject: 'Computer Network',
-    date: '14 Oct 2026',
-    type: 'pdf',
-    size: '2.4 MB'
-  },
-  {
-    id: 'mat-2',
-    name: 'OSI-Model-Architecture-Diagram.png',
-    batch: 'B.Sc 6th Sem',
-    subject: 'Computer Network',
-    date: '12 Oct 2026',
-    type: 'image',
-    size: '1.1 MB'
-  },
-  {
-    id: 'mat-3',
-    name: 'TCP-IP-Protocol-Suite-Lecture-Notes.docx',
-    batch: 'B.Sc 6th Sem',
-    subject: 'Computer Network',
-    date: '10 Oct 2026',
-    type: 'word',
-    size: '850 KB'
-  },
-  {
-    id: 'mat-4',
-    name: 'DPP-01-Subnetting-Practice-Problems.pdf',
-    batch: 'B.Sc 6th Sem',
-    subject: 'Computer Network',
-    date: '08 Oct 2026',
-    type: 'pdf',
-    size: '1.6 MB'
-  },
-  {
-    id: 'mat-5',
-    name: 'Routing-Algorithms-Lab-Manual.xlsx',
-    batch: 'B.Sc 6th Sem',
-    subject: 'Computer Network',
-    date: '05 Oct 2026',
-    type: 'excel',
-    size: '420 KB'
-  }
-];
+import { apiRequest } from '../../api';
 
 export function StudyMaterial() {
-  const [materials, setMaterials] = useState(INITIAL_MATERIALS);
+  const [batchesList, setBatchesList] = useState([]);
+  const [materials, setMaterials] = useState([]);
   const [selectedBatch, setSelectedBatch] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [isDragOver, setIsDragOver] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [toastMessage, setToastMessage] = useState('');
 
   const fileInputRef = useRef(null);
@@ -62,15 +19,16 @@ export function StudyMaterial() {
     setToastMessage(msg);
     setTimeout(() => {
       setToastMessage('');
-    }, 2800);
+    }, 3200);
   };
 
   const getFileType = (filename) => {
-    const ext = filename.split('.').pop()?.toLowerCase();
+    const ext = filename?.split('.').pop()?.toLowerCase() || '';
     if (['pdf'].includes(ext)) return 'pdf';
     if (['png', 'jpg', 'jpeg', 'webp', 'gif', 'svg'].includes(ext)) return 'image';
     if (['doc', 'docx'].includes(ext)) return 'word';
     if (['xls', 'xlsx', 'csv'].includes(ext)) return 'excel';
+    if (['mp4', 'webm', 'mov', 'mkv', 'avi'].includes(ext)) return 'video';
     return 'default';
   };
 
@@ -85,6 +43,15 @@ export function StudyMaterial() {
               <line x1="16" y1="13" x2="8" y2="13" />
               <line x1="16" y1="17" x2="8" y2="17" />
               <polyline points="10 9 9 9 8 9" />
+            </svg>
+          </div>
+        );
+      case 'video':
+        return (
+          <div className="sm-file-badge badge-video" title="Video File" style={{ backgroundColor: '#EEF2FF', color: '#4F46E5' }}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="23 7 16 12 23 17 23 7" />
+              <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
             </svg>
           </div>
         );
@@ -132,6 +99,77 @@ export function StudyMaterial() {
     }
   };
 
+  const fetchMaterials = useCallback(async () => {
+    try {
+      const data = await apiRequest('/api/teacher/study-materials');
+      if (Array.isArray(data)) {
+        const formatted = data.map((m) => ({
+          id: m.id,
+          name: m.title || (m.file_url ? m.file_url.split('/').pop() : 'Study Material'),
+          batch_id: m.batch_id,
+          batch: m.batches?.name || 'Assigned Batch',
+          subject: m.subject,
+          date: m.created_at ? new Date(m.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '',
+          type: getFileType(m.title || m.file_url || ''),
+          file_url: m.file_url,
+          signed_url: m.signed_url,
+          description: m.description,
+        }));
+        setMaterials(formatted);
+      }
+    } catch (err) {
+      console.error('Failed to load study materials:', err);
+      showToast('⚠️ Could not load study materials from server.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  // Fetch batches & materials on mount
+  useEffect(() => {
+    let isMounted = true;
+
+    apiRequest('/api/teacher/my-batches')
+      .then((data) => {
+        if (!isMounted) return;
+        if (Array.isArray(data)) {
+          setBatchesList(data);
+          if (data.length > 0) {
+            setSelectedBatch(data[0].batch_id);
+            const firstSubject = data[0].subjects?.[0]?.name || (typeof data[0].subjects?.[0] === 'string' ? data[0].subjects[0] : '');
+            if (firstSubject) setSelectedSubject(firstSubject);
+          }
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to load teacher batches:', err);
+      });
+
+    fetchMaterials();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [fetchMaterials]);
+
+  // Derived subjects for the currently selected batch
+  const availableSubjects = useMemo(() => {
+    const currentBatch = batchesList.find((b) => b.batch_id === selectedBatch);
+    if (!currentBatch || !currentBatch.subjects) return [];
+    return currentBatch.subjects.map((s) => (typeof s === 'string' ? s : s.name));
+  }, [batchesList, selectedBatch]);
+
+  const handleBatchChange = (newBatchId) => {
+    setSelectedBatch(newBatchId);
+    const b = batchesList.find((x) => x.batch_id === newBatchId);
+    if (b && b.subjects && b.subjects.length > 0) {
+      const firstSubj = typeof b.subjects[0] === 'string' ? b.subjects[0] : b.subjects[0].name;
+      setSelectedSubject(firstSubj || '');
+    } else {
+      setSelectedSubject('');
+    }
+  };
+
   const triggerUploadClick = () => {
     if (!selectedBatch || !selectedSubject) {
       showToast('⚠️ Please select both Batch and Subject before uploading files.');
@@ -140,28 +178,53 @@ export function StudyMaterial() {
     fileInputRef.current?.click();
   };
 
-  const handleFileUpload = (filesList) => {
+  const handleFileUpload = async (filesList) => {
     if (!filesList || filesList.length === 0) return;
     if (!selectedBatch || !selectedSubject) {
       showToast('⚠️ Please select both Batch and Subject before uploading files.');
       return;
     }
 
-    const newItems = Array.from(filesList).map((file, idx) => {
-      const type = getFileType(file.name);
-      return {
-        id: `mat-${Date.now()}-${idx}`,
-        name: file.name,
-        batch: selectedBatch,
-        subject: selectedSubject,
-        date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
-        type,
-        size: `${(file.size / (1024 * 1024)).toFixed(1)} MB`
-      };
-    });
+    const filesArray = Array.from(filesList);
+    const maxBytes = 50 * 1024 * 1024; // 50 MiB
+    const validExtensions = ['.pdf', '.doc', '.docx', '.mp4', '.webm', '.mov', '.mkv'];
 
-    setMaterials((prev) => [...newItems, ...prev]);
-    showToast(`Uploaded ${newItems.length} file${newItems.length > 1 ? 's' : ''} successfully to ${selectedBatch}!`);
+    setIsUploading(true);
+    let successCount = 0;
+
+    for (const file of filesArray) {
+      const ext = '.' + file.name.split('.').pop()?.toLowerCase();
+      if (!validExtensions.includes(ext)) {
+        showToast(`❌ "${file.name}" unsupported format. Allowed: PDF, DOC, DOCX, MP4, WEBM, MOV, MKV`);
+        continue;
+      }
+      if (file.size > maxBytes) {
+        showToast(`❌ "${file.name}" exceeds the 50 MiB limit.`);
+        continue;
+      }
+
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('batch_id', selectedBatch);
+      formData.append('subject', selectedSubject);
+      formData.append('title', file.name);
+
+      try {
+        await apiRequest('/api/teacher/study-materials', {
+          method: 'POST',
+          body: formData,
+        });
+        successCount++;
+      } catch (err) {
+        showToast(`❌ Failed to upload "${file.name}": ${err.message}`);
+      }
+    }
+
+    setIsUploading(false);
+    if (successCount > 0) {
+      showToast(`✓ Uploaded ${successCount} file${successCount > 1 ? 's' : ''} successfully!`);
+      await fetchMaterials();
+    }
   };
 
   const handleDragOver = (e) => {
@@ -189,35 +252,81 @@ export function StudyMaterial() {
     }
   };
 
-  const handleDelete = (id, name) => {
-    setMaterials((prev) => prev.filter((m) => m.id !== id));
-    showToast(`Deleted "${name}"`);
+  const handleDelete = async (id, name) => {
+    if (!window.confirm(`Are you sure you want to delete "${name}"?`)) {
+      return;
+    }
+    try {
+      await apiRequest(`/api/teacher/study-materials/${id}`, {
+        method: 'DELETE',
+      });
+      setMaterials((prev) => prev.filter((m) => m.id !== id));
+      showToast(`✓ Deleted "${name}" successfully.`);
+    } catch (err) {
+      showToast(`❌ Delete failed: ${err.message}`);
+    }
   };
 
-  const handleView = (name) => {
-    showToast(`Opening "${name}"...`);
+  const handleView = async (item) => {
+    try {
+      let url = item.signed_url;
+      if (!url) {
+        const res = await apiRequest(`/api/teacher/study-materials/${item.id}/access-url`);
+        url = res.signed_url;
+      }
+      if (url) {
+        window.open(url, '_blank', 'noopener,noreferrer');
+      } else {
+        showToast('⚠️ Unable to generate secure view link.');
+      }
+    } catch (err) {
+      showToast(`❌ View error: ${err.message}`);
+    }
   };
 
-  const handleDownload = (name) => {
-    showToast(`Downloading "${name}"...`);
+  const handleDownload = async (item) => {
+    try {
+      let url = item.signed_url;
+      if (!url) {
+        const res = await apiRequest(`/api/teacher/study-materials/${item.id}/access-url`);
+        url = res.signed_url;
+      }
+      if (url) {
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = item.name || 'study-material';
+        a.target = '_blank';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      } else {
+        showToast('⚠️ Unable to generate download link.');
+      }
+    } catch (err) {
+      showToast(`❌ Download error: ${err.message}`);
+    }
   };
 
   const filteredMaterials = useMemo(() => {
     if (!selectedBatch || !selectedSubject) return [];
     return materials.filter((item) => {
+      const matchBatch = item.batch_id === selectedBatch;
       const matchSubject = !item.subject || item.subject.toLowerCase() === selectedSubject.toLowerCase();
       const matchSearch = !searchQuery.trim() ||
         item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         item.subject.toLowerCase().includes(searchQuery.toLowerCase());
-      return matchSubject && matchSearch;
+      return matchBatch && matchSubject && matchSearch;
     });
   }, [materials, selectedBatch, selectedSubject, searchQuery]);
+
+  const selectedBatchObj = batchesList.find((b) => b.batch_id === selectedBatch);
+  const selectedBatchName = selectedBatchObj?.batch_name || selectedBatch;
 
   return (
     <div className="sm-page-wrapper">
       <main className="sm-container">
         {/* ==================================================================
-            1. HERO SECTION (Clean alignment, realistic education SVG, no upload button)
+            1. HERO SECTION (Clean alignment, realistic education SVG)
             ================================================================== */}
         <section className="sm-hero" aria-label="Study Material Header">
           <div className="sm-hero-content">
@@ -227,7 +336,7 @@ export function StudyMaterial() {
               <div className="sm-hero-underline" aria-hidden="true" />
             </div>
             <p className="sm-hero-subtitle">
-              Share syllabus, lecture notes, DPPs and resources with students.
+              Upload syllabus, lecture notes, DPPs and videos securely to your assigned batches.
             </p>
           </div>
 
@@ -260,15 +369,21 @@ export function StudyMaterial() {
                   <select
                     className="sm-select"
                     value={selectedBatch}
-                    onChange={(e) => setSelectedBatch(e.target.value)}
+                    onChange={(e) => handleBatchChange(e.target.value)}
                     aria-label="Select Batch"
                   >
-                    <option value="">-- Select Batch --</option>
-                    <option value="B.Sc 6th Sem">B.Sc 6th Sem</option>
-                    <option value="B.Sc 4th Sem">B.Sc 4th Sem</option>
-                    <option value="B.Sc 2nd Sem">B.Sc 2nd Sem</option>
-                    <option value="BCA 6th Sem">BCA 6th Sem</option>
-                    <option value="MCA 2nd Sem">MCA 2nd Sem</option>
+                    {batchesList.length === 0 ? (
+                      <option value="">No batches assigned</option>
+                    ) : (
+                      <>
+                        <option value="">-- Select Batch --</option>
+                        {batchesList.map((b) => (
+                          <option key={b.batch_id} value={b.batch_id}>
+                            {b.batch_name}
+                          </option>
+                        ))}
+                      </>
+                    )}
                   </select>
                   <div className="sm-select-arrow" aria-hidden="true">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -295,13 +410,20 @@ export function StudyMaterial() {
                     value={selectedSubject}
                     onChange={(e) => setSelectedSubject(e.target.value)}
                     aria-label="Select Subject"
+                    disabled={!selectedBatch || availableSubjects.length === 0}
                   >
-                    <option value="">-- Select Subject --</option>
-                    <option value="Computer Network">Computer Network</option>
-                    <option value="Database Management">Database Management</option>
-                    <option value="Operating Systems">Operating Systems</option>
-                    <option value="Software Engineering">Software Engineering</option>
-                    <option value="Web Technologies">Web Technologies</option>
+                    {availableSubjects.length === 0 ? (
+                      <option value="">-- No Subjects --</option>
+                    ) : (
+                      <>
+                        <option value="">-- Select Subject --</option>
+                        {availableSubjects.map((s, idx) => (
+                          <option key={idx} value={s}>
+                            {s}
+                          </option>
+                        ))}
+                      </>
+                    )}
                   </select>
                   <div className="sm-select-arrow" aria-hidden="true">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -329,7 +451,7 @@ export function StudyMaterial() {
                   <h2 className="sm-upload-title">Upload New Material</h2>
                 </div>
                 <span className="sm-upload-supported">
-                  Supported: PDF, Image, Word, Excel &amp; More
+                  PDF, DOC/DOCX, MP4, WEBM (Max 50MB)
                 </span>
               </div>
 
@@ -340,40 +462,49 @@ export function StudyMaterial() {
                 className="sm-hidden-input"
                 multiple
                 onChange={handleFileInputChange}
-                accept=".pdf,.png,.jpg,.jpeg,.doc,.docx,.xls,.xlsx"
+                accept=".pdf,.doc,.docx,.mp4,.webm,.mov,.mkv"
               />
 
               {/* Dashed Drag-Drop Area */}
               <div
-                className={`sm-drop-area ${isDragOver ? 'is-dragover' : ''}`}
+                className={`sm-drop-area ${isDragOver ? 'is-dragover' : ''} ${isUploading ? 'is-uploading' : ''}`}
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
-                onClick={triggerUploadClick}
+                onClick={isUploading ? undefined : triggerUploadClick}
                 role="button"
                 tabIndex={0}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
+                  if ((e.key === 'Enter' || e.key === ' ') && !isUploading) {
                     e.preventDefault();
                     triggerUploadClick();
                   }
                 }}
                 aria-label="Upload files by dragging or clicking"
+                style={{ opacity: isUploading ? 0.7 : 1, cursor: isUploading ? 'wait' : 'pointer' }}
               >
                 <div className="sm-drop-cloud-icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                    <polyline points="17 8 12 3 7 8" />
-                    <line x1="12" y1="3" x2="12" y2="15" />
-                  </svg>
+                  {isUploading ? (
+                    <div style={{ fontSize: '28px', animation: 'spin 1s linear infinite' }}>⏳</div>
+                  ) : (
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                      <polyline points="17 8 12 3 7 8" />
+                      <line x1="12" y1="3" x2="12" y2="15" />
+                    </svg>
+                  )}
                 </div>
 
                 <p className="sm-drop-title">
-                  Drag and drop files here, or <span className="sm-browse-text">Browse</span>
+                  {isUploading ? (
+                    'Uploading file(s) to secure storage...'
+                  ) : (
+                    <>Drag and drop files here, or <span className="sm-browse-text">Browse</span></>
+                  )}
                 </p>
                 <p className="sm-drop-subtitle">
                   {selectedBatch && selectedSubject 
-                    ? `Files will be assigned to ${selectedBatch} • ${selectedSubject}` 
+                    ? `Files will be assigned to ${selectedBatchName} • ${selectedSubject}` 
                     : 'Select Batch & Subject above first'}
                 </p>
               </div>
@@ -381,7 +512,7 @@ export function StudyMaterial() {
           </div>
 
           {/* ==================================================================
-              4. SHARED MATERIALS LIST (NO upload button next to header)
+              4. SHARED MATERIALS LIST
               ================================================================== */}
           <div className="sm-desktop-main">
             <section className="sm-list-card" aria-label="Shared Materials List">
@@ -401,7 +532,7 @@ export function StudyMaterial() {
                   </h2>
                 </div>
 
-                {/* Search Input - NO upload button here */}
+                {/* Search Input */}
                 <div className="sm-search-box">
                   <div className="sm-search-icon" aria-hidden="true">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
@@ -431,7 +562,11 @@ export function StudyMaterial() {
               </div>
 
               {/* List of File Items */}
-              {!selectedBatch || !selectedSubject ? (
+              {isLoading ? (
+                <div className="sm-empty-state" style={{ padding: '36px 16px', textAlign: 'center' }}>
+                  <div style={{ fontSize: '1rem', color: '#64748B' }}>Loading study materials...</div>
+                </div>
+              ) : !selectedBatch || !selectedSubject ? (
                 <div className="sm-empty-state" style={{ padding: '36px 16px', textAlign: 'center' }}>
                   <div style={{ fontSize: '32px', marginBottom: '8px' }}>📂</div>
                   <div style={{ fontWeight: '700', fontSize: '1rem', color: '#1E293B', marginBottom: '4px' }}>
@@ -443,7 +578,7 @@ export function StudyMaterial() {
                 </div>
               ) : filteredMaterials.length === 0 ? (
                 <div className="sm-empty-state">
-                  No study materials found for {selectedBatch} • {selectedSubject}
+                  No study materials found for {selectedBatchName} • {selectedSubject}
                 </div>
               ) : (
                 <ul className="sm-files-list">
@@ -468,7 +603,7 @@ export function StudyMaterial() {
                         <button
                           type="button"
                           className="sm-action-btn btn-view"
-                          onClick={() => handleView(file.name)}
+                          onClick={() => handleView(file)}
                           aria-label={`View ${file.name}`}
                           title="View file"
                         >
@@ -481,7 +616,7 @@ export function StudyMaterial() {
                         <button
                           type="button"
                           className="sm-action-btn btn-download"
-                          onClick={() => handleDownload(file.name)}
+                          onClick={() => handleDownload(file)}
                           aria-label={`Download ${file.name}`}
                           title="Download file"
                         >

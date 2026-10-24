@@ -6,8 +6,8 @@ export default function DashboardTab({ setActiveTab, user }) {
 
   const displayName = user?.full_name || 'Suman Maji';
   const batchSubtitle = (Array.isArray(user?.batches) ? user.batches[0]?.name : user?.batches?.name)
-    ? `${Array.isArray(user?.batches) ? user.batches[0]?.name : user?.batches?.name} • DigiTute Institute`
-    : 'Class XII - Science • Batch A • DigiTute Institute';
+    || user?.batch
+    || 'Class XII - Science • Batch A';
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -24,6 +24,20 @@ export default function DashboardTab({ setActiveTab, user }) {
     minute: '2-digit',
     second: '2-digit',
     hour12: true
+  });
+
+  const dateString = time.toLocaleDateString('en-GB', {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric'
+  });
+
+  const fullDateString = time.toLocaleDateString('en-GB', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric'
   });
 
   const [selectedDate, setSelectedDate] = useState(14);
@@ -184,15 +198,6 @@ export default function DashboardTab({ setActiveTab, user }) {
               <p className="sp-dash-welcome-subtitle">
                 {batchSubtitle}
               </p>
-              <div className="sp-dash-welcome-date-pill">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect width="18" height="18" x="3" y="4" rx="2" ry="2"/>
-                  <line x1="16" x2="16" y1="2" y2="6"/>
-                  <line x1="8" x2="8" y1="2" y2="6"/>
-                  <line x1="3" x2="21" y1="10" y2="10"/>
-                </svg>
-                <span>Wednesday, 14 October 2026</span>
-              </div>
             </div>
 
             {/* Motivational Quote on the right */}
@@ -265,7 +270,7 @@ export default function DashboardTab({ setActiveTab, user }) {
               <span>LIVE TIME</span>
             </div>
             <div className="sp-dash-night-clock">{timeString}</div>
-            <div className="sp-dash-night-date">Wed, 14 Oct 2026</div>
+            <div className="sp-dash-night-date">{dateString}</div>
             <div className="sp-dash-night-tz">IST (UTC+5:30)</div>
           </div>
         </div>
@@ -489,7 +494,7 @@ export default function DashboardTab({ setActiveTab, user }) {
               </div>
               <div>
                 <h3 className="sp-dash-exact-card-title">Today's Timetable</h3>
-                <p className="sp-dash-exact-card-subtitle">Wednesday, 14 Oct 2026</p>
+                <p className="sp-dash-exact-card-subtitle">{fullDateString}</p>
               </div>
             </div>
 

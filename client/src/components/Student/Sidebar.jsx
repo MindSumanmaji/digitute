@@ -136,7 +136,7 @@ export default function Sidebar({
       {/* Navigation Items */}
       <div className="sp-nav-menu">
         {navItems.map((item) => {
-          const isActive = activeTab === item.id || (item.id === 'tests' && (activeTab === 'tests' || activeTab === 'results' || activeTab === 'performance'));
+          const isActive = !item.hasSubmenu && activeTab === item.id;
           const isDoubt = item.id === 'doubts';
 
           return (
@@ -144,11 +144,13 @@ export default function Sidebar({
               <button
                 className={`sp-nav-item ${isActive ? 'active' : ''} ${isDoubt && isActive ? 'active-doubt' : ''}`}
                 onClick={() => {
-                  setActiveTab(item.id);
                   if (item.id === 'tests') {
-                    setTestsMenuOpen(true);
+                    setTestsMenuOpen(!testsMenuOpen);
+                  } else {
+                    setActiveTab(item.id);
+                    setTestsMenuOpen(false);
+                    if (setMobileSidebarOpen) setMobileSidebarOpen(false);
                   }
-                  if (setMobileSidebarOpen) setMobileSidebarOpen(false);
                 }}
               >
                 {isActive && <div className={`sp-nav-indicator ${isDoubt ? 'indicator-red' : ''}`} />}
@@ -158,13 +160,25 @@ export default function Sidebar({
                 <span className="sp-nav-label">{item.label}</span>
                 {item.hasSubmenu && (
                   <span 
-                    className="sp-nav-sub-arrow"
+                    className={`sp-nav-sub-arrow ${testsMenuOpen ? 'open' : ''}`}
                     onClick={(e) => {
                       e.stopPropagation();
                       setTestsMenuOpen(!testsMenuOpen);
                     }}
+                    title={testsMenuOpen ? "Collapse" : "Expand"}
                   >
-                    {testsMenuOpen ? '▾' : '▸'}
+                    <svg
+                      width="15"
+                      height="15"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.4"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <polyline points="6 9 12 15 18 9" />
+                    </svg>
                   </span>
                 )}
               </button>
@@ -182,7 +196,7 @@ export default function Sidebar({
                     }}
                   >
                     <span className="sp-sub-icon">📊</span>
-                    <span>1. Test & Performance</span>
+                    <span>Test & Performance</span>
                   </button>
                   <button
                     className={`sp-nav-sub-btn ${(activeTab === 'tests' && testSubTab === 'results') || activeTab === 'results' ? 'active' : ''}`}
@@ -194,7 +208,7 @@ export default function Sidebar({
                     }}
                   >
                     <span className="sp-sub-icon">🏆</span>
-                    <span>2. Result</span>
+                    <span>Result</span>
                   </button>
                 </div>
               )}
@@ -209,6 +223,7 @@ export default function Sidebar({
           className={`sp-nav-item ${activeTab === 'settings' ? 'active' : ''}`}
           onClick={() => {
             setActiveTab('settings');
+            setTestsMenuOpen(false);
             if (setMobileSidebarOpen) setMobileSidebarOpen(false);
           }}
         >

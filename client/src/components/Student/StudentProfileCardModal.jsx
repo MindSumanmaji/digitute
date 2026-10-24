@@ -5,10 +5,8 @@ export default function StudentProfileCardModal({ isOpen, onClose, studentData, 
 
   const defaultStudent = {
     name: 'Suman Maji',
-    handle: '@sumanmaji',
-    quote: '"Consistent study today, bigger opportunities tomorrow."',
     badge: 'Silver',
-    photo: '/student-avatar.jpg',
+    photo: null,
     initial: 'S',
     bg: '#eff6ff',
     color: '#2563eb',
@@ -36,6 +34,13 @@ export default function StudentProfileCardModal({ isOpen, onClose, studentData, 
   };
 
   const student = { ...defaultStudent, ...studentData };
+
+  const getInitials = (name) => {
+    if (!name) return 'PS';
+    const parts = name.trim().split(/\s+/);
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  };
 
   // Persisted Quote
   const [quote, setQuote] = useState(() => {
@@ -269,91 +274,31 @@ export default function StudentProfileCardModal({ isOpen, onClose, studentData, 
 
           {/* Hero Section: Clean profile view without the outer gradient box */}
           <div className="sp-pcard-hero-banner">
-            {/* Top row with pencil edit button */}
-            <div className="sp-pcard-hero-top">
-              {!isEditMode && (
-                <button 
-                  className="sp-pcard-edit-btn"
-                  onClick={handleEnterEditMode}
-                  title="Edit Profile Card Details"
-                  aria-label="Edit Profile Card Details"
-                >
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 20h9"/>
-                    <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
-                  </svg>
-                </button>
+            {/* Avatar */}
+            <div className="sp-pcard-avatar-wrap">
+              {student.photo ? (
+                <img 
+                  src={student.photo} 
+                  alt={student.name}
+                  className="sp-pcard-avatar-img"
+                />
+              ) : (
+                <div className="sp-pcard-avatar-initials">
+                  {getInitials(student.name)}
+                </div>
               )}
             </div>
 
-            {/* Avatar with Online/Verified Indicator */}
-            <div className="sp-pcard-avatar-wrap">
-              <img 
-                src={student.photo || '/student-avatar.jpg'} 
-                alt={student.name}
-                className="sp-pcard-avatar-img"
-                onError={(e) => {
-                  e.target.src = "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80";
-                }}
-              />
-              <span className="sp-pcard-online-dot" />
-            </div>
-
-            {/* Name, Handle & Bio */}
+            {/* Name & Batch */}
             <div className="sp-pcard-identity">
               <div className="sp-pcard-name-row">
                 <h4 className="sp-pcard-name">{student.name}</h4>
-                <svg className="sp-pcard-verified-icon" width="18" height="18" viewBox="0 0 24 24" fill="none">
-                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" fill="#10b981"/>
-                </svg>
               </div>
-              <span className="sp-pcard-handle">{student.handle || '@' + student.name.toLowerCase().replace(/\s+/g, '')}</span>
-              
-              {/* Motivational Quote: Editable only in Edit Mode */}
-              {!isEditMode ? (
-                <p className="sp-pcard-quote">
-                  {quote || <span style={{ color: '#94a3b8' }}>Consistent study today, bigger opportunities tomorrow.</span>}
-                </p>
-              ) : (
-                <div className="sp-pcard-quote-edit-box">
-                  <textarea
-                    className="sp-pcard-quote-input"
-                    value={draftQuote}
-                    onChange={(e) => setDraftQuote(e.target.value)}
-                    placeholder="Type your motivational quote..."
-                    autoFocus
-                    maxLength={140}
-                  />
-                </div>
+              {student.batch && (
+                <p className="sp-pcard-batch-sub">{student.batch}</p>
               )}
             </div>
           </div>
-
-          {/* Academic Info Chip (Only Batch Name) */}
-          {hasAcademicChips && (
-            <div className="sp-pcard-chips-grid single-chip">
-              {currentVisibility.batchCard && (
-                <div className="sp-pcard-removable-wrap">
-                  {isEditMode && (
-                    <button 
-                      className="sp-pcard-remove-badge"
-                      onClick={() => handleRemoveItem('batchCard', 'Batch Name')}
-                      title="Remove Batch Name"
-                    >
-                      ✕
-                    </button>
-                  )}
-                  <div className="sp-pcard-chip">
-                    <span className="sp-chip-icon purple">👥</span>
-                    <div className="sp-chip-text">
-                      <strong>{student.batch}</strong>
-                      <span>Batches</span>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
 
           {/* 3 Individual Metric Summary Cards (Attendance, Avg Score, Rank) */}
           {hasMetrics && (

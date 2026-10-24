@@ -2712,12 +2712,71 @@ select:focus {
   border-color: #e2e8f0;
 }
 
+.sp-profile-chip.sp-avatar-only-chip {
+  padding: 2px;
+  border-radius: 50%;
+  gap: 0;
+}
+
+.sp-profile-chip.sp-avatar-only-chip:hover {
+  background: transparent;
+  border-color: transparent;
+}
+
+.sp-profile-chip.sp-avatar-only-chip:hover .sp-avatar-img {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18);
+  transform: scale(1.04);
+}
+
 .sp-avatar-img {
   width: 42px;
   height: 42px;
   border-radius: 50%;
   object-fit: cover;
   border: 1.5px solid #e2e8f0;
+  transition: all 0.2s ease;
+}
+
+.sp-avatar-initials-badge {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: 0.5px;
+  border: 1.5px solid #bfdbfe;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.22);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  user-select: none;
+}
+
+.sp-profile-chip:hover .sp-avatar-initials-badge {
+  transform: scale(1.05);
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.22);
+}
+
+.sp-sfp-avatar-initials-badge {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 38px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  border: 3px solid #ffffff;
+  box-shadow: 0 10px 25px rgba(37, 99, 235, 0.3);
+  user-select: none;
 }
 
 .sp-profile-text {
@@ -3107,10 +3166,11 @@ select:focus {
 }
 
 .sp-dash-welcome-subtitle {
-  font-size: 13px;
-  color: #64748b;
-  margin: 0 0 12px;
-  font-weight: 500;
+  font-size: 15.5px;
+  color: #475569;
+  margin: 0;
+  font-weight: 600;
+  letter-spacing: 0.2px;
 }
 
 .sp-dash-welcome-date-pill {
@@ -7475,9 +7535,25 @@ select:focus {
 
 .sp-nav-sub-arrow {
   margin-left: auto;
-  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
   color: #64748b;
-  transition: transform 0.2s ease;
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), color 0.15s ease, background 0.15s ease;
+  flex-shrink: 0;
+}
+
+.sp-nav-sub-arrow:hover {
+  color: #0f172a;
+  background: rgba(15, 23, 42, 0.05);
+}
+
+.sp-nav-sub-arrow.open {
+  transform: rotate(180deg);
+  color: #2563eb;
 }
 
 .sp-nav-submenu-list {
@@ -8206,6 +8282,12 @@ select:focus {
   .sp-avatar-img {
     width: 34px !important;
     height: 34px !important;
+  }
+
+  .sp-avatar-initials-badge {
+    width: 34px !important;
+    height: 34px !important;
+    font-size: 13px !important;
   }
 
   .sp-popover-menu {
@@ -14518,6 +14600,23 @@ select:focus {
   display: block;
 }
 
+.sp-pcard-avatar-initials {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 36px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  border: 4px solid #ffffff;
+  box-shadow: 0 8px 24px rgba(37, 99, 235, 0.25), 0 2px 6px rgba(0, 0, 0, 0.06);
+  user-select: none;
+}
+
 .sp-pcard-online-dot {
   position: absolute;
   bottom: 6px;
@@ -14548,12 +14647,12 @@ select:focus {
   margin: 0;
 }
 
-.sp-pcard-handle {
-  font-size: 13px;
+.sp-pcard-batch-sub {
+  font-size: 14.5px;
   font-weight: 600;
-  color: #64748b;
-  display: block;
-  margin-bottom: 8px;
+  color: #475569;
+  margin: 3px 0 0 0;
+  letter-spacing: 0.01em;
 }
 
 .sp-pcard-quote {
@@ -15571,12 +15670,13 @@ select:focus {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 7px;
   cursor: pointer;
   box-shadow: 0 2px 8px rgba(37, 99, 235, 0.08);
   transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
   width: 100%;
   max-width: 400px;
+  line-height: 1;
 }
 
 .sp-sfp-view-card-btn:hover {
@@ -15592,17 +15692,34 @@ select:focus {
 }
 
 .sp-sfp-vc-icon {
-  font-size: 16px;
+  font-size: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  transform: translateY(-1.5px);
+  flex-shrink: 0;
+}
+
+.sp-sfp-vc-text {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
 }
 
 .sp-sfp-vc-arrow {
+  display: inline-flex;
+  align-items: center;
   font-size: 15px;
   font-weight: 800;
+  line-height: 1;
+  margin-left: 2px;
+  transform: translateY(-0.5px);
   transition: transform 0.15s ease;
 }
 
 .sp-sfp-view-card-btn:hover .sp-sfp-vc-arrow {
-  transform: translateX(4px);
+  transform: translate(4px, -0.5px);
 }
 
 /* Divider */

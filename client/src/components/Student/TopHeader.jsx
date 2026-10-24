@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import NotificationPanel from './NotificationPanel';
 
 export default function TopHeader({
@@ -14,7 +14,32 @@ export default function TopHeader({
   user,
 }) {
   const displayName = user?.full_name || 'Suman Maji';
-  const batchName = (Array.isArray(user?.batches) ? user.batches[0]?.name : user?.batches?.name) || user?.batch || 'Class XII - Science';
+  const avatarUrl = user?.avatar_url || user?.photo;
+
+  const getInitials = (name) => {
+    if (!name) return 'S';
+    const parts = name.trim().split(/\s+/);
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  };
+
+  const initials = getInitials(displayName);
+  const profileRef = useRef(null);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (profileRef.current && !profileRef.current.contains(event.target)) {
+        setProfileDropdownOpen(false);
+      }
+    };
+    if (profileDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [profileDropdownOpen, setProfileDropdownOpen]);
 
   return (
     <header className="sp-top-header">
@@ -62,10 +87,10 @@ export default function TopHeader({
           {notificationOpen && <NotificationPanel />}
         </div>
 
-        {/* Student Profile Pill */}
-        <div className="sp-profile-wrapper">
+        {/* Student Profile Pill: Desktop only shows photo or initials avatar */}
+        <div className="sp-profile-wrapper" ref={profileRef}>
           <div 
-            className="sp-profile-chip" 
+            className="sp-profile-chip sp-avatar-only-chip" 
             onClick={() => {
               if (window.innerWidth <= 768) {
                 setActiveTab('profile');
@@ -73,31 +98,25 @@ export default function TopHeader({
                 setProfileDropdownOpen(!profileDropdownOpen);
               }
             }}
+            title={displayName}
+            role="button"
+            tabIndex={0}
           >
-            <img 
-              src="/student-avatar.jpg" 
-              alt={displayName} 
-              className="sp-avatar-img"
-              onError={(e) => {
-                e.target.src = "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&q=80";
-              }}
-            />
-            <div className="sp-profile-text">
-              <span className="sp-profile-name">{displayName}</span>
-              <span className="sp-profile-role">{batchName}</span>
-            </div>
-            <span className="sp-profile-chevron">⌵</span>
+            {avatarUrl ? (
+              <img 
+                src={avatarUrl} 
+                alt={displayName} 
+                className="sp-avatar-img"
+              />
+            ) : (
+              <div className="sp-avatar-initials-badge">
+                {initials}
+              </div>
+            )}
           </div>
 
           {profileDropdownOpen && (
             <div className="sp-popover-menu sp-profile-menu">
-              <div className="sp-profile-menu-head">
-                <div className="sp-pm-name-badge">
-                  <strong>{displayName}</strong>
-                  <span className="sp-pm-online-pill">Active</span>
-                </div>
-                <span className="sp-pm-roll">{user?.phone || user?.email || 'Roll: 12-SCI-042'}</span>
-              </div>
               <div className="sp-profile-menu-body">
                 <button 
                   className="sp-pm-item"
@@ -109,20 +128,19 @@ export default function TopHeader({
                       <circle cx="12" cy="7" r="4"/>
                     </svg>
                   </span>
-                  <span className="sp-pm-item-text">View Full Profile</span>
+                  <span className="sp-pm-item-text">View profile</span>
                 </button>
                 <button 
                   className="sp-pm-item"
-                  onClick={() => { setActiveTab('profile'); setProfileDropdownOpen(false); }}
+                  onClick={() => { setActiveTab('settings'); setProfileDropdownOpen(false); }}
                 >
                   <span className="sp-pm-item-icon teal">
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                      <circle cx="12" cy="12" r="10"/>
-                      <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
-                      <line x1="12" y1="17" x2="12.01" y2="17"/>
+                      <circle cx="12" cy="12" r="3"/>
+                      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
                     </svg>
                   </span>
-                  <span className="sp-pm-item-text">Help & Support</span>
+                  <span className="sp-pm-item-text">Settings</span>
                 </button>
                 <div className="sp-menu-divider" />
                 <button 

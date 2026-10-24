@@ -574,13 +574,13 @@ function Modal({ modal, onClose, onSubmit, selectedItem, batches, teachers }) {
                             isExport ? 'Export Institute Report' : modal}
             </h2>
             <p>
-              {isAdmission ? 'Enter student and guardian contact details for batch enrolment.' :
+              {isAdmission ? 'Enter student and guardian contact details for batch enrolment. Default password is #{initials}@123.' :
                 isEditStudent ? 'Update student profile, enrolled batch, contact numbers and scholarship discount.' :
                 isDeleteBatch ? 'Confirm permanent removal of this course batch from database.' :
                 isEditBatch ? 'Update batch fee model, course fee and faculty revenue sharing.' :
                   isBatch ? 'Configure batch name, tuition fee model and faculty revenue sharing.' :
                     isEditTeacher ? 'Update faculty contact info, qualifications and academic specialization.' :
-                    isTeacher ? 'Onboard teacher with qualification, subjects and payout model.' :
+                    isTeacher ? 'Onboard teacher with qualification, subjects and payout model. Default password is #{initials}@123.' :
                       isCollect ? 'Record counter cash payment and issue digital receipt slip.' :
                         isReceipt ? 'Official money voucher with institute seal.' :
                           isNotice ? 'Publish notification to student and faculty portals.' : 'Confirm action.'}
@@ -1158,7 +1158,7 @@ export default function AdminPanel({ onBackToLanding }) {
             studentCount: (b.studentCount || b.student_count || 0) + 1
           } : b));
         }
-        showToast('Student Enrolled', `${createdStudent.full_name} admitted to ${batchName}. Default password is phone number.`);
+        showToast('Student Enrolled', `${createdStudent.full_name} admitted to ${batchName}. Default password: ${res.default_password || 'assigned'}`);
       } catch (err) {
         console.error('Failed to admit student on server:', err);
         showToast('Admission Failed', err.message || 'Could not register student.');
@@ -1294,7 +1294,7 @@ export default function AdminPanel({ onBackToLanding }) {
         });
         const createdTeacher = res.teacher;
         setTeachers(prev => [createdTeacher, ...prev]);
-        showToast('Faculty Onboarded', `${createdTeacher.full_name} successfully registered.`);
+        showToast('Faculty Onboarded', `${createdTeacher.full_name} registered. Default password: ${res.default_password || 'assigned'}`);
       } catch (err) {
         console.error('Failed to onboard teacher to server:', err);
         showToast('Onboard Failed', err.message || 'Could not register faculty member.');

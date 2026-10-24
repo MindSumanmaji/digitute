@@ -2431,12 +2431,71 @@ select:focus {
   border-color: #e2e8f0;
 }
 
+.sp-profile-chip.sp-avatar-only-chip {
+  padding: 2px;
+  border-radius: 50%;
+  gap: 0;
+}
+
+.sp-profile-chip.sp-avatar-only-chip:hover {
+  background: transparent;
+  border-color: transparent;
+}
+
+.sp-profile-chip.sp-avatar-only-chip:hover .sp-avatar-img {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18);
+  transform: scale(1.04);
+}
+
 .sp-avatar-img {
   width: 42px;
   height: 42px;
   border-radius: 50%;
   object-fit: cover;
   border: 1.5px solid #e2e8f0;
+  transition: all 0.2s ease;
+}
+
+.sp-avatar-initials-badge {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: 0.5px;
+  border: 1.5px solid #bfdbfe;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.22);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  user-select: none;
+}
+
+.sp-profile-chip:hover .sp-avatar-initials-badge {
+  transform: scale(1.05);
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.22);
+}
+
+.sp-sfp-avatar-initials-badge {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 38px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  border: 3px solid #ffffff;
+  box-shadow: 0 10px 25px rgba(37, 99, 235, 0.3);
+  user-select: none;
 }
 
 .sp-profile-text {
@@ -2760,10 +2819,11 @@ select:focus {
 }
 
 .sp-dash-welcome-subtitle {
-  font-size: 13px;
-  color: #64748b;
-  margin: 0 0 12px;
-  font-weight: 500;
+  font-size: 15.5px;
+  color: #475569;
+  margin: 0;
+  font-weight: 600;
+  letter-spacing: 0.2px;
 }
 
 .sp-dash-welcome-date-pill {
@@ -6962,9 +7022,25 @@ select:focus {
 
 .sp-nav-sub-arrow {
   margin-left: auto;
-  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
   color: #64748b;
-  transition: transform 0.2s ease;
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), color 0.15s ease, background 0.15s ease;
+  flex-shrink: 0;
+}
+
+.sp-nav-sub-arrow:hover {
+  color: #0f172a;
+  background: rgba(15, 23, 42, 0.05);
+}
+
+.sp-nav-sub-arrow.open {
+  transform: rotate(180deg);
+  color: #2563eb;
 }
 
 .sp-nav-submenu-list {
@@ -7665,6 +7741,12 @@ select:focus {
   .sp-avatar-img {
     width: 34px !important;
     height: 34px !important;
+  }
+
+  .sp-avatar-initials-badge {
+    width: 34px !important;
+    height: 34px !important;
+    font-size: 13px !important;
   }
 
   .sp-popover-menu {
@@ -13912,6 +13994,23 @@ select:focus {
   display: block;
 }
 
+.sp-pcard-avatar-initials {
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 34px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  border: 4px solid #ffffff;
+  box-shadow: 0 6px 20px rgba(37, 99, 235, 0.25);
+  user-select: none;
+}
+
 .sp-pcard-online-dot {
   position: absolute;
   bottom: 6px;
@@ -13942,12 +14041,12 @@ select:focus {
   margin: 0;
 }
 
-.sp-pcard-handle {
-  font-size: 13px;
+.sp-pcard-batch-sub {
+  font-size: 14.5px;
   font-weight: 600;
-  color: #64748b;
-  display: block;
-  margin-bottom: 8px;
+  color: #475569;
+  margin: 3px 0 0 0;
+  letter-spacing: 0.01em;
 }
 
 .sp-pcard-quote {

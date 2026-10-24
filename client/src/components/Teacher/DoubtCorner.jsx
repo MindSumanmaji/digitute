@@ -291,50 +291,24 @@ export default function DoubtCorner({ onBack, initialBatch = null, initialSubjec
         </div>
       )}
 
-      {/* --- TOP BREADCRUMB & HEADER --- */}
+      {/* --- TOP HEADER / METRICS --- */}
       <header className="dc-header">
-        <div className="dc-top-actions">
-          <button type="button" className="dc-back-btn" onClick={onBack} aria-label="Back to Academics">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="19" y1="12" x2="5" y2="12" />
-              <polyline points="12 19 5 12 12 5" />
-            </svg>
-            <span>Back to Academics</span>
-          </button>
-
-          {isSelectionComplete && (
-            <div className="dc-header-chips">
-              <span className="dc-metric-chip pending">
-                <span className="dc-dot red" />
-                {totalPendingCount} Pending
-              </span>
-              <span className="dc-metric-chip offline">
-                <span className="dc-dot amber" />
-                {offlineDoubts.length} Offline Mark
-              </span>
-              <span className="dc-metric-chip solved">
-                <span className="dc-dot green" />
-                {solvedDoubts.length} Solved
-              </span>
-            </div>
-          )}
-        </div>
-
-        <div className="dc-title-group">
-          <div className="dc-hero-icon-box">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-              <circle cx="12" cy="10" r="1" fill="currentColor" />
-              <path d="M12 7v1" strokeWidth="2.5" />
-            </svg>
+        {isSelectionComplete && (
+          <div className="dc-header-chips" style={{ marginBottom: '12px' }}>
+            <span className="dc-metric-chip pending">
+              <span className="dc-dot red" />
+              {totalPendingCount} Pending
+            </span>
+            <span className="dc-metric-chip offline">
+              <span className="dc-dot amber" />
+              {offlineDoubts.length} Offline Mark
+            </span>
+            <span className="dc-metric-chip solved">
+              <span className="dc-dot green" />
+              {solvedDoubts.length} Solved
+            </span>
           </div>
-          <div>
-            <h1 className="dc-title">Doubt Corner</h1>
-            <p className="dc-subtitle">
-              Select Batch &amp; Subject to manage doubts.
-            </p>
-          </div>
-        </div>
+        )}
 
         {/* STEP 1: BATCH & SUBJECT SELECTION BAR */}
         <div className="dc-selector-card" aria-label="Select Batch and Subject">

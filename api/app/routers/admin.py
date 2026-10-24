@@ -8,11 +8,16 @@ from app.models import (
     StudentUpdate,
     TeacherCreate,
     TeacherUpdate,
-    PaymentCollectRequest
+    PaymentCollectRequest,
+    SessionCreate,
+    GenerateMonthSessionsRequest,
+    SessionActionRequest
 )
 from datetime import date, datetime
+import calendar
 import uuid
 import re
+import traceback
 
 def _normalize_phone(raw: str) -> str:
     digits = re.sub(r'\D', '', raw)  # keep only digits
@@ -20,6 +25,23 @@ def _normalize_phone(raw: str) -> str:
     if len(digits) == 12 and digits.startswith('91'):
         digits = digits[2:]
     return digits
+
+def _generate_default_password(name: str) -> str:
+    """
+    Generates default password in format #{initials}@123
+    Examples:
+      - 'Pritam Sahoo' -> '#ps@123'
+      - 'Suman Kumar Maji' -> '#skm@123'
+    """
+    words = [w for w in re.split(r'\s+', (name or '').strip()) if w]
+    initials = ""
+    for w in words:
+        match = re.search(r'[a-zA-Z0-9]', w)
+        if match:
+            initials += match.group(0).lower()
+    if not initials:
+        initials = "user"
+    return f"#{initials}@123"
 
 # Protect all /api/admin endpoints with ADMIN role check
 router = APIRouter(
@@ -245,7 +267,450 @@ def delete_batch(batch_id: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 # ==============================================================================
-# 4. STUDENTS & ADMISSIONS (Default Password = Phone Number)
+# 3. CLASS ROUTINES & TIMETABLES (RECURRING SCHEDULE & CONFLICT AUDIT)
+# ==============================================================================
+
+def _format_time_str(val: str) -> str:
+    """Normalizes time string to HH:MM:SS"""
+    v = str(val or "").strip()
+    if not v:
+        return "00:00:00"
+    if len(v) == 5:
+        return f"{v}:00"
+    return v[:8]
+
+def _check_routine_clashes(supabase, teacher_id: str, batch_id: str, day_of_week: int, start_time: str, end_time: str, exclude_id: str = None):
+    try:
+        t_start = _format_time_str(start_time)
+        t_end = _format_time_str(end_time)
+        
+        # Query active routines for this day_of_week
+        routines_res = supabase.table("class_routines").select("*").eq("day_of_week", int(day_of_week)).eq("is_active", True).execute()
+        all_day_routines = routines_res.data or []
+        
+        # Lookups for informative error messages
+        b_res = supabase.table("batches").select("id, name").execute()
+        batch_map = {b["id"]: b["name"] for b in (b_res.data or []) if b.get("id")}
+        t_res = supabase.table("users").select("id, full_name").eq("role", "TEACHER").execute()
+        teacher_map = {t["id"]: t["full_name"] for t in (t_res.data or []) if t.get("id")}
+
+        for r in all_day_routines:
+            if exclude_id and str(r.get("id")) == str(exclude_id):
+                continue
+            r_start = _format_time_str(r.get("start_time"))
+            r_end = _format_time_str(r.get("end_time"))
+            
+            # Overlap formula: (r_start < t_end) and (t_start < r_end)
+            if r_start < t_end and t_start < r_end:
+                t_name = teacher_map.get(r.get("teacher_id")) or "This teacher"
+                b_name = batch_map.get(r.get("batch_id")) or "another batch"
+                
+                if str(r.get("teacher_id")) == str(teacher_id):
+                    return {
+                        "has_conflict": True,
+                        "type": "TEACHER_CONFLICT",
+                        "message": f"Conflict detected: Teacher {t_name} is already assigned to '{r.get('subject')}' in batch '{b_name}' from {r_start[:5]} to {r_end[:5]} on this day."
+                    }
+                if str(r.get("batch_id")) == str(batch_id):
+                    return {
+                        "has_conflict": True,
+                        "type": "BATCH_CONFLICT",
+                        "message": f"Conflict detected: Batch '{b_name}' already has a class '{r.get('subject')}' scheduled from {r_start[:5]} to {r_end[:5]} on this day."
+                    }
+        return {"has_conflict": False}
+    except Exception as e:
+        traceback.print_exc()
+        return {"has_conflict": False}
+
+@router.get("/routines", summary="List All Master Routine Slots")
+def list_routines(batch_id: str = None, teacher_id: str = None):
+    try:
+        supabase = get_supabase_client()
+        query = supabase.table("class_routines").select("*").eq("is_active", True)
+        if batch_id and batch_id != "ALL":
+            query = query.eq("batch_id", batch_id)
+        if teacher_id and teacher_id != "ALL":
+            query = query.eq("teacher_id", teacher_id)
+            
+        res = query.order("day_of_week").order("start_time").execute()
+        routines = res.data or []
+        
+        # Batch and teacher maps for reliable names
+        b_res = supabase.table("batches").select("id, name").execute()
+        batch_map = {b["id"]: b["name"] for b in (b_res.data or []) if b.get("id")}
+        t_res = supabase.table("users").select("id, full_name, specialization").eq("role", "TEACHER").execute()
+        teacher_map = {t["id"]: t for t in (t_res.data or []) if t.get("id")}
+        
+        for r in routines:
+            b_id = r.get("batch_id")
+            t_id = r.get("teacher_id")
+            r["batch_name"] = batch_map.get(b_id, "General Batch")
+            t_obj = teacher_map.get(t_id, {})
+            r["teacher_name"] = t_obj.get("full_name", "Faculty Member")
+            r["teacher_specialization"] = t_obj.get("specialization", "")
+            
+        return routines
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/routines", summary="Create New Master Routine Slot")
+def create_routine_slot(slot: RoutineSlotCreate):
+    try:
+        supabase = get_supabase_client()
+        clean_start = _format_time_str(slot.start_time)
+        clean_end = _format_time_str(slot.end_time)
+        
+        if clean_start >= clean_end:
+            raise HTTPException(status_code=400, detail="Start time must be strictly earlier than end time.")
+            
+        # Verify Batch exists
+        b_check = supabase.table("batches").select("id, name").eq("id", slot.batch_id).execute()
+        if not b_check.data:
+            raise HTTPException(status_code=400, detail="Invalid batch selected.")
+        batch_name = b_check.data[0]["name"]
+        
+        # Verify Teacher exists
+        t_check = supabase.table("users").select("id, full_name").eq("id", slot.teacher_id).eq("role", "TEACHER").execute()
+        if not t_check.data:
+            raise HTTPException(status_code=400, detail="Invalid faculty member selected.")
+        teacher_name = t_check.data[0]["full_name"]
+        
+        # Strict Conflict Check
+        conflict = _check_routine_clashes(
+            supabase=supabase,
+            teacher_id=slot.teacher_id,
+            batch_id=slot.batch_id,
+            day_of_week=slot.day_of_week,
+            start_time=clean_start,
+            end_time=clean_end
+        )
+        if conflict["has_conflict"]:
+            raise HTTPException(status_code=400, detail=conflict["message"])
+            
+        payload = {
+            "batch_id": slot.batch_id,
+            "subject": slot.subject.strip(),
+            "teacher_id": slot.teacher_id,
+            "day_of_week": slot.day_of_week,
+            "start_time": clean_start,
+            "end_time": clean_end,
+            "is_active": True
+        }
+        res = supabase.table("class_routines").insert(payload).execute()
+        if not res.data:
+            raise HTTPException(status_code=500, detail="Failed to insert routine slot into database.")
+            
+        created = res.data[0]
+        created["batch_name"] = batch_name
+        created["teacher_name"] = teacher_name
+        return created
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/routines/{routine_id}", summary="Delete Master Routine Slot")
+def delete_routine_slot(routine_id: str):
+    try:
+        supabase = get_supabase_client()
+        try:
+            del_res = supabase.table("class_routines").delete().eq("id", routine_id).execute()
+            if del_res.data:
+                return {"message": "Routine slot deleted successfully", "id": routine_id}
+        except Exception:
+            pass
+        supabase.table("class_routines").update({"is_active": False}).eq("id", routine_id).execute()
+        return {"message": "Routine slot deactivated successfully", "id": routine_id}
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ==============================================================================
+# 3.1. CLASS SESSIONS (Concrete Date Classes & Calendar Sync)
+# ==============================================================================
+
+def _check_session_clashes(supabase, session_date: str, start_time: str, end_time: str, teacher_id: str = None, batch_id: str = None, exclude_id: str = None):
+    try:
+        s_res = supabase.table("class_sessions").select("*").eq("session_date", session_date).neq("status", "CANCELLED").execute()
+        day_sessions = s_res.data or []
+        
+        t_start = _format_time_str(start_time)
+        t_end = _format_time_str(end_time)
+        
+        b_res = supabase.table("batches").select("id, name").execute()
+        batch_map = {b["id"]: b["name"] for b in (b_res.data or []) if b.get("id")}
+        t_res = supabase.table("users").select("id, full_name").eq("role", "TEACHER").execute()
+        teacher_map = {t["id"]: t["full_name"] for t in (t_res.data or []) if t.get("id")}
+
+        for s in day_sessions:
+            if exclude_id and str(s.get("id")) == str(exclude_id):
+                continue
+            s_start = _format_time_str(s.get("start_time"))
+            s_end = _format_time_str(s.get("end_time"))
+            
+            if s_start < t_end and t_start < s_end:
+                t_name = teacher_map.get(s.get("teacher_id")) or "Faculty member"
+                b_name = batch_map.get(s.get("batch_id")) or "this batch"
+                
+                if teacher_id and str(s.get("teacher_id")) == str(teacher_id):
+                    return {
+                        "has_conflict": True,
+                        "type": "TEACHER_SESSION_OVERLAP",
+                        "message": f"Conflict detected: Teacher {t_name} is already conducting '{s.get('subject')}' ({b_name}) on {session_date} from {s_start[:5]} to {s_end[:5]}."
+                    }
+                if batch_id and str(s.get("batch_id")) == str(batch_id):
+                    return {
+                        "has_conflict": True,
+                        "type": "BATCH_SESSION_OVERLAP",
+                        "message": f"Conflict detected: Batch '{b_name}' already has a session for '{s.get('subject')}' on {session_date} from {s_start[:5]} to {s_end[:5]}."
+                    }
+        return {"has_conflict": False}
+    except Exception as e:
+        traceback.print_exc()
+        return {"has_conflict": False}
+
+@router.get("/sessions", summary="List Concrete Date-wise Class Sessions")
+def list_sessions(start_date: str = None, end_date: str = None, batch_id: str = None, teacher_id: str = None):
+    try:
+        supabase = get_supabase_client()
+        query = supabase.table("class_sessions").select("*")
+        if start_date:
+            query = query.gte("session_date", start_date)
+        if end_date:
+            query = query.lte("session_date", end_date)
+        if batch_id and batch_id != "ALL":
+            query = query.eq("batch_id", batch_id)
+        if teacher_id and teacher_id != "ALL":
+            query = query.eq("teacher_id", teacher_id)
+            
+        res = query.order("session_date").order("start_time").execute()
+        sessions = res.data or []
+        
+        # Batch and teacher maps for reliable names
+        b_res = supabase.table("batches").select("id, name").execute()
+        batch_map = {b["id"]: b["name"] for b in (b_res.data or []) if b.get("id")}
+        t_res = supabase.table("users").select("id, full_name, specialization").eq("role", "TEACHER").execute()
+        teacher_map = {t["id"]: t for t in (t_res.data or []) if t.get("id")}
+        
+        # Fetch attendance counts efficiently
+        session_ids = [s["id"] for s in sessions if s.get("id")]
+        att_map = {}
+        if session_ids:
+            try:
+                att_res = supabase.table("attendance").select("session_id, status").in_("session_id", session_ids[:200]).execute()
+                for a in att_res.data or []:
+                    s_id = a.get("session_id")
+                    if s_id not in att_map:
+                        att_map[s_id] = {"present": 0, "absent": 0}
+                    if a.get("status") == "PRESENT":
+                        att_map[s_id]["present"] += 1
+                    else:
+                        att_map[s_id]["absent"] += 1
+            except Exception:
+                pass
+                
+        for s in sessions:
+            b_id = s.get("batch_id")
+            t_id = s.get("teacher_id")
+            s["batch_name"] = batch_map.get(b_id, "General Batch")
+            t_obj = teacher_map.get(t_id, {})
+            s["teacher_name"] = t_obj.get("full_name", "Faculty Member")
+            s["teacher_specialization"] = t_obj.get("specialization", "")
+            s["attendance_count"] = att_map.get(s["id"], {"present": 0, "absent": 0})
+            
+        return sessions
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/sessions/generate", summary="Auto-Generate Date Sessions from Master Routines for a Month")
+def generate_month_sessions(req: GenerateMonthSessionsRequest):
+    try:
+        supabase = get_supabase_client()
+        parts = req.month.strip().split("-")
+        if len(parts) != 2:
+            raise HTTPException(status_code=400, detail="Month must be in YYYY-MM format, e.g. '2026-10'")
+        gen_year, gen_month = int(parts[0]), int(parts[1])
+        _, total_days = calendar.monthrange(gen_year, gen_month)
+        
+        start_month_date = f"{gen_year:04d}-{gen_month:02d}-01"
+        end_month_date = f"{gen_year:04d}-{gen_month:02d}-{total_days:02d}"
+        
+        # 1. Fetch active master routines
+        r_query = supabase.table("class_routines").select("*").eq("is_active", True)
+        if req.batch_id and req.batch_id != "ALL":
+            r_query = r_query.eq("batch_id", req.batch_id)
+        routines = r_query.execute().data or []
+        
+        if not routines:
+            return {"message": "No active weekly routines found to generate sessions from.", "generated_count": 0, "sessions": []}
+            
+        # 2. Fetch existing sessions for this range to prevent duplicate generation
+        existing_res = supabase.table("class_sessions").select("id, routine_id, batch_id, session_date, start_time").gte("session_date", start_month_date).lte("session_date", end_month_date).execute()
+        existing_sessions = existing_res.data or []
+        
+        existing_keys = set()
+        for es in existing_sessions:
+            if es.get("routine_id"):
+                existing_keys.add((str(es.get("routine_id")), str(es.get("session_date"))))
+            existing_keys.add((str(es.get("batch_id")), str(es.get("session_date")), _format_time_str(es.get("start_time"))))
+            
+        # 3. Generate sessions day by day
+        new_sessions = []
+        for d in range(1, total_days + 1):
+            cur_date = date(gen_year, gen_month, d)
+            # Python isoweekday: 1 = Monday ... 7 = Sunday (matches schema.sql 100%)
+            dow = cur_date.isoweekday()
+            date_str = cur_date.isoformat()
+            
+            for r in routines:
+                if int(r.get("day_of_week")) == dow:
+                    r_id = str(r.get("id"))
+                    b_id = str(r.get("batch_id"))
+                    r_start = _format_time_str(r.get("start_time"))
+                    
+                    # Skip if already exists
+                    if (r_id, date_str) in existing_keys:
+                        continue
+                    if (b_id, date_str, r_start) in existing_keys:
+                        continue
+                        
+                    new_sessions.append({
+                        "routine_id": r["id"],
+                        "batch_id": r["batch_id"],
+                        "subject": r["subject"],
+                        "teacher_id": r["teacher_id"],
+                        "session_date": date_str,
+                        "start_time": r_start,
+                        "end_time": _format_time_str(r.get("end_time")),
+                        "status": "SCHEDULED",
+                        "topic_covered": f"Curriculum Module - {r['subject']}"
+                    })
+                    existing_keys.add((r_id, date_str))
+                    existing_keys.add((b_id, date_str, r_start))
+                    
+        # Bulk insert in chunks of 50
+        inserted_sessions = []
+        if new_sessions:
+            for i in range(0, len(new_sessions), 50):
+                chunk = new_sessions[i:i + 50]
+                ins_res = supabase.table("class_sessions").insert(chunk).execute()
+                if ins_res.data:
+                    inserted_sessions.extend(ins_res.data)
+                    
+        return {
+            "message": f"Successfully generated {len(inserted_sessions)} class sessions for {req.month}.",
+            "generated_count": len(inserted_sessions),
+            "sessions": inserted_sessions
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.patch("/sessions/{session_id}", summary="Perform Action on Class Session (Reschedule, Substitute, Cancel, Complete)")
+def update_session_action(session_id: str, req: SessionActionRequest):
+    try:
+        supabase = get_supabase_client()
+        s_res = supabase.table("class_sessions").select("*").eq("id", session_id).execute()
+        if not s_res.data:
+            raise HTTPException(status_code=404, detail="Class session not found.")
+        current_session = s_res.data[0]
+        
+        if req.action == "cancel":
+            reason = (req.cancellation_reason or "Cancelled by institute administration").strip()
+            up_res = supabase.table("class_sessions").update({
+                "status": "CANCELLED",
+                "cancellation_reason": reason
+            }).eq("id", session_id).execute()
+            return {"message": "Session marked as cancelled.", "session": up_res.data[0] if up_res.data else current_session}
+            
+        elif req.action == "complete":
+            topic = (req.topic_covered or current_session.get("topic_covered") or "Lesson completed").strip()
+            up_res = supabase.table("class_sessions").update({
+                "status": "COMPLETED",
+                "topic_covered": topic
+            }).eq("id", session_id).execute()
+            return {"message": "Session marked as completed.", "session": up_res.data[0] if up_res.data else current_session}
+            
+        elif req.action == "substitute":
+            if not req.substitute_teacher_id:
+                raise HTTPException(status_code=400, detail="Please select a substitute faculty member.")
+            # Conflict check for substitute teacher on this date and time
+            conflict = _check_session_clashes(
+                supabase=supabase,
+                session_date=current_session["session_date"],
+                start_time=current_session["start_time"],
+                end_time=current_session["end_time"],
+                teacher_id=req.substitute_teacher_id,
+                exclude_id=session_id
+            )
+            if conflict["has_conflict"]:
+                raise HTTPException(status_code=400, detail=conflict["message"])
+                
+            up_res = supabase.table("class_sessions").update({
+                "teacher_id": req.substitute_teacher_id
+            }).eq("id", session_id).execute()
+            return {"message": "Substitute faculty assigned successfully.", "session": up_res.data[0] if up_res.data else current_session}
+            
+        elif req.action == "reschedule":
+            new_date = (req.new_date or current_session["session_date"]).strip()
+            new_start = _format_time_str(req.new_start_time or current_session["start_time"])
+            new_end = _format_time_str(req.new_end_time or current_session["end_time"])
+            
+            if new_start >= new_end:
+                raise HTTPException(status_code=400, detail="Start time must be strictly earlier than end time.")
+                
+            # Conflict check for teacher & batch on new date and time
+            conflict = _check_session_clashes(
+                supabase=supabase,
+                session_date=new_date,
+                start_time=new_start,
+                end_time=new_end,
+                teacher_id=current_session.get("teacher_id"),
+                batch_id=current_session.get("batch_id"),
+                exclude_id=session_id
+            )
+            if conflict["has_conflict"]:
+                raise HTTPException(status_code=400, detail=conflict["message"])
+                
+            # Audit trail: update current session to RESCHEDULED
+            supabase.table("class_sessions").update({
+                "status": "RESCHEDULED",
+                "cancellation_reason": f"Rescheduled to {new_date} from {new_start[:5]} to {new_end[:5]}"
+            }).eq("id", session_id).execute()
+            
+            # Create new session linked via rescheduled_from_id
+            new_payload = {
+                "routine_id": current_session.get("routine_id"),
+                "batch_id": current_session["batch_id"],
+                "subject": current_session["subject"],
+                "teacher_id": current_session.get("teacher_id"),
+                "session_date": new_date,
+                "start_time": new_start,
+                "end_time": new_end,
+                "status": "SCHEDULED",
+                "rescheduled_from_id": session_id,
+                "topic_covered": current_session.get("topic_covered")
+            }
+            new_res = supabase.table("class_sessions").insert(new_payload).execute()
+            return {
+                "message": f"Session rescheduled to {new_date} with audit trail.",
+                "new_session": new_res.data[0] if new_res.data else new_payload
+            }
+        else:
+            raise HTTPException(status_code=400, detail=f"Unsupported action '{req.action}'.")
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ==============================================================================
+# 4. STUDENTS & ADMISSIONS
 # ==============================================================================
 @router.get("/students", summary="List All Enrolled Students")
 def list_students(batch_id: str = None):
@@ -277,7 +742,7 @@ def list_students(batch_id: str = None):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/students/admit", summary="New Student Admission (Default Password = Phone Number)")
+@router.post("/students/admit", summary="New Student Admission (Default Password = #{initials}@123)")
 def admit_student(req: StudentCreate):
     try:
         supabase = get_supabase_client()
@@ -291,8 +756,8 @@ def admit_student(req: StudentCreate):
                 detail=f"Phone number must be at least 6 digits. Received: '{req.phone.strip()}' → normalized: '{clean_phone}'"
             )
 
-        # Default login password is the normalized digits-only phone number
-        default_password = clean_phone
+        # Default login password is in format #{initials}@123 (e.g. 'Pritam Sahoo' -> '#ps@123')
+        default_password = _generate_default_password(req.full_name)
         
         # Check duplicate in public.users
         existing = supabase.table("users").select("id").eq("email", clean_email).execute()
@@ -343,6 +808,17 @@ def admit_student(req: StudentCreate):
                         if u_email and u_email.lower() == clean_email:
                             user_id = getattr(u, 'id', None) or u.get('id')
                             break
+                    if user_id:
+                        try:
+                            supabase.auth.admin.update_user_by_id(
+                                user_id,
+                                {
+                                    "password": default_password,
+                                    "user_metadata": {"full_name": req.full_name, "role": "STUDENT"}
+                                }
+                            )
+                        except Exception:
+                            pass
                 except Exception:
                     pass
             if not user_id:
@@ -365,7 +841,7 @@ def admit_student(req: StudentCreate):
             "address": req.address.strip() if req.address else None,
             "is_active": True
         }
-        res = supabase.table("users").insert(record).execute()
+        res = supabase.table("users").upsert(record).execute()
         
         batch_name = None
         if batch_id:
@@ -384,11 +860,12 @@ def admit_student(req: StudentCreate):
             "message": "Student registered successfully",
             "student": student_data,
             "default_password": default_password,
-            "login_instructions": f"Login with Email: {clean_email} and Default Password (Phone): {clean_phone}"
+            "login_instructions": f"Login with Email: {clean_email} and Default Password: {default_password}"
         }
     except HTTPException:
         raise
     except Exception as e:
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/students/{student_id}", summary="Get Student Details")
@@ -538,7 +1015,7 @@ def update_student(student_id: str, req: StudentUpdate):
         raise HTTPException(status_code=500, detail=str(e))
 
 # ==============================================================================
-# 5. TEACHERS & FACULTY (Default Password = Phone Number)
+# 5. TEACHERS & FACULTY (Default Password = #{initials}@123)
 # ==============================================================================
 @router.get("/teachers", summary="List All Faculty Members")
 def list_teachers():
@@ -549,7 +1026,7 @@ def list_teachers():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/teachers/onboard", summary="Onboard Faculty Member (Default Password = Phone Number)")
+@router.post("/teachers/onboard", summary="Onboard Faculty Member (Default Password = #{initials}@123)")
 def onboard_teacher(req: TeacherCreate):
     try:
         supabase = get_supabase_client()
@@ -563,27 +1040,57 @@ def onboard_teacher(req: TeacherCreate):
                 detail=f"Phone number must be at least 6 digits. Received: '{req.phone.strip()}' → normalized: '{clean_phone}'"
             )
 
-        # Default login password is the normalized digits-only phone number
-        default_password = clean_phone
+        # Default login password is in format #{initials}@123 (e.g. 'Suman Kumar Maji' -> '#skm@123')
+        default_password = _generate_default_password(req.full_name)
         
         existing = supabase.table("users").select("id").eq("email", clean_email).execute()
         if existing.data:
             raise HTTPException(status_code=400, detail=f"Faculty member with email {clean_email} already exists.")
             
-        # 1. Create in Supabase Auth (email_confirm=True for instant access without email verification)
-        auth_user = supabase.auth.admin.create_user({
-            "email": clean_email,
-            "password": default_password,
-            "email_confirm": True,
-            "user_metadata": {
-                "full_name": req.full_name,
-                "role": "TEACHER"
-            }
-        })
+        # 1. Create or link in Supabase Auth (email_confirm=True for instant access without email verification)
+        user_id = None
+        try:
+            auth_user = supabase.auth.admin.create_user({
+                "email": clean_email,
+                "password": default_password,
+                "email_confirm": True,
+                "user_metadata": {
+                    "full_name": req.full_name,
+                    "role": "TEACHER"
+                }
+            })
+            user_id = auth_user.user.id
+        except Exception as auth_err:
+            err_str = str(auth_err).lower()
+            if "already" in err_str or "exists" in err_str:
+                # User already registered in Auth: locate their ID and update password/metadata
+                try:
+                    list_u = supabase.auth.admin.list_users()
+                    users_list = getattr(list_u, 'users', list_u) if not isinstance(list_u, list) else list_u
+                    for u in users_list:
+                        u_email = getattr(u, 'email', None) or (u.get('email') if isinstance(u, dict) else None)
+                        if u_email and u_email.lower() == clean_email:
+                            user_id = getattr(u, 'id', None) or u.get('id')
+                            break
+                    if user_id:
+                        try:
+                            supabase.auth.admin.update_user_by_id(
+                                user_id,
+                                {
+                                    "password": default_password,
+                                    "user_metadata": {"full_name": req.full_name, "role": "TEACHER"}
+                                }
+                            )
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+            if not user_id:
+                raise HTTPException(status_code=400, detail=f"Auth creation failed: {str(auth_err)}")
         
-        # 2. Insert into public.users strictly matching schema.sql
+        # 2. Insert or update in public.users strictly matching schema.sql
         record = {
-            "id": auth_user.user.id,
+            "id": user_id,
             "full_name": req.full_name.strip(),
             "email": clean_email,
             "phone": clean_phone,
@@ -592,18 +1099,19 @@ def onboard_teacher(req: TeacherCreate):
             "specialization": req.specialization.strip() if req.specialization else None,
             "is_active": True
         }
-        res = supabase.table("users").insert(record).execute()
+        res = supabase.table("users").upsert(record).execute()
         rec = res.data[0] if (res.data and len(res.data) > 0) else record
         
         return {
             "message": "Faculty member onboarded successfully",
             "teacher": rec,
             "default_password": default_password,
-            "login_instructions": f"Login with Email: {clean_email} and Default Password (Phone): {clean_phone}"
+            "login_instructions": f"Login with Email: {clean_email} and Default Password: {default_password}"
         }
     except HTTPException:
         raise
     except Exception as e:
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/teachers/{teacher_id}", summary="Get Faculty Member Details")

@@ -150,6 +150,19 @@ class SessionCreate(BaseModel):
     routine_id: Optional[str] = None
     topic_covered: Optional[str] = None
 
+class GenerateMonthSessionsRequest(BaseModel):
+    month: str = Field(..., description="Target month in YYYY-MM format e.g. '2026-10'")
+    batch_id: Optional[str] = None
+
+class SessionActionRequest(BaseModel):
+    action: Literal["reschedule", "substitute", "cancel", "complete"]
+    new_date: Optional[str] = None
+    new_start_time: Optional[str] = None
+    new_end_time: Optional[str] = None
+    substitute_teacher_id: Optional[str] = None
+    cancellation_reason: Optional[str] = None
+    topic_covered: Optional[str] = None
+
 class AttendanceStudentEntry(BaseModel):
     student_id: str
     status: Literal["PRESENT", "ABSENT"] = "PRESENT"
@@ -157,6 +170,7 @@ class AttendanceStudentEntry(BaseModel):
 class MarkAttendanceRequest(BaseModel):
     session_id: str
     records: list[AttendanceStudentEntry]
+    topic_covered: Optional[str] = None
 
 # ==============================================================================
 # 6. INVOICES, PAYMENTS & TRANSACTIONS
@@ -192,6 +206,17 @@ class StudyMaterialCreate(BaseModel):
     title: str
     description: Optional[str] = None
     file_url: str
+
+class StudyMaterialResponse(BaseModel):
+    id: str
+    batch_id: str
+    teacher_id: Optional[str] = None
+    subject: str
+    title: str
+    description: Optional[str] = None
+    file_url: str
+    signed_url: Optional[str] = None
+    created_at: Optional[str] = None
 
 class DoubtCreate(BaseModel):
     batch_id: str
