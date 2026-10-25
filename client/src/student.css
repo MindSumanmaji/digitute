@@ -6905,6 +6905,11 @@ select:focus {
   color: #dc2626;
 }
 
+.sp-status-tag.tag-upcoming {
+  background: #eff6ff;
+  color: #2563eb;
+}
+
 .sp-log-empty-clean {
   padding: 32px 16px;
   text-align: center;
@@ -13568,7 +13573,7 @@ select:focus {
 /* Quick Summary Mini Strip */
 .sp-summary-mini-strip {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 12px;
   background: #f8fafc;
   border: 1px solid #e2e8f0;
@@ -13698,6 +13703,769 @@ select:focus {
   color: #15803d;
   font-weight: 700;
   border-radius: 999px;
+}
+
+/* ==========================================================================
+   PHOTO-ACCURATE ATTENDANCE ANALYSIS - MONTH FILTER DESIGN
+   ========================================================================== */
+.sp-month-header-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.sp-month-nav-pill {
+  display: inline-flex;
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 9999px;
+  padding: 3px 6px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+  gap: 4px;
+}
+
+.sp-mn-btn {
+  background: transparent;
+  border: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 9999px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  color: #475569;
+  transition: all 0.15s ease;
+}
+
+.sp-mn-btn:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.sp-mn-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+  padding: 0 6px;
+  white-space: nowrap;
+}
+
+.sp-mn-label svg {
+  color: #2563eb;
+  flex-shrink: 0;
+}
+
+.sp-month-chart-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 16px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 9999px;
+  padding: 5px 14px;
+}
+
+.sp-mcl-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.sp-mcl-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.sp-mcl-dashed {
+  display: inline-block;
+  width: 16px;
+  border-top: 2px dashed #ef4444;
+}
+
+.sp-mcl-target {
+  color: #ef4444;
+  font-weight: 700;
+}
+
+.sp-month-chart-wrap {
+  width: 100%;
+  padding-top: 10px;
+}
+
+.sp-month-col-group:hover .sp-month-animated-bar {
+  filter: brightness(1.08);
+}
+
+@media (max-width: 768px) {
+  .sp-month-header-right {
+    align-items: flex-start;
+    width: 100%;
+    margin-top: 8px;
+  }
+}
+
+/* ==========================================================================
+   PHOTO-ACCURATE ATTENDANCE ANALYSIS - MONTH CLICKED WEEK LOG CARD
+   ========================================================================== */
+.sp-month-col-group {
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.sp-month-col-group:hover rect.sp-month-animated-bar {
+  filter: brightness(1.1);
+}
+
+.sp-month-week-log-card {
+  margin-top: 24px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04);
+  overflow: hidden;
+  transition: all 0.2s ease;
+}
+
+.sp-mwl-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.sp-mwl-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.sp-mwl-icon-box {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: #eff6ff;
+  color: #2563eb;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.sp-mwl-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: -0.01em;
+}
+
+.sp-mwl-subtitle {
+  font-size: 12px;
+  color: #64748b;
+  margin-top: 2px;
+  display: block;
+}
+
+.sp-mwl-stats-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 9999px;
+  padding: 6px 14px;
+  font-size: 12px;
+  color: #475569;
+}
+
+.sp-mwl-stat-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sp-mwl-stat-item.stat-present strong {
+  color: #16a34a;
+}
+
+.sp-mwl-stat-item.stat-absent strong {
+  color: #dc2626;
+}
+
+.sp-mwl-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.sp-mwl-dot.dot-present {
+  background: #10b981;
+}
+
+.sp-mwl-dot.dot-absent {
+  background: #ef4444;
+}
+
+.sp-mwl-dot.dot-upcoming {
+  background: #2563eb;
+}
+
+.sp-mwl-divider {
+  color: #cbd5e1;
+  font-weight: 700;
+}
+
+.sp-mwl-rows-wrap {
+  max-height: 340px;
+  overflow-y: auto;
+}
+
+.sp-mwl-rows-wrap::-webkit-scrollbar {
+  width: 5px;
+}
+
+.sp-mwl-rows-wrap::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 6px;
+}
+
+.sp-mwl-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 38px 20px;
+  text-align: center;
+}
+
+.sp-mwl-empty-icon {
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  background: #f1f5f9;
+  display: grid;
+  place-items: center;
+  margin-bottom: 10px;
+}
+
+.sp-mwl-empty-text {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #475569;
+  margin: 0;
+}
+
+.sp-mwl-empty-sub {
+  font-size: 12px;
+  color: #94a3b8;
+  margin-top: 4px;
+}
+
+/* ==========================================================================
+   PHOTO-ACCURATE ATTENDANCE ANALYSIS - YEAR FILTER DESIGN
+   ========================================================================== */
+.sp-year-header-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.sp-year-nav-pill {
+  display: inline-flex;
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 9999px;
+  padding: 3px 6px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+  gap: 4px;
+}
+
+.sp-yn-btn {
+  background: transparent;
+  border: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 9999px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  color: #475569;
+  transition: all 0.15s ease;
+}
+
+.sp-yn-btn:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.sp-yn-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #1e293b;
+  padding: 0 6px;
+  white-space: nowrap;
+}
+
+.sp-yn-label svg {
+  color: #2563eb;
+  flex-shrink: 0;
+}
+
+.sp-year-chart-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 9999px;
+  padding: 5px 14px;
+}
+
+.sp-ycl-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.sp-ycl-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.sp-ycl-dot.dot-good {
+  background: #10b981;
+}
+
+.sp-ycl-dot.dot-warning {
+  background: #f59e0b;
+}
+
+.sp-ycl-dot.dot-danger {
+  background: #ef4444;
+}
+
+.sp-ycl-dot.dot-nodata {
+  background: #f1f5f9;
+  border: 1.5px solid #cbd5e1;
+}
+
+.sp-year-dial-container {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 16px 0 28px;
+  position: relative;
+}
+
+.sp-year-dial-svg {
+  width: 100%;
+  max-width: 860px;
+  height: auto;
+  overflow: visible;
+  filter: drop-shadow(0 2px 12px rgba(15, 23, 42, 0.03));
+}
+
+.sp-year-node-group {
+  cursor: pointer;
+  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.sp-year-node-group:hover circle {
+  filter: brightness(1.05);
+}
+
+.sp-year-month-log-card {
+  width: 100%;
+  max-width: 860px;
+  margin-top: 24px;
+}
+
+@media (max-width: 768px) {
+  .sp-year-header-right {
+    align-items: flex-start;
+    width: 100%;
+    margin-top: 8px;
+  }
+  .sp-year-chart-legend {
+    flex-wrap: wrap;
+    gap: 8px 12px;
+  }
+}
+
+/* ==========================================================================
+   PHOTO-ACCURATE ATTENDANCE ANALYSIS - WEEK CARDS DESIGN
+   ========================================================================== */
+.sp-week-header-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+/* Week Range Navigation Pill */
+.sp-week-nav-pill {
+  display: inline-flex;
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 4px 6px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+  gap: 6px;
+}
+
+.sp-wn-btn {
+  background: transparent;
+  border: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  color: #475569;
+  transition: all 0.15s ease;
+}
+
+.sp-wn-btn:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.sp-wn-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+  padding: 0 6px;
+  white-space: nowrap;
+}
+
+.sp-wn-label svg {
+  color: #2563eb;
+  flex-shrink: 0;
+}
+
+/* Status Legend (Present, Absent, No Class, Holiday) */
+.sp-week-status-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.sp-wsl-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.sp-wsl-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.sp-wsl-dot.dot-present {
+  background: #10b981;
+}
+
+.sp-wsl-dot.dot-absent {
+  background: #ef4444;
+}
+
+.sp-wsl-dot.dot-noclass {
+  background: #64748b;
+}
+
+.sp-wsl-dot.dot-holiday {
+  background: #38bdf8;
+}
+
+/* 7-Card Grid (Mon to Sun) */
+.sp-week-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 12px;
+  margin-top: 10px;
+}
+
+@media (max-width: 1200px) {
+  .sp-week-cards-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .sp-week-cards-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .sp-week-header-right {
+    width: 100%;
+    justify-content: space-between;
+    margin-top: 8px;
+  }
+}
+
+@media (max-width: 480px) {
+  .sp-week-cards-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Individual Week Day Card */
+.sp-week-day-card {
+  border-radius: 16px;
+  padding: 16px 14px 20px 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  border: 1px solid transparent;
+  min-height: 270px;
+}
+
+.sp-week-day-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
+}
+
+/* Theme 1: Present (Light Mint Green) */
+.sp-week-day-card.theme-present {
+  background: #f0fdf4;
+  border-color: #dcfce7;
+}
+
+/* Theme 2: Absent (Light Pink Red) */
+.sp-week-day-card.theme-absent {
+  background: #fef2f2;
+  border-color: #fee2e2;
+}
+
+/* Theme 3: No Class (Light Slate / Soft Gray) */
+.sp-week-day-card.theme-noclass {
+  background: #f8fafc;
+  border-color: #f1f5f9;
+}
+
+/* Theme 4: Holiday (Light Sky Blue) */
+.sp-week-day-card.theme-holiday {
+  background: #f0f9ff;
+  border-color: #e0f2fe;
+}
+
+/* Theme 5: Upcoming (Light Indigo / Sky Blue) */
+.sp-week-day-card.theme-upcoming {
+  background: #f0f7ff;
+  border-color: #dbeafe;
+}
+
+/* Card Header: Day and Date */
+.sp-wc-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.sp-wc-day-name {
+  font-size: 15px;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.2px;
+}
+
+.sp-wc-day-date {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+/* Status Icon & Pill */
+.sp-wc-status-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 22px;
+}
+
+.sp-wc-circle-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.06);
+}
+
+.sp-wc-circle-icon.icon-present {
+  background: #10b981;
+}
+
+.sp-wc-circle-icon.icon-absent {
+  background: #ef4444;
+}
+
+.sp-wc-circle-icon.icon-upcoming {
+  background: #2563eb;
+}
+
+.sp-wc-circle-icon.icon-noclass {
+  background: #64748b;
+}
+
+.sp-wc-circle-icon.icon-holiday {
+  background: #0284c7;
+}
+
+.sp-wc-status-pill {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 12px;
+  border-radius: 999px;
+  letter-spacing: 0.2px;
+}
+
+.sp-wc-status-pill.pill-present {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.sp-wc-status-pill.pill-absent {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.sp-wc-status-pill.pill-upcoming {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.sp-wc-status-pill.pill-noclass {
+  background: #e2e8f0;
+  color: #475569;
+}
+
+.sp-wc-status-pill.pill-holiday {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+.sp-wsl-dot.dot-upcoming {
+  background: #2563eb;
+}
+
+/* Body Content */
+.sp-wc-body {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 1;
+}
+
+/* Scheduled Class Details */
+.sp-wc-class-info {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding-top: 4px;
+}
+
+.sp-wc-class-count {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #1e293b;
+  margin-bottom: 4px;
+}
+
+.sp-wc-book-icon {
+  font-size: 14px;
+}
+
+.sp-wc-detail-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #475569;
+}
+
+.sp-wc-detail-row svg {
+  color: #64748b;
+  flex-shrink: 0;
+}
+
+.sp-wc-detail-text {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: #334155;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Empty State / No Class Scheduled */
+.sp-wc-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding-top: 10px;
+  gap: 10px;
+  width: 100%;
+}
+
+.sp-wc-cal-icon {
+  color: #94a3b8;
+  display: grid;
+  place-items: center;
+}
+
+.sp-wc-empty-text {
+  margin: 0;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: #64748b;
+  line-height: 1.4;
+  max-width: 110px;
 }
 
 /* ==========================================================================
