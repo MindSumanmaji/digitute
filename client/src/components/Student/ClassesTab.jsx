@@ -59,6 +59,18 @@ export default function ClassesTab({ showToast }) {
   const [routinesList, setRoutinesList] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // Local ISO date formatter (avoiding UTC timezone shifting bugs)
+  const formatToIso = (d) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+
+  const realTodayObj = useMemo(() => new Date(), []);
+  const realTodayIso = useMemo(() => formatToIso(realTodayObj), [realTodayObj]);
+  const todayDateNum = useMemo(() => realTodayObj.getDate(), [realTodayObj]);
+
   // 1. Fetch live data from backend
   useEffect(() => {
     let isMounted = true;
@@ -106,19 +118,7 @@ export default function ClassesTab({ showToast }) {
     return () => {
       isMounted = false;
     };
-  }, []);
-
-  // 2. Local ISO date formatter (avoiding UTC timezone shifting bugs)
-  const formatToIso = (d) => {
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${y}-${m}-${day}`;
-  };
-
-  const realTodayObj = useMemo(() => new Date(), []);
-  const realTodayIso = useMemo(() => formatToIso(realTodayObj), [realTodayObj]);
-  const todayDateNum = useMemo(() => realTodayObj.getDate(), [realTodayObj]);
+  }, [realTodayObj]);
 
   // View Day for 'Today' tab (allows +/- days)
   const viewDayObj = useMemo(() => {
