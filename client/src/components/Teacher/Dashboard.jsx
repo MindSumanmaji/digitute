@@ -1,32 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import realisticEducationSvg from '../../assets/digitute_realistic_education_resized.svg';
 import { getLiveBatchDoubtStats } from '../../data/doubtData';
-/* ──────────────────────────────────────────────────────────────────────────
-   DATA: Today's classes for the popup modal
-   ────────────────────────────────────────────────────────────────────────── */
-const TODAY_CLASSES = [
-  { id: 'cls-1', time: '10:00 A.M', subject: 'Computer Network', batch: 'B.Sc 6th Sem' },
-  { id: 'cls-2', time: '12:00 P.M', subject: 'DBMS',             batch: 'B.Sc 4th Sem' },
-  { id: 'cls-3', time: '2:00 P.M',  subject: 'Software Engineering', batch: 'B.Sc 2nd Sem' },
-];
-
-/* ──────────────────────────────────────────────────────────────────────────
-   DATA: Per-batch stats so cards react to batch selection
-   ────────────────────────────────────────────────────────────────────────── */
-const BATCH_DATA = {
-  'B.Sc 6th Sem':    { students: 42, solved: 70, pending: 6,  completed: 20, total: 30 },
-  'B.Sc 4th Sem':    { students: 38, solved: 55, pending: 11, completed: 14, total: 28 },
-  'MCA 2nd Sem':     { students: 24, solved: 83, pending: 3,  completed: 22, total: 25 },
-  'B.Tech CS 3rd Sem':{ students: 56, solved: 61, pending: 9, completed: 18, total: 32 },
-};
-
-/* Subjects per batch */
-const BATCH_SUBJECTS = {
-  'B.Tech CS 3rd Sem':['Computer Network', 'Data Structures', 'Digital Electronics', 'Discrete Mathematics'],
-  'B.Sc 6th Sem':     ['Computer Network', 'Operating Systems', 'Database Systems'],
-  'B.Sc 4th Sem':     ['DBMS', 'Data Structures', 'Computer Architecture'],
-  'MCA 2nd Sem':      ['Software Engineering', 'Computer Graphics', 'Web Technologies'],
-};
+import { apiRequest } from '../../api';
 
 /* ──────────────────────────────────────────────────────────────────────────
    Helpers
@@ -45,17 +20,44 @@ const getGreeting = () => {
   return 'GOOD EVENING,';
 };
 
+const formatTime = (timeStr) => {
+  if (!timeStr) return '';
+  const parts = timeStr.split(':');
+  if (parts.length < 2) return timeStr;
+  let hour = parseInt(parts[0], 10);
+  const min = parts[1];
+  const ampm = hour >= 12 ? 'PM' : 'AM';
+  hour = hour % 12 || 12;
+  return `${hour}:${min} ${ampm}`;
+};
+
 /* Ring stroke offset for a given percentage (circumference = 2π×25 ≈ 157) */
-const ringOffset = (pct) => 157 * (1 - pct / 100);
+const ringOffset = (pct) => 157 * (1 - Math.min(Math.max(pct, 0), 100) / 100);
 
 /* ══════════════════════════════════════════════════════════════════════════
    COMPONENT
    ══════════════════════════════════════════════════════════════════════════ */
 const Dashboard = ({ onNavigate, user }) => {
-  // null = nothing selected yet
-  const [selectedBatch,   setSelectedBatch]   = useState(null);
+  // Batches from database
+  const [batchesList, setBatchesList] = useState([]);
+  const [loadingBatches, setLoadingBatches] = useState(true);
+
+  // Selected batch and subject
+  const [selectedBatch, setSelectedBatch] = useState(null);
   const [selectedSubject, setSelectedSubject] = useState(null);
-  const [showClassModal,  setShowClassModal]  = useState(false);
+  const [showClassModal, setShowClassModal] = useState(false);
+
+  // Date selection (defaults to today YYYY-MM-DD)
+  const todayDateStr = useMemo(() => new Date().toISOString().split('T')[0], []);
+  const [selectedDate, setSelectedDate] = useState(() => todayDateStr);
+  const isToday = selectedDate === todayDateStr;
+
+  // Scheduled sessions for selectedDate from database
+  const [sessions, setSessions] = useState([]);
+  const [loadingSessions, setLoadingSessions] = useState(false);
+
+  // Ref for hidden native datepicker attached to the calendar icon
+  const dateInputRef = useRef(null);
 
   const teacherName = user?.full_name || (() => {
     try {
@@ -69,35 +71,209 @@ const Dashboard = ({ onNavigate, user }) => {
         const p = JSON.parse(saved);
         if (p.name) return p.name;
       }
-    } catch {}
-    return 'Sudipta Sir';
+    } catch { }
+    return 'Teacher';
   })();
 
+  // Live time
+  const { timeStr } = getLiveDateTime();
+
+  // Formatted selected date
+  const formattedSelectedDate = useMemo(() => {
+    try {
+      const d = new Date(selectedDate + 'T00:00:00');
+      return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    } catch {
+      return selectedDate;
+    }
+  }, [selectedDate]);
+
   // Animation values for smooth number counter & progress advancement
-  const [animatedSolved,   setAnimatedSolved]   = useState(0);
+  const [animatedSolved, setAnimatedSolved] = useState(0);
   const [animatedSyllabus, setAnimatedSyllabus] = useState(0);
   const [animatedStudents, setAnimatedStudents] = useState(0);
-  const [animateKey,       setAnimateKey]       = useState(0);
+  const [animateKey, setAnimateKey] = useState(0);
 
-  const { dateStr, timeStr } = getLiveDateTime();
+  // 1. Fetch batches directly from database on mount (matching Syllabus Setup & Study Materials)
+  useEffect(() => {
+    let isMounted = true;
+    setLoadingBatches(true);
 
-  // Only compute stats when a batch is actually selected
-  const batchStats  = selectedBatch ? BATCH_DATA[selectedBatch] : null;
-  const subjectList = selectedBatch ? (BATCH_SUBJECTS[selectedBatch] || []) : [];
+    apiRequest('/api/teacher/my-batches')
+      .then((data) => {
+        if (!isMounted) return;
+        if (Array.isArray(data)) {
+          setBatchesList(data);
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to load teacher batches for dashboard:', err);
+      })
+      .finally(() => {
+        if (isMounted) setLoadingBatches(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // 2. Fetch sessions for selectedDate from database
+  useEffect(() => {
+    let isMounted = true;
+    setLoadingSessions(true);
+
+    apiRequest(`/api/teacher/sessions?session_date=${selectedDate}`)
+      .then((data) => {
+        if (!isMounted) return;
+        setSessions(Array.isArray(data) ? data : []);
+      })
+      .catch((err) => {
+        console.error('Failed to load sessions for date:', err);
+        if (isMounted) setSessions([]);
+      })
+      .finally(() => {
+        if (isMounted) setLoadingSessions(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedDate]);
+
+  // Derived batch metadata & available subjects from database
+  const selectedBatchObj = useMemo(() => {
+    return batchesList.find((b) => b.batch_id === selectedBatch || b.batch_name === selectedBatch) || null;
+  }, [batchesList, selectedBatch]);
+
+  const selectedBatchName = selectedBatchObj ? selectedBatchObj.batch_name : (selectedBatch || '');
+
+  const availableSubjects = useMemo(() => {
+    if (!selectedBatchObj || !selectedBatchObj.subjects) return [];
+    return selectedBatchObj.subjects
+      .map((s) => (typeof s === 'string' ? s : s.name))
+      .filter(Boolean);
+  }, [selectedBatchObj]);
+
   const bothSelected = Boolean(selectedBatch && selectedSubject);
 
   /* When batch changes, reset subject to blank */
   const handleBatchChange = (val) => {
     setSelectedBatch(val || null);
-    setSelectedSubject(null); // always clear subject on batch change
+    setSelectedSubject(null);
   };
 
-  // Synchronize syllabus stats from Syllabus Setup in localStorage (or fallback to batch stats)
+  // Open native calendar picker on icon click
+  const handleOpenCalendar = () => {
+    try {
+      dateInputRef.current?.showPicker?.();
+    } catch {
+      dateInputRef.current?.click?.();
+    }
+  };
+
+  // 3. Live Batch Summary (students count and doubts) from database
+  const [batchSummary, setBatchSummary] = useState(null);
+
+  useEffect(() => {
+    if (!bothSelected) {
+      setBatchSummary(null);
+      return;
+    }
+
+    let isMounted = true;
+    const params = new URLSearchParams({
+      batch_id: selectedBatch || '',
+      batch_name: selectedBatchName || '',
+      subject: selectedSubject || '',
+    });
+
+    apiRequest(`/api/teacher/batch-summary?${params.toString()}`)
+      .then((data) => {
+        if (!isMounted) return;
+        if (data) {
+          setBatchSummary(data);
+          setAnimateKey((k) => k + 1);
+        }
+      })
+      .catch((err) => {
+        console.warn('Failed to load batch summary from DB:', err);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedBatch, selectedBatchName, selectedSubject, bothSelected]);
+
+  // 4. Live Syllabus stats from Database
+  const [dbSyllabusStats, setDbSyllabusStats] = useState(null);
+
+  useEffect(() => {
+    if (!bothSelected) {
+      setDbSyllabusStats(null);
+      return;
+    }
+
+    let isMounted = true;
+    const params = new URLSearchParams({
+      batch_id: selectedBatch || '',
+      batch_name: selectedBatchName || '',
+      subject: selectedSubject || '',
+    });
+
+    apiRequest(`/api/teacher/syllabus?${params.toString()}`)
+      .then((data) => {
+        if (!isMounted) return;
+        if (data && data.total > 0) {
+          setDbSyllabusStats({
+            completed: data.completed,
+            total: data.total,
+            pct: data.pct
+          });
+          setAnimateKey((k) => k + 1);
+        } else {
+          setDbSyllabusStats({ completed: 0, total: 0, pct: 0 });
+        }
+      })
+      .catch((err) => {
+        console.warn('Failed to load DB syllabus stats for dashboard:', err);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedBatch, selectedBatchName, selectedSubject, bothSelected]);
+
+  // Listen for real-time syllabus updates from Syllabus Setup
+  useEffect(() => {
+    const handleSyllabusUpdated = (e) => {
+      const detail = e.detail;
+      if (
+        detail &&
+        (detail.batch === selectedBatch || detail.batch_name === selectedBatchName) &&
+        detail.subject === selectedSubject
+      ) {
+        setDbSyllabusStats({
+          completed: detail.completed,
+          total: detail.total,
+          pct: detail.pct
+        });
+        setAnimateKey((k) => k + 1);
+      }
+    };
+    window.addEventListener('digitute_syllabus_updated', handleSyllabusUpdated);
+    return () => window.removeEventListener('digitute_syllabus_updated', handleSyllabusUpdated);
+  }, [selectedBatch, selectedBatchName, selectedSubject]);
+
+  // Synchronize syllabus stats from Database (or localStorage fallback)
   const syllabusStats = useMemo(() => {
     if (!bothSelected) return { completed: 0, total: 0, pct: 0 };
-    const key = `digitute_syllabus_v1_${selectedBatch}_${selectedSubject}`;
+    if (dbSyllabusStats && dbSyllabusStats.total > 0) return dbSyllabusStats;
+
+    const keyWithId = `digitute_syllabus_v1_${selectedBatch}_${selectedSubject}`;
+    const keyWithName = `digitute_syllabus_v1_${selectedBatchName}_${selectedSubject}`;
     try {
-      const savedRaw = localStorage.getItem(key);
+      const savedRaw = localStorage.getItem(keyWithId) || localStorage.getItem(keyWithName);
       if (savedRaw) {
         const parsed = JSON.parse(savedRaw);
         if (Array.isArray(parsed.chapters) && parsed.chapters.length > 0) {
@@ -110,11 +286,8 @@ const Dashboard = ({ onNavigate, user }) => {
     } catch (e) {
       console.error('Error reading saved syllabus:', e);
     }
-    const comp = batchStats ? batchStats.completed : 0;
-    const tot = batchStats ? batchStats.total : 0;
-    const pct = tot > 0 ? Math.round((comp / tot) * 100) : 0;
-    return { completed: comp, total: tot, pct };
-  }, [selectedBatch, selectedSubject, bothSelected, batchStats]);
+    return dbSyllabusStats || { completed: 0, total: 0, pct: 0 };
+  }, [selectedBatch, selectedBatchName, selectedSubject, bothSelected, dbSyllabusStats]);
 
   // Listen for real-time doubt updates
   useEffect(() => {
@@ -125,24 +298,25 @@ const Dashboard = ({ onNavigate, user }) => {
 
   // Compute live doubt stats for the selected batch and subject from Doubt Corner store
   const liveDoubtStats = useMemo(() => {
-    if (!selectedBatch) return null;
-    return getLiveBatchDoubtStats(selectedBatch, selectedSubject);
-  }, [selectedBatch, selectedSubject, animateKey]);
+    if (!selectedBatchName) return null;
+    return getLiveBatchDoubtStats(selectedBatchName, selectedSubject);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedBatchName, selectedSubject, batchSummary, dbSyllabusStats]);
 
   /* Smooth sequential animation when both batch & subject are chosen */
   useEffect(() => {
-    if (!bothSelected || !batchStats) {
+    if (!bothSelected) {
       setAnimatedSolved(0);
       setAnimatedSyllabus(0);
       setAnimatedStudents(0);
       return;
     }
 
-    setAnimateKey((k) => k + 1);
-
-    const targetStudents = batchStats.students;
-    const targetSolved = liveDoubtStats ? liveDoubtStats.solvedPct : batchStats.solved;
-    const targetSyllabus = syllabusStats.pct;
+    // Compute targets from current data (avoid depending on liveDoubtStats to prevent infinite loop)
+    const targetStudents = batchSummary ? batchSummary.students : 0;
+    const currentDoubtStats = selectedBatchName ? getLiveBatchDoubtStats(selectedBatchName, selectedSubject) : null;
+    const targetSolved = currentDoubtStats ? currentDoubtStats.solvedPct : (batchSummary?.doubts?.solved_pct ?? 100);
+    const targetSyllabus = syllabusStats.pct || 0;
 
     setAnimatedStudents(0);
     setAnimatedSolved(0);
@@ -151,9 +325,6 @@ const Dashboard = ({ onNavigate, user }) => {
     let animationFrameId;
     const startTimestamp = performance.now();
 
-    // Sequence timing:
-    // 1. Doubt ring rotates and draws arc first (0ms -> 750ms)
-    // 2. Syllabus progress starts after 320ms, advances smoothly forward from 0% -> target
     const doubtDuration = 750;
     const syllabusDelay = 320;
     const syllabusDuration = 800;
@@ -187,7 +358,10 @@ const Dashboard = ({ onNavigate, user }) => {
 
     animationFrameId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(animationFrameId);
-  }, [selectedBatch, selectedSubject]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedBatch, selectedSubject, batchSummary, syllabusStats.pct, bothSelected]);
+
+  const targetPendingDoubts = liveDoubtStats ? liveDoubtStats.pending : (batchSummary?.doubts?.pending ?? 0);
 
   return (
     <div className="dashboard-wrapper">
@@ -230,34 +404,86 @@ const Dashboard = ({ onNavigate, user }) => {
             ════════════════════════════════════════════════════════════════ */}
         <section className="dashboard-top-row" aria-label="Date and Today's Classes">
 
-          {/* Card A: Date & Time */}
-          <div className="dash-card metric-card">
-            <div className="metric-left-circle" aria-hidden="true">
+          {/* Card A: Date & Time with interactive Calendar Picker */}
+          <div className="dash-card metric-card" style={{ position: 'relative' }}>
+            <div
+              className="metric-left-circle"
+              aria-hidden="true"
+              onClick={handleOpenCalendar}
+              style={{ cursor: 'pointer', position: 'relative' }}
+              title="Click calendar icon to pick date"
+            >
               <svg viewBox="0 0 24 24" fill="none" stroke="#1E293B" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="3" y="4" width="18" height="18" rx="2.5" ry="2.5" />
                 <line x1="16" y1="2" x2="16" y2="6" />
-                <line x1="8"  y1="2" x2="8"  y2="6" />
-                <line x1="3"  y1="10" x2="21" y2="10" />
-                <circle cx="8"  cy="14" r="1" fill="#1E293B" />
+                <line x1="8" y1="2" x2="8" y2="6" />
+                <line x1="3" y1="10" x2="21" y2="10" />
+                <circle cx="8" cy="14" r="1" fill="#1E293B" />
                 <circle cx="12" cy="14" r="1" fill="#1E293B" />
                 <circle cx="16" cy="14" r="1" fill="#1E293B" />
-                <circle cx="8"  cy="18" r="1" fill="#1E293B" />
+                <circle cx="8" cy="18" r="1" fill="#1E293B" />
                 <circle cx="12" cy="18" r="1" fill="#1E293B" />
               </svg>
+
+              {/* Invisible native date input directly over calendar icon */}
+              <input
+                ref={dateInputRef}
+                type="date"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  height: '100%',
+                  opacity: 0,
+                  cursor: 'pointer',
+                  zIndex: 2,
+                }}
+                aria-label="Select Date"
+              />
             </div>
-            <div className="metric-text-group">
-              <span className="metric-label">Date &amp; Time</span>
-              <span className="metric-date">{dateStr}</span>
+            <div className="metric-text-group" onClick={handleOpenCalendar} style={{ cursor: 'pointer' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                <span className="metric-label">Date &amp; Time</span>
+                {!isToday && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedDate(todayDateStr);
+                    }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#4F46E5',
+                      fontSize: '0.72rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      padding: '0 4px',
+                    }}
+                    title="Reset to Today"
+                  >
+                    Today
+                  </button>
+                )}
+              </div>
+              <span className="metric-date">{formattedSelectedDate}</span>
               <span className="metric-time">{timeStr}</span>
             </div>
           </div>
 
-          {/* Card B: Total Class today — click opens modal */}
-          <button
-            type="button"
-            className="dash-card metric-card clickable-metric"
-            onClick={() => setShowClassModal(true)}
-            aria-label={`Today ${TODAY_CLASSES.length} classes — click to see details`}
+          {/* Card B: Total Class for date — click opens modal ONLY if count > 0 */}
+          <div
+            className={`dash-card metric-card ${sessions.length > 0 ? 'clickable-metric' : ''}`}
+            onClick={() => {
+              if (sessions.length > 0) setShowClassModal(true);
+            }}
+            style={{ cursor: sessions.length > 0 ? 'pointer' : 'default' }}
+            role={sessions.length > 0 ? 'button' : undefined}
+            tabIndex={sessions.length > 0 ? 0 : undefined}
+            aria-label={`${isToday ? "Today's" : "Scheduled"} ${sessions.length} classes${sessions.length > 0 ? ' — click to see details' : ''}`}
           >
             <div className="metric-left-circle" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="none" stroke="#1E293B" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
@@ -266,21 +492,23 @@ const Dashboard = ({ onNavigate, user }) => {
               </svg>
             </div>
             <div className="metric-text-group">
-              <span className="metric-label">Today's Classes</span>
-              <span className="metric-bold-value">{TODAY_CLASSES.length}</span>
+              <span className="metric-label">{isToday ? "Today's Classes" : "Scheduled Classes"}</span>
+              <span className="metric-bold-value">{loadingSessions ? '…' : sessions.length}</span>
             </div>
-            <div className="metric-right-arrow" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" stroke="#4F46E5" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="5" y1="12" x2="19" y2="12" />
-                <polyline points="12 5 19 12 12 19" />
-              </svg>
-            </div>
-          </button>
+            {sessions.length > 0 && (
+              <div className="metric-right-arrow" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#4F46E5" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                  <polyline points="12 5 19 12 12 19" />
+                </svg>
+              </div>
+            )}
+          </div>
 
         </section>
 
         {/* ════════════════════════════════════════════════════════════════
-            3. BATCH & SUBJECT SELECTOR
+            3. BATCH & SUBJECT SELECTOR (FETCHED FROM DATABASE)
             ════════════════════════════════════════════════════════════════ */}
         <section className="dash-card selector-card" aria-label="Batch and Subject Selection">
           <div className="selector-grid">
@@ -302,9 +530,11 @@ const Dashboard = ({ onNavigate, user }) => {
                     onChange={(e) => handleBatchChange(e.target.value || null)}
                     aria-label="Select Batch"
                   >
-                    <option value="" disabled>Select batch…</option>
-                    {Object.keys(BATCH_DATA).map((b) => (
-                      <option key={b} value={b}>{b}</option>
+                    <option value="" disabled>
+                      {loadingBatches ? 'Loading batches…' : batchesList.length === 0 ? 'No batches assigned' : 'Select batch…'}
+                    </option>
+                    {batchesList.map((b) => (
+                      <option key={b.batch_id} value={b.batch_id}>{b.batch_name}</option>
                     ))}
                   </select>
                   <svg className="selector-chevron-svg" viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
@@ -332,13 +562,13 @@ const Dashboard = ({ onNavigate, user }) => {
                     className={`selector-native-select${!selectedSubject ? ' selector-placeholder' : ''}`}
                     value={selectedSubject || ''}
                     onChange={(e) => setSelectedSubject(e.target.value || null)}
-                    disabled={!selectedBatch}
+                    disabled={!selectedBatch || availableSubjects.length === 0}
                     aria-label="Select Subject"
                   >
                     <option value="" disabled>
-                      {selectedBatch ? 'Select subject…' : 'Select batch first'}
+                      {!selectedBatch ? 'Select batch first' : availableSubjects.length === 0 ? 'No subjects found' : 'Select subject…'}
                     </option>
-                    {subjectList.map((s) => (
+                    {availableSubjects.map((s) => (
                       <option key={s} value={s}>{s}</option>
                     ))}
                   </select>
@@ -357,7 +587,7 @@ const Dashboard = ({ onNavigate, user }) => {
                 <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
               </svg>
               {bothSelected
-                ? <>Showing stats for <strong>{selectedBatch}</strong> — <strong>{selectedSubject}</strong></>
+                ? <>Showing stats for <strong>{selectedBatchName}</strong> — <strong>{selectedSubject}</strong></>
                 : <>Batch selected — now choose a <strong>subject</strong></>
               }
             </div>
@@ -391,7 +621,7 @@ const Dashboard = ({ onNavigate, user }) => {
               {/* Doubt Status */}
               <div
                 className="dash-card doubt-status-card dash-animated-card delay-2"
-                onClick={() => onNavigate && onNavigate('academics', { section: 'doubt-corner', batch: selectedBatch, subject: selectedSubject })}
+                onClick={() => onNavigate && onNavigate('academics', { section: 'doubt-corner', batch: selectedBatchName, subject: selectedSubject })}
                 role="button"
                 tabIndex={0}
                 title="Click to open Doubt Corner for this batch"
@@ -400,7 +630,7 @@ const Dashboard = ({ onNavigate, user }) => {
                   <span className="doubt-header-label">Doubt Status</span>
                 </div>
                 <div className="doubt-card-body">
-                  <div className="doubt-ring-container" aria-label={`${liveDoubtStats ? liveDoubtStats.solvedPct : batchStats.solved}% resolved doubts`}>
+                  <div className="doubt-ring-container" aria-label={`${animatedSolved}% resolved doubts`}>
                     <svg className="doubt-ring-svg doubt-ring-spinning" viewBox="0 0 60 60">
                       <circle cx="30" cy="30" r="25" fill="none" stroke="#EEF2FF" strokeWidth="5" />
                       <circle
@@ -432,7 +662,7 @@ const Dashboard = ({ onNavigate, user }) => {
                       </div>
                       <div className="doubt-pending-meta">
                         <span className="doubt-pending-sub">Pending</span>
-                        <span className="doubt-pending-num">{liveDoubtStats ? liveDoubtStats.pending : batchStats.pending}</span>
+                        <span className="doubt-pending-num">{targetPendingDoubts}</span>
                       </div>
                     </div>
                   </div>
@@ -449,7 +679,7 @@ const Dashboard = ({ onNavigate, user }) => {
                     <svg viewBox="0 0 24 24" fill="none" stroke="#1E293B" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                       <line x1="18" y1="20" x2="18" y2="10" />
                       <line x1="12" y1="20" x2="12" y2="4" />
-                      <line x1="6"  y1="20" x2="6"  y2="14" />
+                      <line x1="6" y1="20" x2="6" y2="14" />
                     </svg>
                   </div>
                   <h2 className="syllabus-card-heading">Syllabus Progress</h2>
@@ -516,7 +746,12 @@ const Dashboard = ({ onNavigate, user }) => {
 
           <div className="quick-actions-grid">
             {/* Take Attendance */}
-            <button type="button" className="action-card attendance-action" onClick={() => onNavigate && onNavigate('academics', { section: 'attendance', batch: selectedBatch, subject: selectedSubject })} aria-label="Take Attendance">
+            <button
+              type="button"
+              className="action-card attendance-action"
+              onClick={() => onNavigate && onNavigate('academics', { section: 'attendance', batch: selectedBatchName, subject: selectedSubject })}
+              aria-label="Take Attendance"
+            >
               <div className="action-card-header">
                 <div className="action-icon-box attendance-icon-box" aria-hidden="true">
                   <svg viewBox="0 0 24 24" fill="none" stroke="#4F46E5" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
@@ -534,7 +769,12 @@ const Dashboard = ({ onNavigate, user }) => {
             </button>
 
             {/* Money */}
-            <button type="button" className="action-card money-action" onClick={() => onNavigate && onNavigate('finance')} aria-label="Manage Fees and Money">
+            <button
+              type="button"
+              className="action-card money-action"
+              onClick={() => onNavigate && onNavigate('finance')}
+              aria-label="Manage Fees and Money"
+            >
               <div className="action-card-header">
                 <div className="action-icon-box money-icon-box" aria-hidden="true">
                   <svg viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
@@ -553,7 +793,12 @@ const Dashboard = ({ onNavigate, user }) => {
             </button>
 
             {/* Create DPP */}
-            <button type="button" className="action-card ddp-action" onClick={() => onNavigate && onNavigate('academics', { section: 'dpp-management', batch: selectedBatch, subject: selectedSubject })} aria-label="Create DPP">
+            <button
+              type="button"
+              className="action-card ddp-action"
+              onClick={() => onNavigate && onNavigate('academics', { section: 'dpp-management', batch: selectedBatchName, subject: selectedSubject })}
+              aria-label="Create DPP"
+            >
               <div className="action-card-header">
                 <div className="action-icon-box ddp-icon-box" aria-hidden="true">
                   <svg viewBox="0 0 24 24" fill="none" stroke="#EA580C" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
@@ -578,15 +823,15 @@ const Dashboard = ({ onNavigate, user }) => {
       </div>
 
       {/* ══════════════════════════════════════════════════════════════════════
-          TODAY'S CLASSES MODAL POPUP
+          TODAY'S / SCHEDULED CLASSES MODAL POPUP (DATABASE BACKED)
           ══════════════════════════════════════════════════════════════════ */}
-      {showClassModal && (
+      {showClassModal && sessions.length > 0 && (
         <div
           className="class-modal-backdrop"
           onClick={() => setShowClassModal(false)}
           role="dialog"
           aria-modal="true"
-          aria-label="Today's class schedule"
+          aria-label="Class schedule"
         >
           <div
             className="class-modal-sheet"
@@ -595,8 +840,8 @@ const Dashboard = ({ onNavigate, user }) => {
             {/* Modal Header */}
             <div className="class-modal-header">
               <div className="class-modal-title-group">
-                <h2 className="class-modal-title">Today's Schedule</h2>
-                <span className="class-modal-date">{dateStr}</span>
+                <h2 className="class-modal-title">{isToday ? "Today's Schedule" : "Scheduled Classes"}</h2>
+                <span className="class-modal-date">{formattedSelectedDate}</span>
               </div>
               <button
                 type="button"
@@ -617,34 +862,40 @@ const Dashboard = ({ onNavigate, user }) => {
                 <path d="M22 10v6M2 10l10-5 10 5-10 5z" />
                 <path d="M6 12v5c3 3 9 3 12 0v-5" />
               </svg>
-              {TODAY_CLASSES.length} Classes Today
+              {sessions.length} {sessions.length === 1 ? 'Class' : 'Classes'} {isToday ? 'Today' : `on ${formattedSelectedDate}`}
             </div>
 
             {/* Class Capsule List */}
             <div className="class-modal-list">
-              {TODAY_CLASSES.map((cls, idx) => (
-                <div key={cls.id} className="class-capsule">
-                  {/* Time column */}
-                  <div className="class-capsule-time-col">
-                    <span className="class-capsule-time">{cls.time}</span>
-                    {idx < TODAY_CLASSES.length - 1 && (
-                      <div className="class-capsule-connector" aria-hidden="true" />
-                    )}
-                  </div>
+              {sessions.map((cls, idx) => {
+                const timeText = `${formatTime(cls.start_time)} - ${formatTime(cls.end_time)}`;
+                const batchName = cls.batches?.name || 'Assigned Batch';
+                const subjectName = cls.subject || 'Subject';
 
-                  {/* Card */}
-                  <div className="class-capsule-card">
-                    <div className="class-capsule-dot" aria-hidden="true" />
-                    <div className="class-capsule-info">
-                      <span className="class-capsule-subject">{cls.subject}</span>
-                      <span className="class-capsule-batch">{cls.batch}</span>
+                return (
+                  <div key={cls.id || idx} className="class-capsule">
+                    {/* Time column */}
+                    <div className="class-capsule-time-col">
+                      <span className="class-capsule-time">{timeText}</span>
+                      {idx < sessions.length - 1 && (
+                        <div className="class-capsule-connector" aria-hidden="true" />
+                      )}
                     </div>
-                    <div className="class-capsule-index" aria-hidden="true">
-                      {String(idx + 1).padStart(2, '0')}
+
+                    {/* Card */}
+                    <div className="class-capsule-card">
+                      <div className="class-capsule-dot" aria-hidden="true" />
+                      <div className="class-capsule-info">
+                        <span className="class-capsule-subject">{subjectName}</span>
+                        <span className="class-capsule-batch">{batchName}</span>
+                      </div>
+                      <div className="class-capsule-index" aria-hidden="true">
+                        {String(idx + 1).padStart(2, '0')}
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
           </div>
@@ -656,3 +907,4 @@ const Dashboard = ({ onNavigate, user }) => {
 };
 
 export default Dashboard;
+

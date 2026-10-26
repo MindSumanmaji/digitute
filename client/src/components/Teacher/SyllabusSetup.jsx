@@ -1,34 +1,25 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-/* ══════════════════════════════════════════════════════════════════════════
-   BATCHES & SUBJECTS CONFIGURATION
-   ══════════════════════════════════════════════════════════════════════════ */
-const BATCHES = [
-  'B.Tech CS 3rd Sem',
-  'B.Sc 6th Sem',
-  'B.Sc 4th Sem',
-  'MCA 2nd Sem',
-];
-
-const BATCH_SUBJECTS_MAP = {
-  'B.Tech CS 3rd Sem': ['Computer Network', 'Data Structures', 'Digital Electronics', 'Discrete Mathematics'],
-  'B.Sc 6th Sem':      ['Computer Network', 'Operating Systems', 'Database Systems'],
-  'B.Sc 4th Sem':      ['DBMS', 'Data Structures', 'Computer Architecture'],
-  'MCA 2nd Sem':       ['Software Engineering', 'Computer Graphics', 'Web Technologies'],
-};
-
-const CHAPTER_COUNT_OPTIONS = Array.from({ length: 25 }, (_, i) => i + 1);
+import { apiRequest } from '../../api';
 
 // Helper for local storage key
 const getStorageKey = (batch, subject) => `digitute_syllabus_v1_${batch}_${subject}`;
 
 export function SyllabusSetup({ onBack }) {
+  // Database batches & loading state
+  const [batchesList, setBatchesList] = useState([]);
+  const [isLoadingBatches, setIsLoadingBatches] = useState(true);
+
   // Selectors
   const [selectedBatch, setSelectedBatch] = useState('');
   const [selectedSubject, setSelectedSubject] = useState('');
   const [totalChapters, setTotalChapters] = useState('');
+  const [chapterInput, setChapterInput] = useState('');
 
   // Chapter list: [{ id, num, title, completed }]
   const [chapters, setChapters] = useState([]);
+
+  // Saved completed chapter IDs/numbers set (chapters permanently locked after save)
+  const [savedCompletedIds, setSavedCompletedIds] = useState(() => new Set());
 
   // Inline editing state
   const [editingId, setEditingId] = useState(null);
@@ -43,7 +34,49 @@ export function SyllabusSetup({ onBack }) {
   const toastTimerRef = useRef(null);
   const editInputRef = useRef(null);
 
-  const availableSubjects = selectedBatch ? (BATCH_SUBJECTS_MAP[selectedBatch] || []) : [];
+  // Fetch batches directly from database on mount (identical to Study Materials)
+  useEffect(() => {
+    let isMounted = true;
+    setIsLoadingBatches(true);
+
+    apiRequest('/api/teacher/my-batches')
+      .then((data) => {
+        if (!isMounted) return;
+        if (Array.isArray(data)) {
+          setBatchesList(data);
+          if (data.length > 0) {
+            setSelectedBatch(data[0].batch_id);
+            const firstSubject = data[0].subjects?.[0]?.name || (typeof data[0].subjects?.[0] === 'string' ? data[0].subjects[0] : '');
+            if (firstSubject) setSelectedSubject(firstSubject);
+          }
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to load teacher batches for syllabus:', err);
+      })
+      .finally(() => {
+        if (isMounted) setIsLoadingBatches(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Derived batch metadata & available subjects from database
+  const selectedBatchObj = useMemo(() => {
+    return batchesList.find((b) => b.batch_id === selectedBatch) || null;
+  }, [batchesList, selectedBatch]);
+
+  const selectedBatchName = selectedBatchObj ? selectedBatchObj.batch_name : '';
+
+  const availableSubjects = useMemo(() => {
+    if (!selectedBatchObj || !selectedBatchObj.subjects) return [];
+    return selectedBatchObj.subjects
+      .map((s) => (typeof s === 'string' ? s : s.name))
+      .filter(Boolean);
+  }, [selectedBatchObj]);
+
   const readyForChapters = !!(selectedBatch && selectedSubject);
 
   const showToast = (msg) => {
@@ -52,48 +85,112 @@ export function SyllabusSetup({ onBack }) {
     toastTimerRef.current = setTimeout(() => setToastMessage(''), 3000);
   };
 
-  // Load saved syllabus when Batch and Subject are both selected
+  // Helper to check if a chapter was already saved as completed
+  const isChapterSavedCompleted = (ch) => {
+    if (!ch) return false;
+    return savedCompletedIds.has(String(ch.id)) || savedCompletedIds.has(String(ch.num));
+  };
+
+  // Load saved syllabus from Database & LocalStorage when Batch and Subject are both selected
   useEffect(() => {
     if (!readyForChapters) {
       setChapters([]);
       setTotalChapters('');
+      setChapterInput('');
       setEditingId(null);
       setIsDirty(false);
       setLastSaved(null);
+      setSavedCompletedIds(new Set());
       return;
     }
 
+    let isMounted = true;
     setIsLoading(true);
-    const timer = setTimeout(() => {
-      const key = getStorageKey(selectedBatch, selectedSubject);
-      const savedRaw = localStorage.getItem(key);
 
-      if (savedRaw) {
-        try {
-          const parsed = JSON.parse(savedRaw);
-          if (Array.isArray(parsed.chapters) && parsed.chapters.length > 0) {
-            setChapters(parsed.chapters);
-            setTotalChapters(parsed.chapters.length);
-            setLastSaved(parsed.lastSaved || null);
-            setIsDirty(false);
-            setIsLoading(false);
-            return;
-          }
-        } catch (err) {
-          console.error('Error parsing stored syllabus:', err);
+    // 1. Immediately read from localStorage cache for instant UI rendering
+    const key = getStorageKey(selectedBatch, selectedSubject);
+    const savedRaw = localStorage.getItem(key);
+    if (savedRaw) {
+      try {
+        const parsed = JSON.parse(savedRaw);
+        if (Array.isArray(parsed.chapters) && parsed.chapters.length > 0) {
+          setChapters(parsed.chapters);
+          setTotalChapters(parsed.chapters.length);
+          setChapterInput(String(parsed.chapters.length));
+          setLastSaved(parsed.lastSaved || null);
+
+          // Populate saved completed chapters from cache
+          const compSet = new Set();
+          parsed.chapters.forEach((c) => {
+            if (c.completed) {
+              if (c.id) compSet.add(String(c.id));
+              if (c.num) compSet.add(String(c.num));
+            }
+          });
+          setSavedCompletedIds(compSet);
         }
+      } catch (err) {
+        console.error('Error parsing stored syllabus cache:', err);
       }
+    }
 
-      // No existing saved syllabus
-      setChapters([]);
-      setTotalChapters('');
-      setLastSaved(null);
-      setIsDirty(false);
-      setIsLoading(false);
-    }, 400);
+    // 2. Query Postgres database via backend API
+    const params = new URLSearchParams({
+      batch_id: selectedBatch,
+      batch_name: selectedBatchName || '',
+      subject: selectedSubject,
+    });
 
-    return () => clearTimeout(timer);
-  }, [selectedBatch, selectedSubject, readyForChapters]);
+    apiRequest(`/api/teacher/syllabus?${params.toString()}`)
+      .then((data) => {
+        if (!isMounted) return;
+        if (data && Array.isArray(data.chapters) && data.chapters.length > 0) {
+          setChapters(data.chapters);
+          setTotalChapters(data.chapters.length);
+          setChapterInput(String(data.chapters.length));
+          setLastSaved(new Date().toISOString());
+          setIsDirty(false);
+
+          // Populate saved completed chapters from DB
+          const compSet = new Set();
+          data.chapters.forEach((c) => {
+            if (c.completed) {
+              if (c.id) compSet.add(String(c.id));
+              if (c.num) compSet.add(String(c.num));
+            }
+          });
+          setSavedCompletedIds(compSet);
+
+          // Update local cache
+          localStorage.setItem(key, JSON.stringify({
+            batch: selectedBatch,
+            batch_name: selectedBatchName,
+            subject: selectedSubject,
+            totalChapters: data.chapters.length,
+            lastSaved: new Date().toISOString(),
+            chapters: data.chapters
+          }));
+        } else if (data && Array.isArray(data.chapters) && data.chapters.length === 0) {
+          if (!savedRaw) {
+            setChapters([]);
+            setTotalChapters('');
+            setChapterInput('');
+            setLastSaved(null);
+            setSavedCompletedIds(new Set());
+          }
+        }
+      })
+      .catch((err) => {
+        console.warn('Backend syllabus load error (using cache):', err);
+      })
+      .finally(() => {
+        if (isMounted) setIsLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedBatch, selectedBatchName, selectedSubject, readyForChapters]);
 
   // Focus inline edit input
   useEffect(() => {
@@ -104,30 +201,40 @@ export function SyllabusSetup({ onBack }) {
   }, [editingId]);
 
   // Batch change
-  const handleBatchChange = (newBatch) => {
-    setSelectedBatch(newBatch);
-    setSelectedSubject('');
+  const handleBatchChange = (newBatchId) => {
+    setSelectedBatch(newBatchId);
+    const b = batchesList.find((x) => x.batch_id === newBatchId);
+    if (b && b.subjects && b.subjects.length > 0) {
+      const firstSubj = typeof b.subjects[0] === 'string' ? b.subjects[0] : b.subjects[0].name;
+      setSelectedSubject(firstSubj || '');
+    } else {
+      setSelectedSubject('');
+    }
     setTotalChapters('');
+    setChapterInput('');
     setChapters([]);
     setEditingId(null);
     setIsDirty(false);
+    setSavedCompletedIds(new Set());
   };
 
   // Subject change
   const handleSubjectChange = (newSubject) => {
     setSelectedSubject(newSubject);
     setTotalChapters('');
+    setChapterInput('');
     setChapters([]);
     setEditingId(null);
     setIsDirty(false);
+    setSavedCompletedIds(new Set());
   };
 
-  // Change total chapters from dropdown
-  const handleTotalChaptersSelect = (newCountVal) => {
-    const newCount = parseInt(newCountVal, 10);
-    if (isNaN(newCount) || newCount <= 0) return;
+  // Update total chapters
+  const updateChapterCount = (newCount) => {
+    if (isNaN(newCount) || newCount < 0) return;
 
-    setTotalChapters(newCount);
+    setTotalChapters(newCount > 0 ? newCount : '');
+    setChapterInput(newCount > 0 ? String(newCount) : '');
 
     setChapters((prev) => {
       const currentLen = prev.length;
@@ -152,7 +259,38 @@ export function SyllabusSetup({ onBack }) {
     });
 
     setIsDirty(true);
-    showToast(`Generated ${newCount} chapters for ${selectedSubject}`);
+    if (newCount > 0) {
+      showToast(`Set to ${newCount} chapter${newCount > 1 ? 's' : ''}`);
+    }
+  };
+
+  const handleChapterInputChange = (e) => {
+    const raw = e.target.value;
+    setChapterInput(raw);
+    if (raw === '') return;
+    const val = parseInt(raw, 10);
+    if (!isNaN(val) && val >= 0 && val <= 100) {
+      updateChapterCount(val);
+    }
+  };
+
+  const handleChapterInputBlur = () => {
+    if (!chapterInput.trim()) {
+      setChapterInput(chapters.length > 0 ? String(chapters.length) : '');
+      return;
+    }
+    const val = parseInt(chapterInput, 10);
+    if (!isNaN(val) && val >= 0) {
+      updateChapterCount(val);
+    } else {
+      setChapterInput(chapters.length > 0 ? String(chapters.length) : '');
+    }
+  };
+
+  const handleStep = (delta) => {
+    const current = chapters.length;
+    const next = Math.max(0, current + delta);
+    updateChapterCount(next);
   };
 
   // Start inline editing
@@ -181,12 +319,28 @@ export function SyllabusSetup({ onBack }) {
     setEditTitle('');
   };
 
-  // Toggle chapter completion
+  // Toggle chapter completion: can be toggled/deselected freely BEFORE save, locked AFTER save
   const handleToggleComplete = (chId) => {
-    setChapters((prev) =>
-      prev.map((c) => (c.id === chId ? { ...c, completed: !c.completed } : c))
-    );
+    const existing = chapters.find((c) => c.id === chId || String(c.num) === String(chId));
+    if (!existing) return;
+
+    // Once a chapter is saved as completed, it cannot be deselected
+    if (existing.completed && isChapterSavedCompleted(existing)) {
+      showToast('⚠️ Completed chapters cannot be unmarked after save.');
+      return;
+    }
+
+    const newStatus = !existing.completed;
+    const updated = chapters.map((c) => {
+      if (c.id === chId || String(c.num) === String(chId)) {
+        return { ...c, completed: newStatus };
+      }
+      return c;
+    });
+
+    setChapters(updated);
     setIsDirty(true);
+    showToast(newStatus ? '✓ Chapter marked complete (Save to finalize)' : 'Chapter unmarked as incomplete');
   };
 
   // Quick Add Chapter
@@ -201,40 +355,57 @@ export function SyllabusSetup({ onBack }) {
       };
       const updated = [...prev, newCh];
       setTotalChapters(updated.length);
+      setChapterInput(String(updated.length));
       return updated;
     });
     setIsDirty(true);
     showToast('Added 1 chapter');
   };
 
-  // Delete individual chapter
+  // Delete individual chapter (Prohibited if already saved completed or syllabus complete)
   const handleDeleteChapter = (chId) => {
+    if (isSyllabusComplete) {
+      showToast('⚠️ Completed syllabus cannot be deleted.');
+      return;
+    }
+    const target = chapters.find((c) => c.id === chId || String(c.num) === String(chId));
+    if (target && isChapterSavedCompleted(target)) {
+      showToast('⚠️ Completed chapters cannot be deleted once saved.');
+      return;
+    }
     setChapters((prev) => {
-      const filtered = prev.filter((c) => c.id !== chId);
+      const filtered = prev.filter((c) => c.id !== chId && String(c.num) !== String(chId));
       const renumbered = filtered.map((c, idx) => ({ ...c, num: idx + 1 }));
       setTotalChapters(renumbered.length);
+      setChapterInput(renumbered.length > 0 ? String(renumbered.length) : '');
       return renumbered;
     });
     setIsDirty(true);
+    showToast('Chapter removed');
   };
 
-  // Save permanently to localStorage
-  const handleSavePermanently = () => {
+  // Save permanently to database and localStorage
+  const handleSavePermanently = async () => {
     if (!selectedBatch || !selectedSubject) {
       showToast('Please select Batch and Subject first');
       return;
     }
     if (chapters.length === 0) {
-      showToast('Please select total chapters before saving');
+      showToast('Please enter chapters before saving');
       return;
     }
 
     const key = getStorageKey(selectedBatch, selectedSubject);
     const nowIso = new Date().toISOString();
+    const comp = chapters.filter((c) => c.completed).length;
+    const tot = chapters.length;
+    const pct = tot > 0 ? Math.round((comp / tot) * 100) : 0;
+
     const payload = {
       batch: selectedBatch,
+      batch_name: selectedBatchName,
       subject: selectedSubject,
-      totalChapters: chapters.length,
+      totalChapters: tot,
       lastSaved: nowIso,
       chapters,
     };
@@ -243,10 +414,48 @@ export function SyllabusSetup({ onBack }) {
       localStorage.setItem(key, JSON.stringify(payload));
       setLastSaved(nowIso);
       setIsDirty(false);
-      showToast(`Syllabus saved permanently for ${selectedSubject}!`);
+
+      // Lock all currently completed chapters permanently after save
+      setSavedCompletedIds((prev) => {
+        const nextSet = new Set(prev);
+        chapters.forEach((c) => {
+          if (c.completed) {
+            if (c.id) nextSet.add(String(c.id));
+            if (c.num) nextSet.add(String(c.num));
+          }
+        });
+        return nextSet;
+      });
+
+      // Dispatch real-time event for Dashboard reflection
+      window.dispatchEvent(new CustomEvent('digitute_syllabus_updated', {
+        detail: {
+          batch: selectedBatch,
+          batch_name: selectedBatchName,
+          subject: selectedSubject,
+          completed: comp,
+          total: tot,
+          pct,
+          chapters
+        }
+      }));
+
+      // Persist to PostgreSQL database
+      await apiRequest('/api/teacher/syllabus', {
+        method: 'POST',
+        body: JSON.stringify({
+          batch_id: selectedBatch,
+          batch_name: selectedBatchName,
+          subject: selectedSubject,
+          total_chapters: tot,
+          chapters
+        })
+      });
+
+      showToast(`✓ Syllabus saved to database for ${selectedSubject}!`);
     } catch (e) {
       console.error(e);
-      showToast('Error saving to local storage');
+      showToast('Saved locally (network error saving to DB)');
     }
   };
 
@@ -259,6 +468,17 @@ export function SyllabusSetup({ onBack }) {
       return null;
     }
   }, [lastSaved]);
+
+  // Computed syllabus completion stats
+  const completedCount = useMemo(() => chapters.filter((c) => c.completed).length, [chapters]);
+  const totalCount = chapters.length;
+  const progressPct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+
+  // Once syllabus is 100% complete, deletion is strictly prohibited
+  const isSyllabusComplete = totalCount > 0 && completedCount === totalCount;
+
+  // Once syllabus has been saved or has existing chapters in DB/storage, lock direct modification from top bar
+  const isChapterCountLocked = Boolean(readyForChapters && (lastSaved || (chapters.length > 0 && !isDirty)));
 
   return (
     <div className="ss-wrapper">
@@ -291,10 +511,16 @@ export function SyllabusSetup({ onBack }) {
               value={selectedBatch}
               onChange={(e) => handleBatchChange(e.target.value)}
             >
-              <option value="" disabled>— Choose a batch —</option>
-              {BATCHES.map((b) => (
-                <option key={b} value={b}>{b}</option>
-              ))}
+              {batchesList.length === 0 ? (
+                <option value="" disabled>{isLoadingBatches ? 'Loading batches...' : 'No batches assigned'}</option>
+              ) : (
+                <>
+                  <option value="" disabled>— Choose a batch —</option>
+                  {batchesList.map((b) => (
+                    <option key={b.batch_id} value={b.batch_id}>{b.batch_name}</option>
+                  ))}
+                </>
+              )}
             </select>
             <div className="ss-select-caret" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"
@@ -321,14 +547,20 @@ export function SyllabusSetup({ onBack }) {
               className="ss-native-select"
               value={selectedSubject}
               onChange={(e) => handleSubjectChange(e.target.value)}
-              disabled={!selectedBatch}
+              disabled={!selectedBatch || availableSubjects.length === 0}
             >
-              <option value="" disabled>
-                {selectedBatch ? '— Choose a subject —' : '— Select batch first —'}
-              </option>
-              {availableSubjects.map((s) => (
-                <option key={s} value={s}>{s}</option>
-              ))}
+              {availableSubjects.length === 0 ? (
+                <option value="" disabled>
+                  {selectedBatch ? '— No subjects available —' : '— Select batch first —'}
+                </option>
+              ) : (
+                <>
+                  <option value="" disabled>— Choose a subject —</option>
+                  {availableSubjects.map((s) => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </>
+              )}
             </select>
             <div className="ss-select-caret" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"
@@ -339,9 +571,9 @@ export function SyllabusSetup({ onBack }) {
 
         <div className="ss-selector-divider" aria-hidden="true" />
 
-        {/* Total Chapters */}
+        {/* Chapter Count */}
         <div className="ss-selector-item">
-          <label htmlFor="ss-chapters-select" className="ss-selector-label">
+          <label htmlFor="ss-chapters-input" className="ss-selector-label">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
               strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <line x1="8" y1="6" x2="21" y2="6" />
@@ -351,29 +583,61 @@ export function SyllabusSetup({ onBack }) {
               <line x1="3" y1="12" x2="3.01" y2="12" />
               <line x1="3" y1="18" x2="3.01" y2="18" />
             </svg>
-            <span>TOTAL CHAPTERS</span>
+            <span>CHAPTER</span>
           </label>
-          <div className="ss-select-dropdown-wrap">
-            <select
-              id="ss-chapters-select"
-              className="ss-native-select"
-              value={totalChapters}
-              onChange={(e) => handleTotalChaptersSelect(e.target.value)}
+          <div className={`ss-chapter-count-box ${!readyForChapters ? 'is-disabled' : ''} ${isChapterCountLocked ? 'is-locked' : ''}`}>
+            <span className="ss-chapter-static-label">Chapter</span>
+            <input
+              id="ss-chapters-input"
+              type="number"
+              min="0"
+              max="100"
+              className="ss-chapter-number-field"
+              value={chapterInput}
+              onChange={!isChapterCountLocked ? handleChapterInputChange : undefined}
+              onBlur={!isChapterCountLocked ? handleChapterInputBlur : undefined}
+              onKeyDown={(e) => {
+                if (!isChapterCountLocked && e.key === 'Enter') {
+                  e.preventDefault();
+                  handleChapterInputBlur();
+                }
+              }}
+              placeholder={!readyForChapters ? '—' : 'Enter count'}
               disabled={!readyForChapters}
-            >
-              <option value="" disabled>
-                {!readyForChapters ? '— Select subject first —' : '— Select chapters count —'}
-              </option>
-              {CHAPTER_COUNT_OPTIONS.map((count) => (
-                <option key={count} value={count}>
-                  {count} {count === 1 ? 'Chapter' : 'Chapters'}
-                </option>
-              ))}
-            </select>
-            <div className="ss-select-caret" aria-hidden="true">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"
-                strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
-            </div>
+              readOnly={isChapterCountLocked}
+              title={isChapterCountLocked ? "Initial chapter count is locked after save. Use '+ Add Another Chapter' below to add more." : undefined}
+            />
+            {isChapterCountLocked ? (
+              <span className="ss-locked-badge" title="Chapter count is locked. Add more chapters using '+ Add Another Chapter' below.">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                </svg>
+                <span>Locked</span>
+              </span>
+            ) : readyForChapters && (
+              <div className="ss-chapter-stepper">
+                <button
+                  type="button"
+                  className="ss-chapter-step-btn"
+                  onClick={() => handleStep(-1)}
+                  disabled={chapters.length === 0}
+                  title="Decrease chapter count"
+                  aria-label="Decrease chapter count"
+                >
+                  −
+                </button>
+                <button
+                  type="button"
+                  className="ss-chapter-step-btn"
+                  onClick={() => handleStep(1)}
+                  title="Increase chapter count"
+                  aria-label="Increase chapter count"
+                >
+                  +
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </section>
@@ -398,7 +662,7 @@ export function SyllabusSetup({ onBack }) {
           <div className="ss-prompt-hint">
             {!selectedBatch
               ? 'Choose your batch from the dropdown above to view or setup chapters'
-              : `${availableSubjects.length} subjects available for ${selectedBatch}`}
+              : `${availableSubjects.length} subjects available for ${selectedBatchName || 'this batch'}`}
           </div>
         </div>
       )}
@@ -421,7 +685,7 @@ export function SyllabusSetup({ onBack }) {
             How many chapters are in <em>{selectedSubject}</em>?
           </p>
           <div className="ss-prompt-hint">
-            Select the total chapters count from the dropdown above (e.g., 5, 8, 10, or 12 chapters).
+            Enter the number of chapters in the Chapter box above (e.g., 5, 8, 10, or 12).
           </div>
         </div>
       )}
@@ -444,6 +708,43 @@ export function SyllabusSetup({ onBack }) {
       {readyForChapters && !isLoading && chapters.length > 0 && (
         <div className="ss-content-section ss-animate-in">
 
+          {/* ── SYLLABUS PROGRESS CARD (Matches Dashboard) ── */}
+          <div className="dash-card syllabus-card ss-dash-progress-card" aria-label="Syllabus Progress Summary">
+            <div className="syllabus-top-row">
+              <div className="syllabus-title-wrap">
+                <div className="syllabus-circle-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="#1E293B" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="20" x2="18" y2="10" />
+                    <line x1="12" y1="20" x2="12" y2="4" />
+                    <line x1="6" y1="20" x2="6" y2="14" />
+                  </svg>
+                </div>
+                <h2 className="syllabus-card-heading">Syllabus Progress</h2>
+              </div>
+              <span className="syllabus-percent-badge">{progressPct}%</span>
+            </div>
+
+            <div
+              className="syllabus-track-bar"
+              role="progressbar"
+              aria-valuenow={progressPct}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-label={`Syllabus progress ${progressPct}%`}
+            >
+              <div className="syllabus-fill-pill" style={{ width: `${progressPct}%` }}>
+                <div className="syllabus-pill-glow" />
+              </div>
+            </div>
+
+            <div className="syllabus-bottom-meta">
+              <span className="syllabus-completion-text">
+                {completedCount} / {totalCount} Chapters Complete
+              </span>
+              <span className="syllabus-subject-chip">{selectedSubject}</span>
+            </div>
+          </div>
+
           {/* CHAPTERS LIST */}
           <div className="ss-chapters-list-wrap">
             <div className="ss-chapters-header">
@@ -456,7 +757,8 @@ export function SyllabusSetup({ onBack }) {
             <div className="ss-chapters-list">
               {chapters.map((ch, idx) => {
                 const isEditing = editingId === ch.id;
-                const isCompleted = ch.completed;
+                const isCompleted = Boolean(ch.completed);
+                const isSavedCompleted = isChapterSavedCompleted(ch);
 
                 return (
                   <div
@@ -546,11 +848,21 @@ export function SyllabusSetup({ onBack }) {
 
                     {/* Completion Checkbox on Far Right */}
                     <div className="ss-chapter-check-col">
-                      <label className="ss-custom-checkbox" title={isCompleted ? 'Mark as incomplete' : 'Mark as completed'}>
+                      <label
+                        className={`ss-custom-checkbox ${isSavedCompleted ? 'is-completed-locked' : ''}`}
+                        title={
+                          isSavedCompleted
+                            ? 'Completed chapter (saved, cannot be unmarked)'
+                            : isCompleted
+                            ? 'Marked complete (Click to unmark)'
+                            : 'Mark as completed'
+                        }
+                      >
                         <input
                           type="checkbox"
                           checked={isCompleted}
-                          onChange={() => handleToggleComplete(ch.id)}
+                          disabled={isSavedCompleted}
+                          onChange={() => !isSavedCompleted && handleToggleComplete(ch.id)}
                         />
                         <span className="ss-checkbox-checkmark">
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"
@@ -560,20 +872,34 @@ export function SyllabusSetup({ onBack }) {
                         </span>
                       </label>
 
-                      {/* Delete chapter option */}
-                      <button
-                        type="button"
-                        className="ss-delete-ch-btn"
-                        onClick={() => handleDeleteChapter(ch.id)}
-                        title="Remove chapter"
-                        aria-label={`Remove ${ch.title}`}
-                      >
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-                          strokeLinecap="round" strokeLinejoin="round">
-                          <line x1="18" y1="6" x2="6" y2="18" />
-                          <line x1="6" y1="6" x2="18" y2="18" />
-                        </svg>
-                      </button>
+                      {/* Delete chapter option - Strictly prohibited if saved completed or if syllabus is 100% complete */}
+                      {!isSavedCompleted && !isSyllabusComplete ? (
+                        <button
+                          type="button"
+                          className="ss-delete-ch-btn"
+                          onClick={() => handleDeleteChapter(ch.id)}
+                          title="Remove chapter"
+                          aria-label={`Remove ${ch.title}`}
+                        >
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                            strokeLinecap="round" strokeLinejoin="round">
+                            <line x1="18" y1="6" x2="6" y2="18" />
+                            <line x1="6" y1="6" x2="18" y2="18" />
+                          </svg>
+                        </button>
+                      ) : (
+                        <span
+                          className="ss-delete-disabled-lock"
+                          title={isSyllabusComplete ? 'Completed syllabus cannot be deleted.' : 'Completed chapters cannot be deleted once saved.'}
+                          aria-label="Delete locked"
+                        >
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"
+                            strokeLinecap="round" strokeLinejoin="round" style={{ width: 14, height: 14, color: '#94A3B8' }}>
+                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                          </svg>
+                        </span>
+                      )}
                     </div>
                   </div>
                 );

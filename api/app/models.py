@@ -285,3 +285,21 @@ class ExamCreate(BaseModel):
     total_marks: float
     exam_date: Optional[date] = None
     results: Optional[list[dict[str, Any]]] = []
+
+# ==============================================================================
+# 8. SYLLABUS & CHAPTER PROGRESS MODELS
+# ==============================================================================
+class SyllabusSaveRequest(BaseModel):
+    subject: str
+    batch_name: Optional[str] = None
+    batch_id: Optional[str] = None
+    total_chapters: Optional[int] = None
+    chapters: list[dict[str, Any]] = []
+
+class SyllabusToggleChapterRequest(BaseModel):
+    subject: str
+    chapter_id: str
+    completed: bool
+    batch_name: Optional[str] = None
+    batch_id: Optional[str] = None
+
