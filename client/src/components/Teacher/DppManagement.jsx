@@ -1,31 +1,19 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
-import {
-  BATCHES,
-  BATCH_SUBJECTS_MAP,
-  DEFAULT_SUBJECT_TOPICS,
-  getSavedDpps,
-  saveDpp,
-  deleteDpp,
-  getStudentsForCombo,
-} from '../../data/academicData';
-export function DppManagement({ onBack, initialBatch = '', initialSubject = '' }) {
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import { apiRequest, formatApiErrorMessage } from '../../api';
+
+
+
+export function DppManagement({ _onBack, initialBatch = '', initialSubject = '' }) {
   // Navigation tabs: 'create' | 'published'
   const [activeTab, setActiveTab] = useState('create');
 
   // Form selections
   const [selectedBatch, setSelectedBatch] = useState(initialBatch);
   const [selectedSubject, setSelectedSubject] = useState(initialSubject);
-  const [selectedTopic, setSelectedTopic] = useState('');
-  const [customTopic, setCustomTopic] = useState('');
+  const [batchesList, setBatchesList] = useState([]);
+  const [isLoadingBatches, setIsLoadingBatches] = useState(true);
+  const [batchesError, setBatchesError] = useState(null);
   const [dppTitle, setDppTitle] = useState('');
-  const [dueDate, setDueDate] = useState(() => {
-    // Default: 3 days from today
-    const d = new Date();
-    d.setDate(d.getDate() + 3);
-    return d.toISOString().split('T')[0];
-  });
-  const [totalQuestions, setTotalQuestions] = useState('');
-  const [instructions, setInstructions] = useState('');
 
   // Mode: 'file' (Upload Image/PDF) or 'typed' (Manual Typing)
   const [contentMode, setContentMode] = useState('file');
@@ -33,22 +21,21 @@ export function DppManagement({ onBack, initialBatch = '', initialSubject = '' }
   // File Upload State
   const [uploadedFile, setUploadedFile] = useState(null);
   const [fileDragActive, setFileDragActive] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef(null);
 
-  // Manual Typing State: list of questions
-  const [typedQuestions, setTypedQuestions] = useState([
-    { id: 'q-1', text: 'Explain the working principle and provide a neat diagram.', marks: '10' },
-    { id: 'q-2', text: 'Solve the given numerical problem and justify each step.', marks: '10' },
-  ]);
+  // Manual Typing State: single freeform text
+  const [typedContent, setTypedContent] = useState('');
 
-  // Preview & Modal States
+  // Modal States
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [showSuccessCard, setShowSuccessCard] = useState(false);
   const [lastPublishedDpp, setLastPublishedDpp] = useState(null);
-  const [showLivePreview, setShowLivePreview] = useState(false);
+  const [viewingQuestionsDpp, setViewingQuestionsDpp] = useState(null);
 
   // Published DPPs List
   const [publishedList, setPublishedList] = useState([]);
+  const [isLoadingPublished, setIsLoadingPublished] = useState(false);
   const [publishedFilterBatch, setPublishedFilterBatch] = useState('all');
   const [searchFilter, setSearchFilter] = useState('');
 
@@ -56,50 +43,120 @@ export function DppManagement({ onBack, initialBatch = '', initialSubject = '' }
   const [toastMessage, setToastMessage] = useState('');
   const toastTimerRef = useRef(null);
 
-  // Load published DPPs on mount
-  useEffect(() => {
-    setPublishedList(getSavedDpps());
-  }, []);
-
   const showToast = (msg) => {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     setToastMessage(msg);
     toastTimerRef.current = setTimeout(() => setToastMessage(''), 2800);
   };
 
-  // Subjects dynamic list
+  // Fetch published DPPs from backend API
+  const fetchPublishedDpps = useCallback(async () => {
+    setIsLoadingPublished(true);
+    try {
+      const data = await apiRequest('/api/teacher/dpps');
+      if (Array.isArray(data)) {
+        const mapped = data.map((d) => ({
+          id: d.id,
+          batch: d.batches?.name || d.batch_id,
+          batchId: d.batch_id,
+          subject: d.subject,
+          title: d.title,
+          contentType: d.content_type || (d.file_url ? 'FILE' : 'MANUAL'),
+          questions: d.questions,
+          submissionType: (d.content_type === 'MANUAL' || (!d.file_url && d.questions)) ? 'typed' : 'file',
+          fileName: d.file_url ? d.file_url.split('/').pop()?.replace(/^[a-f0-9]+_/, '') : 'In-App Questions',
+          fileUrl: d.file_url,
+          signedUrl: d.signed_url,
+          status: 'Published',
+          publishedAt: d.created_at,
+        }));
+        setPublishedList(mapped);
+      } else {
+        setPublishedList([]);
+      }
+    } catch (err) {
+      console.warn('Could not load published DPPs from server:', err);
+      setPublishedList([]);
+    } finally {
+      setIsLoadingPublished(false);
+    }
+  }, []);
+
+  // Fetch teacher's assigned batches & subjects on mount (reuses Study Materials pattern)
+  useEffect(() => {
+    let isMounted = true;
+
+    apiRequest('/api/teacher/my-batches')
+      .then((data) => {
+        if (!isMounted) return;
+        if (Array.isArray(data)) {
+          setBatchesList(data);
+          if (initialBatch) {
+            const matched = data.find(
+              (b) => b.batch_id === initialBatch || b.batch_name === initialBatch
+            );
+            if (matched) {
+              setSelectedBatch(matched.batch_id);
+              if (initialSubject) {
+                const subMatch = matched.subjects?.find(
+                  (s) => (typeof s === 'string' ? s : s.name) === initialSubject
+                );
+                if (subMatch) {
+                  setSelectedSubject(typeof subMatch === 'string' ? subMatch : subMatch.name);
+                }
+              }
+            }
+          }
+        } else {
+          setBatchesList([]);
+        }
+      })
+      .catch((err) => {
+        if (!isMounted) return;
+        console.error('Failed to load teacher batches for DPP:', err);
+        setBatchesError(err.message || 'Failed to load assigned batches');
+        showToast('⚠️ Could not load assigned batches from server.');
+      })
+      .finally(() => {
+        if (isMounted) {
+          setIsLoadingBatches(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [initialBatch, initialSubject]);
+
+  useEffect(() => {
+    fetchPublishedDpps();
+  }, [fetchPublishedDpps]);
+
+  // Current batch object & display name
+  const currentBatchObj = useMemo(() => {
+    return batchesList.find(
+      (b) => b.batch_id === selectedBatch || b.batch_name === selectedBatch
+    );
+  }, [batchesList, selectedBatch]);
+  const selectedBatchName = currentBatchObj?.batch_name || selectedBatch;
+
+  // Subjects dynamic list derived from assigned batches
   const availableSubjects = useMemo(() => {
-    return selectedBatch ? (BATCH_SUBJECTS_MAP[selectedBatch] || []) : [];
-  }, [selectedBatch]);
-
-  // Suggested topics dynamic list
-  const suggestedTopics = useMemo(() => {
-    return selectedSubject ? (DEFAULT_SUBJECT_TOPICS[selectedSubject] || []) : [];
-  }, [selectedSubject]);
-
-  // Target students count
-  const targetStudentsCount = useMemo(() => {
-    if (!selectedBatch || !selectedSubject) return 0;
-    return getStudentsForCombo(selectedBatch, selectedSubject).length;
-  }, [selectedBatch, selectedSubject]);
-
-  // Effective topic string
-  const effectiveTopic = selectedTopic.trim();
+    if (!currentBatchObj || !currentBatchObj.subjects) return [];
+    return currentBatchObj.subjects
+      .map((s) => (typeof s === 'string' ? s : s?.name || ''))
+      .filter(Boolean);
+  }, [currentBatchObj]);
 
   // Handle batch change
-  const handleBatchChange = (batch) => {
-    setSelectedBatch(batch);
+  const handleBatchChange = (batchId) => {
+    setSelectedBatch(batchId);
     setSelectedSubject('');
-    setSelectedTopic('');
-    setCustomTopic('');
   };
 
   // Handle subject change
   const handleSubjectChange = (subject) => {
     setSelectedSubject(subject);
-    setSelectedTopic('');
-    setCustomTopic('');
-    // Auto generate suggested DPP title
     if (subject) {
       setDppTitle(`DPP — ${subject} Practice`);
     }
@@ -113,14 +170,12 @@ export function DppManagement({ onBack, initialBatch = '', initialSubject = '' }
   };
 
   const processSelectedFile = (file) => {
-    // Validate file type
     const validTypes = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
     if (!validTypes.includes(file.type)) {
       showToast('⚠️ Please upload a valid PDF or Image file (PNG, JPG, WEBP).');
       return;
     }
 
-    // Size limit 15MB
     if (file.size > 15 * 1024 * 1024) {
       showToast('⚠️ File size exceeds 15MB limit.');
       return;
@@ -160,67 +215,6 @@ export function DppManagement({ onBack, initialBatch = '', initialSubject = '' }
     }
   };
 
-  // Insert mock sample file for fast teacher workflow testing
-  const handleInsertSampleFile = () => {
-    setUploadedFile({
-      name: `${(selectedSubject || 'Subject').replace(/\s+/g, '_')}_DPP_Problems.pdf`,
-      size: '640 KB',
-      type: 'application/pdf',
-      rawFile: null,
-      previewUrl: null,
-      uploadedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    });
-    showToast('✓ Sample PDF attached for testing');
-  };
-
-  // Sync total questions with typed questions format
-  const handleTotalQuestionsChange = (val) => {
-    setTotalQuestions(val);
-    const count = parseInt(val, 10);
-    if (!isNaN(count) && count > 0 && count <= 100) {
-      setTypedQuestions((prev) => {
-        if (prev.length === count) return prev;
-        if (prev.length < count) {
-          const added = Array.from({ length: count - prev.length }, (_, i) => ({
-            id: `q-${Date.now()}-${prev.length + i + 1}`,
-            text: '',
-          }));
-          return [...prev, ...added];
-        }
-        return prev.slice(0, count);
-      });
-    } else if (val === '') {
-      setTypedQuestions([]);
-    }
-  };
-
-  // Manual questions management
-  const handleAddQuestion = () => {
-    const nextCount = typedQuestions.length + 1;
-    setTotalQuestions(String(nextCount));
-    setTypedQuestions((prev) => [
-      ...prev,
-      {
-        id: `q-${Date.now()}-${nextCount}`,
-        text: '',
-      },
-    ]);
-  };
-
-  const handleRemoveQuestion = (id) => {
-    setTypedQuestions((prev) => {
-      const filtered = prev.filter((q) => q.id !== id);
-      setTotalQuestions(filtered.length > 0 ? String(filtered.length) : '');
-      return filtered;
-    });
-  };
-
-  const handleQuestionTextChange = (id, text) => {
-    setTypedQuestions((prev) =>
-      prev.map((q) => (q.id === id ? { ...q, text } : q))
-    );
-  };
-
   // Form validation before initiating submit
   const validateForm = () => {
     if (!selectedBatch) {
@@ -231,24 +225,15 @@ export function DppManagement({ onBack, initialBatch = '', initialSubject = '' }
       showToast('⚠️ Please select a Subject.');
       return false;
     }
-    if (!effectiveTopic) {
-      showToast('⚠️ Please enter a Topic.');
-      return false;
-    }
-    if (!totalQuestions || parseInt(totalQuestions, 10) <= 0) {
-      showToast('⚠️ Please enter Total Questions.');
-      return false;
-    }
 
     if (contentMode === 'file') {
-      if (!uploadedFile) {
+      if (!uploadedFile || !uploadedFile.rawFile) {
         showToast('⚠️ Please upload a PDF / Image or switch to Manual Typing.');
         return false;
       }
     } else {
-      const emptyQuestions = typedQuestions.filter((q) => !q.text.trim());
-      if (typedQuestions.length === 0 || emptyQuestions.length > 0) {
-        showToast('⚠️ Please fill out all question texts before submitting.');
+      if (!typedContent.trim()) {
+        showToast('⚠️ Please type or paste the questions before submitting.');
         return false;
       }
     }
@@ -258,87 +243,177 @@ export function DppManagement({ onBack, initialBatch = '', initialSubject = '' }
 
   // Initiate submit
   const handleInitiateSubmit = () => {
+    if (isUploading) return;
     if (validateForm()) {
       setShowConfirmModal(true);
     }
   };
 
-  // Confirm publish
-  const handleConfirmPublish = () => {
-    setShowConfirmModal(false);
+  // Confirm publish with real API call
+  const handleConfirmPublish = async () => {
+    if (isUploading) return;
 
-    const newRecord = {
-      id: `dpp-${Date.now()}`,
-      batch: selectedBatch,
-      subject: selectedSubject,
-      topic: effectiveTopic,
-      title: dppTitle.trim() || `DPP — ${effectiveTopic}`,
-      dueDate: dueDate,
-      totalQuestions: parseInt(totalQuestions, 10) || (contentMode === 'file' ? 1 : typedQuestions.length),
-      questionsCount: parseInt(totalQuestions, 10) || (contentMode === 'file' ? 1 : typedQuestions.length),
-      submissionType: contentMode,
-      fileName: contentMode === 'file' ? uploadedFile?.name : null,
-      fileSize: contentMode === 'file' ? uploadedFile?.size : null,
-      fileType: contentMode === 'file' ? uploadedFile?.type : null,
-      typedQuestions: contentMode === 'typed' ? typedQuestions : null,
-      instructions: instructions.trim() || null,
-      submittedCount: 0,
-      totalStudents: targetStudentsCount || 15,
-      status: 'Published',
-      publishedAt: new Date().toISOString(),
-    };
+    const finalTitle = dppTitle.trim() || `DPP — ${selectedSubject} Practice`;
+    setIsUploading(true);
 
-    const updated = saveDpp(newRecord);
-    setPublishedList(updated);
-    setLastPublishedDpp(newRecord);
-    setShowSuccessCard(true);
-    showToast('🎉 DPP Published Successfully to Students!');
+    try {
+      let result;
+      if (contentMode === 'file') {
+        if (!uploadedFile || !uploadedFile.rawFile) {
+          showToast('⚠️ Please attach a real PDF or Image file to publish.');
+          setShowConfirmModal(false);
+          setIsUploading(false);
+          return;
+        }
+        const formData = new FormData();
+        formData.append('batch_id', selectedBatch);
+        formData.append('subject', selectedSubject);
+        formData.append('title', finalTitle);
+        formData.append('file', uploadedFile.rawFile);
+
+        result = await apiRequest('/api/teacher/dpps', {
+          method: 'POST',
+          body: formData,
+        });
+      } else {
+        if (!typedContent.trim()) {
+          showToast('⚠️ Please enter questions before publishing.');
+          setShowConfirmModal(false);
+          setIsUploading(false);
+          return;
+        }
+        const rawText = typedContent.trim();
+        const items = rawText
+          .split(/\n{2,}/)
+          .map((q) => q.trim())
+          .filter(Boolean);
+
+        const questionsPayload = {
+          raw_text: rawText,
+          items: items.length > 0 ? items : [rawText],
+        };
+
+        result = await apiRequest('/api/teacher/dpps/manual', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            batch_id: selectedBatch,
+            subject: selectedSubject,
+            title: finalTitle,
+            questions: questionsPayload,
+          }),
+        });
+      }
+
+      const publishedRecord = {
+        id: result.id,
+        batch: selectedBatchName,
+        batchId: selectedBatch,
+        subject: selectedSubject,
+        title: result.title || finalTitle,
+        contentType: result.content_type || (contentMode === 'typed' ? 'MANUAL' : 'FILE'),
+        questions: result.questions,
+        submissionType: contentMode,
+        fileName: contentMode === 'file' ? (uploadedFile?.name || 'Worksheet') : 'In-App Questions',
+        fileSize: contentMode === 'file' ? (uploadedFile?.size || 'Attached File') : 'JSON Questions',
+        status: 'Published',
+        publishedAt: result.created_at || new Date().toISOString(),
+        fileUrl: result.file_url,
+        signedUrl: result.signed_url,
+      };
+
+      setLastPublishedDpp(publishedRecord);
+      setShowSuccessCard(true);
+      setShowConfirmModal(false);
+      setUploadedFile(null);
+      setTypedContent('');
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      showToast('🎉 DPP Published Successfully to Students!');
+
+      // Refresh published list from backend
+      await fetchPublishedDpps();
+    } catch (err) {
+      console.error('Failed to publish DPP:', err);
+      const displayMsg = formatApiErrorMessage(err, err?.status);
+      showToast(`❌ Failed to publish DPP: ${displayMsg}`);
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   // Reset create form for another DPP
   const handleResetForm = () => {
     setSelectedBatch('');
     setSelectedSubject('');
-    setSelectedTopic('');
-    setCustomTopic('');
     setDppTitle('');
     setUploadedFile(null);
-    setTypedQuestions([
-      { id: 'q-1', text: '', marks: '10' },
-      { id: 'q-2', text: '', marks: '10' },
-    ]);
-    setInstructions('');
+    setTypedContent('');
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
     setShowSuccessCard(false);
     setLastPublishedDpp(null);
   };
 
-  // Delete a published DPP
-  const handleDeletePublished = (id) => {
-    if (window.confirm('Are you sure you want to delete this published DPP?')) {
-      const updated = deleteDpp(id);
-      setPublishedList(updated);
-      showToast('DPP deleted.');
+  // Delete a published DPP via backend API
+  const handleDeletePublished = async (id, title) => {
+    if (!window.confirm(`Are you sure you want to delete "${title || 'this DPP'}"?`)) {
+      return;
+    }
+    try {
+      await apiRequest(`/api/teacher/dpps/${id}`, { method: 'DELETE' });
+      setPublishedList((prev) => prev.filter((d) => d.id !== id));
+      showToast('✓ DPP deleted successfully.');
+    } catch (err) {
+      console.error('Failed to delete DPP:', err);
+      showToast(`❌ Delete failed: ${formatApiErrorMessage(err, err?.status)}`);
+    }
+  };
+
+  // View / open a published DPP file or manual questions
+  const handleViewDpp = async (dpp) => {
+    if (dpp.contentType === 'MANUAL' || (!dpp.fileUrl && dpp.questions)) {
+      setViewingQuestionsDpp(dpp);
+      return;
+    }
+
+    try {
+      let url = dpp.signedUrl;
+      if (!url) {
+        const res = await apiRequest(`/api/teacher/dpps/${dpp.id}/access-url`);
+        url = res.signed_url;
+      }
+      if (url) {
+        window.open(url, '_blank', 'noopener,noreferrer');
+      } else {
+        showToast('⚠️ Unable to generate secure view link.');
+      }
+    } catch (err) {
+      console.error('Failed to view DPP:', err);
+      showToast(`❌ View error: ${formatApiErrorMessage(err, err?.status)}`);
     }
   };
 
   // Filtered published list
   const filteredPublishedDpps = useMemo(() => {
     return publishedList.filter((dpp) => {
-      const matchBatch = publishedFilterBatch === 'all' || dpp.batch === publishedFilterBatch;
+      const matchBatch =
+        publishedFilterBatch === 'all' ||
+        dpp.batch === publishedFilterBatch ||
+        dpp.batchId === publishedFilterBatch;
       const q = searchFilter.toLowerCase().trim();
       const matchSearch =
         !q ||
-        dpp.title.toLowerCase().includes(q) ||
-        dpp.subject.toLowerCase().includes(q) ||
-        dpp.topic.toLowerCase().includes(q);
+        dpp.title?.toLowerCase().includes(q) ||
+        dpp.subject?.toLowerCase().includes(q);
       return matchBatch && matchSearch;
     });
   }, [publishedList, publishedFilterBatch, searchFilter]);
 
   return (
     <div className="dpp-container">
-
-
       {/* ── TOP VIEW TAB SWITCHER ── */}
       <div className="dpp-main-tab-bar" role="tablist">
         <button
@@ -382,14 +457,11 @@ export function DppManagement({ onBack, initialBatch = '', initialSubject = '' }
               <div className="dpp-success-info">
                 <h3 className="dpp-success-title">DPP Published Successfully!</h3>
                 <p className="dpp-success-desc">
-                  <strong>{lastPublishedDpp.title}</strong> has been sent to all{' '}
-                  <strong>{lastPublishedDpp.totalStudents} students</strong> of{' '}
+                  <strong>{lastPublishedDpp.title}</strong> has been published for{' '}
                   <strong>{lastPublishedDpp.batch}</strong>.
                 </p>
                 <div className="dpp-success-meta-chips">
                   <span className="dpp-schip">Subject: {lastPublishedDpp.subject}</span>
-                  <span className="dpp-schip">Due: {lastPublishedDpp.dueDate}</span>
-                  <span className="dpp-schip">Questions: {lastPublishedDpp.totalQuestions || lastPublishedDpp.questionsCount || 1}</span>
                 </div>
               </div>
               <div className="dpp-success-actions">
@@ -411,13 +483,13 @@ export function DppManagement({ onBack, initialBatch = '', initialSubject = '' }
             </div>
           )}
 
-          {/* STEP 1: BATCH, SUBJECT & TOPIC CARD */}
+          {/* STEP 1: BATCH & SUBJECT */}
           <section className="dpp-card dpp-config-card">
             <div className="dpp-card-header">
               <span className="dpp-step-badge">STEP 1</span>
               <div>
-                <h2 className="dpp-card-title">Select Batch, Subject &amp; Topic</h2>
-                <p className="dpp-card-desc">Choose the target batch, corresponding subject and topic for this problem sheet.</p>
+                <h2 className="dpp-card-title">Select Batch &amp; Subject</h2>
+                <p className="dpp-card-desc">Choose the target batch and subject for this DPP.</p>
               </div>
             </div>
 
@@ -434,11 +506,24 @@ export function DppManagement({ onBack, initialBatch = '', initialSubject = '' }
                     className="dpp-select-input"
                     value={selectedBatch}
                     onChange={(e) => handleBatchChange(e.target.value)}
+                    disabled={isLoadingBatches || (!batchesError && batchesList.length === 0)}
                   >
-                    <option value="" disabled>— Select Batch —</option>
-                    {BATCHES.map((b) => (
-                      <option key={b} value={b}>{b}</option>
-                    ))}
+                    {isLoadingBatches ? (
+                      <option value="" disabled>Loading assigned batches...</option>
+                    ) : batchesError ? (
+                      <option value="" disabled>Error loading batches</option>
+                    ) : batchesList.length === 0 ? (
+                      <option value="" disabled>No batches assigned</option>
+                    ) : (
+                      <>
+                        <option value="" disabled>— Select Batch —</option>
+                        {batchesList.map((b) => (
+                          <option key={b.batch_id} value={b.batch_id}>
+                            {b.batch_name}
+                          </option>
+                        ))}
+                      </>
+                    )}
                   </select>
                   <div className="dpp-chevron-arrow">▼</div>
                 </div>
@@ -456,44 +541,29 @@ export function DppManagement({ onBack, initialBatch = '', initialSubject = '' }
                     className="dpp-select-input"
                     value={selectedSubject}
                     onChange={(e) => handleSubjectChange(e.target.value)}
-                    disabled={!selectedBatch}
+                    disabled={isLoadingBatches || !selectedBatch || availableSubjects.length === 0}
                   >
-                    <option value="" disabled>
-                      {selectedBatch ? '— Select Subject —' : '— Select Batch First —'}
-                    </option>
-                    {availableSubjects.map((s) => (
-                      <option key={s} value={s}>{s}</option>
-                    ))}
+                    {isLoadingBatches ? (
+                      <option value="" disabled>Loading...</option>
+                    ) : !selectedBatch ? (
+                      <option value="" disabled>— Select Batch First —</option>
+                    ) : availableSubjects.length === 0 ? (
+                      <option value="" disabled>No subjects assigned for this batch</option>
+                    ) : (
+                      <>
+                        <option value="" disabled>— Select Subject —</option>
+                        {availableSubjects.map((s, idx) => (
+                          <option key={idx} value={s}>
+                            {s}
+                          </option>
+                        ))}
+                      </>
+                    )}
                   </select>
                   <div className="dpp-chevron-arrow">▼</div>
                 </div>
               </div>
 
-              {/* Topic Input */}
-              <div className="dpp-form-group">
-                <label className="dpp-form-label" htmlFor="dpp-topic-input">
-                  <span>Topic</span>
-                  <span className="dpp-required">*</span>
-                </label>
-                <input
-                  id="dpp-topic-input"
-                  type="text"
-                  className="dpp-text-input"
-                  placeholder="Type topics..."
-                  value={selectedTopic}
-                  onChange={(e) => {
-                    setSelectedTopic(e.target.value);
-                    if (e.target.value && !dppTitle) {
-                      setDppTitle(`DPP — ${e.target.value}`);
-                    }
-                  }}
-                  disabled={!selectedSubject}
-                />
-              </div>
-            </div>
-
-            {/* DPP Metadata sub-grid */}
-            <div className="dpp-grid-3 dpp-meta-subgrid">
               {/* DPP Title */}
               <div className="dpp-form-group">
                 <label className="dpp-form-label" htmlFor="dpp-title-input">
@@ -508,50 +578,7 @@ export function DppManagement({ onBack, initialBatch = '', initialSubject = '' }
                   onChange={(e) => setDppTitle(e.target.value)}
                 />
               </div>
-
-              {/* Due Date */}
-              <div className="dpp-form-group">
-                <label className="dpp-form-label" htmlFor="dpp-due-date">
-                  <span>Submission Due Date</span>
-                </label>
-                <input
-                  id="dpp-due-date"
-                  type="date"
-                  className="dpp-text-input"
-                  value={dueDate}
-                  onChange={(e) => setDueDate(e.target.value)}
-                />
-              </div>
-
-              {/* Total Questions */}
-              <div className="dpp-form-group">
-                <label className="dpp-form-label" htmlFor="dpp-questions-count">
-                  <span>Total Questions</span>
-                  <span className="dpp-required">*</span>
-                </label>
-                <input
-                  id="dpp-questions-count"
-                  type="number"
-                  min="1"
-                  max="100"
-                  className="dpp-text-input"
-                  placeholder="Enter number of questions"
-                  value={totalQuestions}
-                  onChange={(e) => handleTotalQuestionsChange(e.target.value)}
-                />
-              </div>
             </div>
-
-            {/* Target students badge info */}
-            {selectedBatch && selectedSubject && (
-              <div className="dpp-target-info-strip">
-                <span className="dpp-info-icon">👥</span>
-                <span>
-                  Will be distributed to <strong>{targetStudentsCount} students</strong> in{' '}
-                  <strong>{selectedBatch}</strong>.
-                </span>
-              </div>
-            )}
           </section>
 
           {/* STEP 2: CONTENT CREATION MODE (UPLOAD OR TYPING) */}
@@ -628,19 +655,6 @@ export function DppManagement({ onBack, initialBatch = '', initialSubject = '' }
                       <h3 className="dpp-dropzone-title">Click to upload or drag and drop</h3>
                       <p className="dpp-dropzone-subtitle">PDF documents or PNG/JPG images (Max 15 MB)</p>
                     </div>
-
-                    <div className="dpp-dropzone-footer">
-                      <button
-                        type="button"
-                        className="dpp-sample-attach-btn"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleInsertSampleFile();
-                        }}
-                      >
-                        ⚡ Attach Sample PDF
-                      </button>
-                    </div>
                   </div>
                 ) : (
                   <div className="dpp-file-preview-card">
@@ -686,132 +700,17 @@ export function DppManagement({ onBack, initialBatch = '', initialSubject = '' }
             {/* ── MODE B: MANUAL TYPING ── */}
             {contentMode === 'typed' && (
               <div className="dpp-typing-area">
-                <div className="dpp-questions-header">
-                  <span className="dpp-qcount-text">
-                    {typedQuestions.length} Question{typedQuestions.length > 1 ? 's' : ''} added
-                  </span>
-                  <button
-                    type="button"
-                    className="dpp-add-question-btn"
-                    onClick={handleAddQuestion}
-                  >
-                    + Add Question
-                  </button>
-                </div>
-
-                <div className="dpp-questions-list">
-                  {typedQuestions.length === 0 ? (
-                    <div className="dpp-empty-questions-prompt" style={{ padding: '28px 16px', textAlign: 'center', background: '#F8FAFC', borderRadius: '14px', border: '1.5px dashed #CBD5E1', color: '#64748B', fontSize: '0.88rem' }}>
-                      <p>Please enter <strong>Total Questions</strong> above to generate question format.</p>
-                    </div>
-                  ) : (
-                    typedQuestions.map((q, idx) => (
-                      <div key={q.id} className="dpp-question-item-card">
-                        <div className="dpp-qitem-top">
-                          <span className="dpp-qnum-tag">Question {idx + 1}</span>
-                          <button
-                            type="button"
-                            className="dpp-remove-q-btn"
-                            onClick={() => handleRemoveQuestion(q.id)}
-                            title="Remove question"
-                            aria-label={`Remove Question ${idx + 1}`}
-                          >
-                            ✕
-                          </button>
-                        </div>
-
-                        <textarea
-                          className="dpp-qtextarea"
-                          rows="3"
-                          placeholder={`Type Question ${idx + 1} description, problem statement, or instructions here...`}
-                          value={q.text}
-                          onChange={(e) => handleQuestionTextChange(q.id, e.target.value)}
-                        />
-                      </div>
-                    ))
-                  )}
-                </div>
+                <textarea
+                  className="dpp-qtextarea"
+                  rows="8"
+                  placeholder="Type or paste all your questions here...&#10;&#10;Example:&#10;Q1. Explain the OSI model and describe each layer.&#10;Q2. Solve the given numerical problem and justify each step."
+                  value={typedContent}
+                  onChange={(e) => setTypedContent(e.target.value)}
+                  style={{ minHeight: '180px', resize: 'vertical' }}
+                />
               </div>
             )}
-
-            {/* Optional Instructions */}
-            <div className="dpp-form-group dpp-instructions-group">
-              <label className="dpp-form-label" htmlFor="dpp-instructions-textarea">
-                <span>General Notes / Instructions for Students (Optional)</span>
-              </label>
-              <textarea
-                id="dpp-instructions-textarea"
-                className="dpp-text-input dpp-instructions-input"
-                rows="2"
-                placeholder="e.g. Write solutions in clear handwriting and submit before 5:00 PM."
-                value={instructions}
-                onChange={(e) => setInstructions(e.target.value)}
-              />
-            </div>
           </section>
-
-          {/* STEP 3: LIVE PREVIEW ACCORDION */}
-          <div className="dpp-preview-accordion-card">
-            <button
-              type="button"
-              className="dpp-preview-toggle-bar"
-              onClick={() => setShowLivePreview(!showLivePreview)}
-            >
-              <div className="dpp-preview-bar-left">
-                <span className="dpp-preview-icon">👁️</span>
-                <span className="dpp-preview-bar-title">Student Sheet Preview</span>
-                <span className="dpp-preview-bar-sub">Click to {showLivePreview ? 'hide' : 'expand'}</span>
-              </div>
-              <span className="dpp-accordion-arrow">{showLivePreview ? '▲' : '▼'}</span>
-            </button>
-
-            {showLivePreview && (
-              <div className="dpp-live-preview-content">
-                <div className="dpp-student-preview-sheet">
-                  <div className="dpp-sheet-top-header">
-                    <div>
-                      <span className="dpp-sheet-batch-tag">{selectedBatch || 'Batch Name'}</span>
-                      <h3 className="dpp-sheet-title">{dppTitle || 'Daily Practice Problem'}</h3>
-                      <span className="dpp-sheet-topic">{effectiveTopic || 'Topic Name'}</span>
-                    </div>
-                    <div className="dpp-sheet-stats">
-                      <span className="dpp-sheet-stat">Questions: {totalQuestions || (contentMode === "file" ? 1 : typedQuestions.length)}</span>
-                      <span className="dpp-sheet-stat">Due: {dueDate}</span>
-                    </div>
-                  </div>
-
-                  <div className="dpp-sheet-body">
-                    {contentMode === 'file' ? (
-                      <div className="dpp-sheet-file-wrap">
-                        {uploadedFile ? (
-                          <div className="dpp-preview-attached-file">
-                            <span>📎 {uploadedFile.name} ({uploadedFile.size})</span>
-                          </div>
-                        ) : (
-                          <p className="dpp-empty-preview-note">No file attached yet.</p>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="dpp-sheet-questions-preview">
-                        {typedQuestions.map((q, i) => (
-                          <div key={q.id} className="dpp-preview-q-row">
-                            <strong>Q{i + 1}. ({q.marks} Marks)</strong>
-                            <p>{q.text || 'Question text preview...'}</p>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {instructions && (
-                      <div className="dpp-sheet-notes">
-                        <strong>Instructions:</strong> {instructions}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
 
           {/* ACTION BUTTONS (SUBMIT & CLEAR) */}
           <div className="dpp-bottom-action-bar">
@@ -819,6 +718,7 @@ export function DppManagement({ onBack, initialBatch = '', initialSubject = '' }
               type="button"
               className="dpp-btn-secondary"
               onClick={handleResetForm}
+              disabled={isUploading}
             >
               Clear Form
             </button>
@@ -827,8 +727,9 @@ export function DppManagement({ onBack, initialBatch = '', initialSubject = '' }
               type="button"
               className="dpp-btn-submit"
               onClick={handleInitiateSubmit}
+              disabled={isUploading}
             >
-              <span>Submit &amp; Publish DPP</span>
+              <span>{isUploading ? 'Publishing DPP...' : 'Submit & Publish DPP'}</span>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="5" y1="12" x2="19" y2="12" />
                 <polyline points="12 5 19 12 12 19" />
@@ -853,14 +754,14 @@ export function DppManagement({ onBack, initialBatch = '', initialSubject = '' }
               >
                 All Batches ({publishedList.length})
               </button>
-              {BATCHES.map((b) => (
+              {batchesList.map((b) => (
                 <button
-                  key={b}
+                  key={b.batch_id}
                   type="button"
-                  className={`dpp-fpill ${publishedFilterBatch === b ? 'is-active' : ''}`}
-                  onClick={() => setPublishedFilterBatch(b)}
+                  className={`dpp-fpill ${publishedFilterBatch === b.batch_name ? 'is-active' : ''}`}
+                  onClick={() => setPublishedFilterBatch(b.batch_name)}
                 >
-                  {b}
+                  {b.batch_name}
                 </button>
               ))}
             </div>
@@ -877,68 +778,65 @@ export function DppManagement({ onBack, initialBatch = '', initialSubject = '' }
           </div>
 
           {/* DPP Cards Grid */}
-          <div className="dpp-published-grid">
-            {filteredPublishedDpps.map((dpp) => (
-              <div key={dpp.id} className="dpp-published-card">
-                <div className="dpp-pcard-top">
-                  <div className="dpp-pcard-tags">
-                    <span className="dpp-ptag-batch">{dpp.batch}</span>
-                    <span className="dpp-ptag-subject">{dpp.subject}</span>
+          {isLoadingPublished ? (
+            <div className="dpp-empty-state">
+              <p>Loading published DPPs...</p>
+            </div>
+          ) : (
+            <div className="dpp-published-grid">
+              {filteredPublishedDpps.map((dpp) => (
+                <div key={dpp.id} className="dpp-published-card">
+                  <div className="dpp-pcard-top">
+                    <div className="dpp-pcard-tags">
+                      <span className="dpp-ptag-batch">{dpp.batch}</span>
+                      <span className="dpp-ptag-subject">{dpp.subject}</span>
+                    </div>
+                    <span className="dpp-published-status">Published</span>
                   </div>
-                  <span className="dpp-published-status">Published</span>
+
+                  <h3 className="dpp-pcard-title">{dpp.title}</h3>
+
+                  <div className="dpp-pcard-meta-list">
+                    <div className="dpp-pmeta-item">
+                      <span className="dpp-pmeta-label">Format:</span>
+                      <span className="dpp-pmeta-val">
+                        {dpp.contentType === 'MANUAL'
+                          ? '✍️ In-App Questions (JSON)'
+                          : `📄 Document (${dpp.fileName || 'Attached'})`}
+                      </span>
+                    </div>
+                    <div className="dpp-pmeta-item">
+                      <span className="dpp-pmeta-label">Published:</span>
+                      <span className="dpp-pmeta-val">
+                        {dpp.publishedAt ? new Date(dpp.publishedAt).toLocaleDateString() : 'Recent'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="dpp-pcard-footer">
+                    <button
+                      type="button"
+                      className="dpp-pcard-del-btn"
+                      onClick={() => handleDeletePublished(dpp.id, dpp.title)}
+                      title="Delete DPP"
+                    >
+                      Delete
+                    </button>
+
+                    <button
+                      type="button"
+                      className="dpp-pcard-view-btn"
+                      onClick={() => handleViewDpp(dpp)}
+                    >
+                      {dpp.contentType === 'MANUAL' ? 'View Questions' : 'Open Document'}
+                    </button>
+                  </div>
                 </div>
+              ))}
+            </div>
+          )}
 
-                <h3 className="dpp-pcard-title">{dpp.title}</h3>
-                <span className="dpp-pcard-topic">Topic: {dpp.topic}</span>
-
-                <div className="dpp-pcard-meta-list">
-                  <div className="dpp-pmeta-item">
-                    <span className="dpp-pmeta-label">Due Date:</span>
-                    <span className="dpp-pmeta-val">{dpp.dueDate}</span>
-                  </div>
-                  <div className="dpp-pmeta-item">
-                    <span className="dpp-pmeta-label">Total Questions:</span>
-                    <span className="dpp-pmeta-val">{dpp.totalQuestions || dpp.questionsCount || 1} Questions</span>
-                  </div>
-                  <div className="dpp-pmeta-item">
-                    <span className="dpp-pmeta-label">Format:</span>
-                    <span className="dpp-pmeta-val">
-                      {dpp.submissionType === 'file' ? `PDF/Image (${dpp.fileName || 'Attached'})` : `${dpp.questionsCount || 2} Typed Questions`}
-                    </span>
-                  </div>
-                  <div className="dpp-pmeta-item">
-                    <span className="dpp-pmeta-label">Submissions:</span>
-                    <span className="dpp-pmeta-val green">
-                      {dpp.submittedCount} / {dpp.totalStudents} Submitted
-                    </span>
-                  </div>
-                </div>
-
-                <div className="dpp-pcard-footer">
-                  <button
-                    type="button"
-                    className="dpp-pcard-del-btn"
-                    onClick={() => handleDeletePublished(dpp.id)}
-                    title="Delete DPP"
-                  >
-                    Delete
-                  </button>
-
-                  <button
-                    type="button"
-                    className="dpp-pcard-view-btn"
-                    onClick={() => {
-                      showToast(`Viewing: ${dpp.title}`);
-                    }}
-                  >
-                    View Details
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {filteredPublishedDpps.length === 0 && (
+          {!isLoadingPublished && filteredPublishedDpps.length === 0 && (
             <div className="dpp-empty-state">
               <span className="dpp-empty-icon">📋</span>
               <h3>No DPPs Found</h3>
@@ -961,7 +859,7 @@ export function DppManagement({ onBack, initialBatch = '', initialSubject = '' }
       {showConfirmModal && (
         <div
           className="dpp-modal-overlay"
-          onClick={() => setShowConfirmModal(false)}
+          onClick={() => !isUploading && setShowConfirmModal(false)}
           role="dialog"
           aria-modal="true"
         >
@@ -985,8 +883,9 @@ export function DppManagement({ onBack, initialBatch = '', initialSubject = '' }
               <button
                 type="button"
                 className="dpp-modal-close-btn"
-                onClick={() => setShowConfirmModal(false)}
+                onClick={() => !isUploading && setShowConfirmModal(false)}
                 aria-label="Close modal"
+                disabled={isUploading}
               >
                 ✕
               </button>
@@ -1000,33 +899,21 @@ export function DppManagement({ onBack, initialBatch = '', initialSubject = '' }
               <div className="dpp-modal-summary-box">
                 <div className="dpp-msum-row">
                   <span>Batch:</span>
-                  <strong>{selectedBatch}</strong>
+                  <strong>{selectedBatchName}</strong>
                 </div>
                 <div className="dpp-msum-row">
                   <span>Subject:</span>
                   <strong>{selectedSubject}</strong>
                 </div>
                 <div className="dpp-msum-row">
-                  <span>Topic:</span>
-                  <strong>{effectiveTopic}</strong>
-                </div>
-                <div className="dpp-msum-row">
                   <span>Title:</span>
-                  <strong>{dppTitle || `DPP — ${effectiveTopic}`}</strong>
+                  <strong>{dppTitle || `DPP — ${selectedSubject} Practice`}</strong>
                 </div>
                 <div className="dpp-msum-row">
                   <span>Format:</span>
                   <strong>
-                    {contentMode === 'file' ? `Attached File (${uploadedFile?.name})` : `${typedQuestions.length} Typed Questions`}
+                    {contentMode === 'file' ? `Attached File (${uploadedFile?.name})` : 'Typed Questions (In-App JSON)'}
                   </strong>
-                </div>
-                <div className="dpp-msum-row">
-                  <span>Due Date:</span>
-                  <strong>{dueDate}</strong>
-                </div>
-                <div className="dpp-msum-row highlight">
-                  <span>Target Students:</span>
-                  <strong className="green">{targetStudentsCount || 15} Students</strong>
                 </div>
               </div>
             </div>
@@ -1035,7 +922,8 @@ export function DppManagement({ onBack, initialBatch = '', initialSubject = '' }
               <button
                 type="button"
                 className="dpp-modal-cancel-btn"
-                onClick={() => setShowConfirmModal(false)}
+                onClick={() => !isUploading && setShowConfirmModal(false)}
+                disabled={isUploading}
               >
                 No, Review Draft
               </button>
@@ -1043,8 +931,108 @@ export function DppManagement({ onBack, initialBatch = '', initialSubject = '' }
                 type="button"
                 className="dpp-modal-confirm-btn"
                 onClick={handleConfirmPublish}
+                disabled={isUploading}
               >
-                Yes, Publish DPP
+                {isUploading ? 'Publishing DPP...' : 'Yes, Publish DPP'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════════
+          IN-APP QUESTIONS VIEWER MODAL
+          ══════════════════════════════════════════════════════════════════ */}
+      {viewingQuestionsDpp && (
+        <div
+          className="dpp-modal-overlay"
+          onClick={() => setViewingQuestionsDpp(null)}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div
+            className="dpp-modal-card"
+            style={{ maxWidth: '640px', width: '92%' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="dpp-modal-header">
+              <div className="dpp-modal-icon-wrap" style={{ background: '#ede9fe', color: '#7c3aed' }}>
+                ✍️
+              </div>
+              <div className="dpp-modal-title-wrap">
+                <h3 className="dpp-modal-title">{viewingQuestionsDpp.title}</h3>
+                <span className="dpp-modal-subtitle">
+                  {viewingQuestionsDpp.batch} • {viewingQuestionsDpp.subject} • Manual DPP
+                </span>
+              </div>
+              <button
+                type="button"
+                className="dpp-modal-close-btn"
+                onClick={() => setViewingQuestionsDpp(null)}
+                title="Close"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="dpp-modal-body" style={{ maxHeight: '60vh', overflowY: 'auto' }}>
+              {(() => {
+                const q = viewingQuestionsDpp.questions;
+                if (!q) {
+                  return <p style={{ color: '#64748b' }}>No question text stored for this DPP.</p>;
+                }
+                const items = Array.isArray(q.items)
+                  ? q.items
+                  : Array.isArray(q)
+                    ? q
+                    : q.raw_text
+                      ? q.raw_text.split(/\n{2,}/).filter(Boolean)
+                      : [typeof q === 'string' ? q : JSON.stringify(q, null, 2)];
+
+                return (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    {items.map((item, idx) => (
+                      <div
+                        key={idx}
+                        style={{
+                          padding: '12px 14px',
+                          background: '#f8fafc',
+                          border: '1px solid #e2e8f0',
+                          borderRadius: '8px',
+                        }}
+                      >
+                        <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6366f1', marginBottom: '4px' }}>
+                          QUESTION {idx + 1}
+                        </div>
+                        <div style={{ fontSize: '0.9rem', color: '#1e293b', whiteSpace: 'pre-wrap', lineHeight: '1.5' }}>
+                          {typeof item === 'object' ? JSON.stringify(item, null, 2) : item}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+            </div>
+
+            <div className="dpp-modal-actions" style={{ justifyContent: 'space-between' }}>
+              <button
+                type="button"
+                className="dpp-btn-preview"
+                onClick={() => {
+                  const q = viewingQuestionsDpp.questions;
+                  const text = q?.raw_text || JSON.stringify(q, null, 2);
+                  navigator.clipboard.writeText(text);
+                  showToast('📋 Questions copied to clipboard!');
+                }}
+              >
+                📋 Copy Text
+              </button>
+              <button
+                type="button"
+                className="dpp-btn-submit"
+                onClick={() => setViewingQuestionsDpp(null)}
+              >
+                Done
               </button>
             </div>
           </div>

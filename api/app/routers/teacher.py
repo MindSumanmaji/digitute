@@ -6,6 +6,9 @@ from app.models import (
     MarkAttendanceRequest,
     StudyMaterialCreate,
     StudyMaterialResponse,
+    DppCreate,
+    DppManualCreate,
+    DppResponse,
     DoubtResolve
 )
 from datetime import date
@@ -26,6 +29,16 @@ ALLOWED_EXTENSIONS = {
     ".mkv": "video/x-matroska",
 }
 
+ALLOWED_DPP_EXTENSIONS = {
+    ".pdf": "application/pdf",
+    ".doc": "application/msword",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
+}
+
 def validate_magic_bytes(ext: str, header: bytes) -> bool:
     if ext == ".pdf":
         return header.startswith(b"%PDF")
@@ -33,6 +46,12 @@ def validate_magic_bytes(ext: str, header: bytes) -> bool:
         return header.startswith(b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1")
     elif ext == ".docx":
         return header.startswith(b"PK\x03\x04")
+    elif ext == ".png":
+        return header.startswith(b"\x89PNG\r\n\x1a\n")
+    elif ext in (".jpg", ".jpeg"):
+        return header.startswith(b"\xff\xd8\xff")
+    elif ext == ".webp":
+        return len(header) >= 12 and header.startswith(b"RIFF") and header[8:12] == b"WEBP"
     elif ext == ".mp4":
         return len(header) >= 8 and (b"ftyp" in header[:16] or b"moov" in header[:16])
     elif ext in (".webm", ".mkv"):
@@ -460,8 +479,247 @@ def delete_study_material(material_id: str, current_user: dict = Depends(get_cur
         raise HTTPException(status_code=500, detail=str(e))
 
 
+
 # ==============================================================================
-# 4. DOUBTS & QUESTION RESOLUTION
+# 4. DAILY PRACTICE PROBLEMS (DPPS)
+# ==============================================================================
+@router.post("/dpps", summary="Upload DPP / Worksheet for Batch")
+async def upload_dpp(
+    file: UploadFile = File(...),
+    batch_id: str = Form(...),
+    subject: str = Form(...),
+    title: Optional[str] = Form(None),
+    current_user: dict = Depends(get_current_user)
+):
+    supabase = get_supabase_client()
+    teacher_id = current_user.get("id")
+    teacher_name = current_user.get("full_name", "")
+    user_role = current_user.get("role", "TEACHER")
+
+    # 1. Authorize teacher for batch and exact subject
+    verify_teacher_batch_and_subject(supabase, teacher_id, teacher_name, batch_id, subject, user_role)
+
+    # 2. Validate filename and extension
+    original_filename = file.filename or "dpp_worksheet"
+    clean_filename = os.path.basename(original_filename)
+    ext = os.path.splitext(clean_filename)[1].lower()
+
+    if ext not in ALLOWED_DPP_EXTENSIONS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unsupported file extension '{ext}'. Allowed extensions: PDF, DOC, DOCX, PNG, JPG, JPEG, WEBP"
+        )
+
+    # 3. Read content & validate file size
+    contents = await file.read()
+    if not contents or len(contents) == 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Uploaded file is empty")
+
+    if len(contents) > MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            detail="File size exceeds the maximum limit of 50 MiB"
+        )
+
+    # 4. Validate file content magic bytes
+    if not validate_magic_bytes(ext, contents[:32]):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"File signature/content does not match declared extension '{ext}'"
+        )
+
+    # 5. Prepare storage object path
+    safe_name = re.sub(r'[^a-zA-Z0-9_.-]', '_', clean_filename)
+    object_name = f"{uuid.uuid4().hex[:12]}_{safe_name}"
+    storage_path = f"dpps/{batch_id}/{object_name}"
+
+    content_type = file.content_type or ALLOWED_DPP_EXTENSIONS[ext]
+    if content_type == "application/octet-stream":
+        content_type = ALLOWED_DPP_EXTENSIONS[ext]
+
+    # 6. Upload file to Supabase Storage
+    try:
+        supabase.storage.from_("digitute").upload(
+            path=storage_path,
+            file=contents,
+            file_options={"content-type": content_type, "upsert": "true"}
+        )
+    except Exception as upload_err:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Storage upload failed: {str(upload_err)}"
+        )
+
+    # 7. Insert record in dpps table
+    doc_title = title.strip() if title and title.strip() else clean_filename
+    payload = {
+        "batch_id": batch_id,
+        "teacher_id": teacher_id,
+        "subject": subject.strip(),
+        "title": doc_title,
+        "file_url": storage_path
+    }
+
+    # Include content_type only after migration has been applied (column exists)
+    try:
+        supabase.table("dpps").select("content_type").limit(1).execute()
+        payload["content_type"] = "FILE"
+    except Exception:
+        pass  # Column not yet present; migration pending
+
+    try:
+        res = supabase.table("dpps").insert(payload).execute()
+        record = res.data[0] if res.data else payload
+    except Exception as db_err:
+        # Rollback: delete uploaded file from storage to avoid orphaned objects
+        try:
+            supabase.storage.from_("digitute").remove([storage_path])
+        except Exception:
+            pass
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to save DPP record: {str(db_err)}"
+        )
+
+    # 8. Generate signed URL for immediate usage (3600 seconds)
+    try:
+        signed = supabase.storage.from_("digitute").create_signed_url(storage_path, 3600)
+        record["signed_url"] = signed.get("signedURL") or signed.get("signedUrl")
+    except Exception:
+        record["signed_url"] = None
+
+    return record
+
+@router.post("/dpps/manual", summary="Create Manual Typed DPP (JSONB)")
+def create_manual_dpp(
+    data: DppManualCreate,
+    current_user: dict = Depends(get_current_user)
+):
+    supabase = get_supabase_client()
+    teacher_id = current_user.get("id")
+    teacher_name = current_user.get("full_name", "")
+    user_role = current_user.get("role", "TEACHER")
+
+    # 1. Authorize teacher for batch and exact subject
+    verify_teacher_batch_and_subject(supabase, teacher_id, teacher_name, data.batch_id, data.subject, user_role)
+
+    # 2. Validate questions payload: must be non-empty dict or list
+    if not isinstance(data.questions, (dict, list)) or len(data.questions) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Questions must be a non-empty JSON object or array"
+        )
+
+    title = data.title.strip() if data.title and data.title.strip() else f"Manual DPP — {data.subject.strip()}"
+    payload = {
+        "batch_id": data.batch_id,
+        "teacher_id": teacher_id,
+        "subject": data.subject.strip(),
+        "title": title,
+        "content_type": "MANUAL",
+        "file_url": None,
+        "questions": data.questions
+    }
+
+    try:
+        res = supabase.table("dpps").insert(payload).execute()
+        record = res.data[0] if res.data else payload
+        record["signed_url"] = None
+        return record
+    except Exception as db_err:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to save manual DPP: {str(db_err)}"
+        )
+
+@router.get("/dpps", summary="List DPPs Uploaded by Teacher")
+def list_my_dpps(current_user: dict = Depends(get_current_user)):
+    try:
+        supabase = get_supabase_client()
+        teacher_id = current_user.get("id")
+        user_role = current_user.get("role")
+
+        query = supabase.table("dpps").select("*, batches(name)")
+        if user_role != "ADMIN":
+            query = query.eq("teacher_id", teacher_id)
+
+        res = query.order("created_at", desc=True).execute()
+        dpps = res.data or []
+
+        # Generate signed URLs (3600 seconds expiration)
+        for item in dpps:
+            file_path = item.get("file_url")
+            if file_path:
+                try:
+                    signed = supabase.storage.from_("digitute").create_signed_url(file_path, 3600)
+                    item["signed_url"] = signed.get("signedURL") or signed.get("signedUrl")
+                except Exception:
+                    item["signed_url"] = None
+        return dpps
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/dpps/{dpp_id}/access-url", summary="Get Fresh Signed URL for DPP")
+def get_dpp_access_url(dpp_id: str, current_user: dict = Depends(get_current_user)):
+    try:
+        supabase = get_supabase_client()
+        teacher_id = current_user.get("id")
+        user_role = current_user.get("role")
+
+        res = supabase.table("dpps").select("*").eq("id", dpp_id).execute()
+        if not res.data:
+            raise HTTPException(status_code=404, detail="DPP not found")
+
+        dpp = res.data[0]
+        if user_role != "ADMIN" and dpp.get("teacher_id") != teacher_id:
+            raise HTTPException(status_code=403, detail="Not authorized to access this DPP")
+
+        file_path = dpp.get("file_url")
+        if not file_path or dpp.get("content_type") == "MANUAL":
+            raise HTTPException(status_code=400, detail="No file path associated with this DPP")
+
+        signed = supabase.storage.from_("digitute").create_signed_url(file_path, 3600)
+        signed_url = signed.get("signedURL") or signed.get("signedUrl")
+        return {"signed_url": signed_url, "expires_in": 3600}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/dpps/{dpp_id}", summary="Delete DPP")
+def delete_dpp(dpp_id: str, current_user: dict = Depends(get_current_user)):
+    try:
+        supabase = get_supabase_client()
+        teacher_id = current_user.get("id")
+        user_role = current_user.get("role")
+
+        res = supabase.table("dpps").select("*").eq("id", dpp_id).execute()
+        if not res.data:
+            raise HTTPException(status_code=404, detail="DPP not found")
+
+        dpp = res.data[0]
+        if user_role != "ADMIN" and dpp.get("teacher_id") != teacher_id:
+            raise HTTPException(status_code=403, detail="Not authorized to delete this DPP")
+
+        file_path = dpp.get("file_url")
+
+        supabase.table("dpps").delete().eq("id", dpp_id).execute()
+
+        if file_path:
+            try:
+                supabase.storage.from_("digitute").remove([file_path])
+            except Exception:
+                pass
+
+        return {"message": "DPP deleted successfully", "id": dpp_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==============================================================================
+# 5. DOUBTS & QUESTION RESOLUTION
 # ==============================================================================
 @router.get("/doubts", summary="List Student Doubts in Assigned Batches")
 def list_student_doubts(current_user: dict = Depends(get_current_user)):

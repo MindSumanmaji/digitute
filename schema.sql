@@ -257,11 +257,32 @@ CREATE TABLE dpps (
     teacher_id UUID REFERENCES users(id) ON DELETE SET NULL,
     subject VARCHAR(100) NOT NULL, -- e.g. "Mathematics"
     title VARCHAR(255) NOT NULL,   -- e.g. "Calculus - DPP #04"
-    file_url TEXT NOT NULL,        -- Sheet link
-    created_at TIMESTAMPTZ DEFAULT NOW()
+    content_type VARCHAR(20) NOT NULL DEFAULT 'FILE', -- 'FILE' or 'MANUAL'
+    file_url TEXT,                 -- Sheet link in Supabase Storage (NULL for MANUAL)
+    questions JSONB,               -- Native JSON questions payload (NULL for FILE)
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT chk_dpps_content_type CHECK (content_type IN ('FILE', 'MANUAL')),
+    CONSTRAINT chk_dpps_payload_valid CHECK (
+        (
+            content_type = 'FILE'
+            AND file_url IS NOT NULL
+            AND trim(file_url) <> ''
+        )
+        OR
+        (
+            content_type = 'MANUAL'
+            AND file_url IS NULL
+            AND questions IS NOT NULL
+            AND jsonb_typeof(questions) IN ('object', 'array')
+            AND questions <> 'null'::jsonb   -- reject JSON null literal
+            AND questions <> '{}'::jsonb     -- reject empty object
+            AND questions <> '[]'::jsonb     -- reject empty array
+        )
+    )
 );
 
 CREATE INDEX idx_dpps_batch ON dpps(batch_id);
+CREATE INDEX idx_dpps_teacher_id ON dpps(teacher_id);
 
 -- ==============================================================================
 -- 10. DOUBTS (Single Unified Table: Student Question + Teacher Answer)
