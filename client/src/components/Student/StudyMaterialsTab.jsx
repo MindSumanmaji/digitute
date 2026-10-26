@@ -119,25 +119,11 @@ export default function StudyMaterialsTab({ showToast }) {
 
   return (
     <div className="sp-view-container sp-materials-view">
-      {/* Header with Title & Current Batch */}
+      {/* Header with Title */}
       <div className="sp-title-header-bar">
         <div>
           <h1 className="sp-page-title">Study Material</h1>
           <p className="sp-page-subtitle">Access notes, DPPs, formula sheets, reference videos and more.</p>
-        </div>
-        <div className="sp-batch-pill-card">
-          <div className="sp-batch-pill-icon">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0284c7" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <polygon points="12 2 2 7 12 12 22 7 12 2" />
-              <polyline points="2 17 12 22 22 17" />
-              <polyline points="2 12 12 17 22 12" />
-            </svg>
-          </div>
-          <div className="sp-batch-pill-texts">
-            <small>Current Batch:</small>
-            <strong>{batchName}</strong>
-          </div>
-          <span className="sp-batch-chevron">⌵</span>
         </div>
       </div>
 

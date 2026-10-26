@@ -8,50 +8,11 @@ export default function FeesTab({ paymentDone, setPayModalOpen, showToast }) {
 
   return (
     <div className="sp-view-container sp-fees-view">
-      {/* Header Row with Batch Dropdown Pill */}
+      {/* Header Row */}
       <div className="sp-fees-header-row">
         <div>
           <h1 className="sp-page-title">Fees & Payments</h1>
           <p className="sp-page-subtitle">Track your payments, check due amount and download receipts.</p>
-        </div>
-
-        {/* Current Batch Selector Pill */}
-        <div className="sp-batch-select-pill-wrap">
-          <div 
-            className="sp-batch-pill" 
-            onClick={() => setCurrentBatchDropdown(!currentBatchDropdown)}
-          >
-            <div className="sp-batch-pill-icon">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2.2">
-                <polygon points="12 2 2 7 12 12 22 7 12 2" />
-                <polyline points="2 17 12 22 22 17" />
-                <polyline points="2 12 12 17 22 12" />
-              </svg>
-            </div>
-            <div className="sp-batch-pill-text">
-              <span className="sp-batch-pill-sub">Current Batch</span>
-              <strong className="sp-batch-pill-title">{selectedFeeBatch}</strong>
-            </div>
-            <span className="sp-batch-chevron">⌄</span>
-          </div>
-
-          {currentBatchDropdown && (
-            <div className="sp-popover-menu sp-batch-dropdown-menu">
-              {['Class XII - Science (2026)', 'Class XI - Science (Archive)'].map((b) => (
-                <button
-                  key={b}
-                  className={`sp-batch-opt-btn ${selectedFeeBatch === b ? 'active' : ''}`}
-                  onClick={() => {
-                    setSelectedFeeBatch(b);
-                    setCurrentBatchDropdown(false);
-                    showToast(`Switched view to ${b}`);
-                  }}
-                >
-                  {b}
-                </button>
-              ))}
-            </div>
-          )}
         </div>
       </div>
 

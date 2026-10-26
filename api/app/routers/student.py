@@ -1,9 +1,12 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, status
 from app.db import get_supabase_client
 from app.core.dependencies import get_current_user, require_roles
 from app.models import DoubtCreate
 from typing import Optional, Any
 from datetime import datetime, date, time
+import os
+import re
+import uuid
 
 router = APIRouter(
     prefix="/api/student",
@@ -20,7 +23,7 @@ def get_student_profile(current_user: dict = Depends(get_current_user)):
         supabase = get_supabase_client()
         student_id = current_user.get("id")
         
-        res = supabase.table("users").select("*, batches(name, fee_amount, fee_type)").eq("id", student_id).execute()
+        res = supabase.table("users").select("*, batches(id, name, fee_amount, fee_type, subjects)").eq("id", student_id).execute()
         if not res.data:
             raise HTTPException(status_code=404, detail="Student profile not found")
         return res.data[0]
@@ -271,6 +274,28 @@ def get_my_attendance(current_user: dict = Depends(get_current_user)):
                 "teacher": teacher_name
             })
 
+        # Ensure all batch enrolled subjects are present in subject_map even if no classes held yet
+        batch_id = current_user.get("batch_id")
+        if batch_id:
+            try:
+                b_res = supabase.table("batches").select("subjects").eq("id", batch_id).execute()
+                if b_res.data and b_res.data[0].get("subjects"):
+                    raw_subj = b_res.data[0]["subjects"]
+                    enrolled_subjs = raw_subj if isinstance(raw_subj, list) else [s.strip() for s in str(raw_subj).split(",") if s.strip()]
+                    for s in enrolled_subjs:
+                        if s not in subject_map:
+                            subject_map[s] = {
+                                "subject": s,
+                                "teacher": "Faculty",
+                                "total": 0,
+                                "present": 0,
+                                "absent": 0,
+                                "percentage": 0.0,
+                                "records": []
+                            }
+            except Exception:
+                pass
+
         for s_info in subject_map.values():
             if s_info["total"] > 0:
                 s_info["percentage"] = round((s_info["present"] / s_info["total"] * 100), 1)
@@ -494,20 +519,89 @@ def get_my_dpps(current_user: dict = Depends(get_current_user)):
 # ==============================================================================
 # 10. DOUBTS & FORUM (Table 10 in schema.sql)
 # ==============================================================================
+@router.post("/doubts/upload-file", summary="Upload attachment for a Doubt (Image or PDF)")
+async def upload_doubt_file(
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user)
+):
+    try:
+        supabase = get_supabase_client()
+        student_id = current_user.get("id")
+
+        ALLOWED_DOUBT_EXTS = {
+            ".pdf": "application/pdf",
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".png": "image/png",
+            ".webp": "image/webp"
+        }
+
+        original_filename = file.filename or "doubt_attachment"
+        clean_filename = os.path.basename(original_filename)
+        ext = os.path.splitext(clean_filename)[1].lower()
+
+        if ext not in ALLOWED_DOUBT_EXTS:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Only PDF and Image files (.png, .jpg, .jpeg, .webp) are allowed"
+            )
+
+        contents = await file.read()
+        if not contents or len(contents) == 0:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Uploaded file is empty")
+
+        if len(contents) > 10 * 1024 * 1024:
+            raise HTTPException(status_code=status.HTTP_413_CONTENT_TOO_LARGE, detail="File size exceeds maximum limit of 10 MB")
+
+        safe_name = re.sub(r'[^a-zA-Z0-9_.-]', '_', clean_filename)
+        object_name = f"{uuid.uuid4().hex[:12]}_{safe_name}"
+        storage_path = f"doubts/{student_id}/{object_name}"
+
+        content_type = file.content_type or ALLOWED_DOUBT_EXTS[ext]
+
+        supabase.storage.from_("digitute").upload(
+            path=storage_path,
+            file=contents,
+            file_options={"content-type": content_type, "upsert": "true"}
+        )
+
+        signed = supabase.storage.from_("digitute").create_signed_url(storage_path, 86400 * 7)
+        signed_url = signed.get("signedURL") or signed.get("signedUrl")
+
+        return {
+            "storage_path": storage_path,
+            "signed_url": signed_url,
+            "filename": clean_filename
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.post("/doubts", summary="Ask a Doubt or Submit Question")
 def ask_doubt(doubt: DoubtCreate, current_user: dict = Depends(get_current_user)):
     try:
         supabase = get_supabase_client()
         student_id = current_user.get("id")
         batch_id = doubt.batch_id or current_user.get("batch_id")
-        
+
+        if not batch_id:
+            user_res = supabase.table("users").select("batch_id").eq("id", student_id).execute()
+            if user_res.data and user_res.data[0].get("batch_id"):
+                batch_id = user_res.data[0].get("batch_id")
+
+        if not batch_id:
+            raise HTTPException(status_code=400, detail="Student is not assigned to any batch. Please contact the administrator.")
+
         payload = doubt.model_dump()
         payload["student_id"] = student_id
         payload["batch_id"] = batch_id
         payload["status"] = "OPEN"
-        
+
         res = supabase.table("doubts").insert(payload).execute()
         return res.data[0] if res.data else {}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -516,11 +610,34 @@ def get_my_doubts(current_user: dict = Depends(get_current_user)):
     try:
         supabase = get_supabase_client()
         student_id = current_user.get("id")
-        
+
         res = supabase.table("doubts").select(
             "*, users!doubts_resolved_by_fkey(full_name)"
         ).eq("student_id", student_id).order("created_at", desc=True).execute()
-        return res.data or []
+
+        doubts = res.data or []
+        for d in doubts:
+            q_url = d.get("question_file_url")
+            if q_url and not q_url.startswith("http"):
+                try:
+                    s = supabase.storage.from_("digitute").create_signed_url(q_url, 86400 * 7)
+                    d["question_file_signed_url"] = s.get("signedURL") or s.get("signedUrl")
+                except Exception:
+                    d["question_file_signed_url"] = None
+            elif q_url:
+                d["question_file_signed_url"] = q_url
+
+            r_url = d.get("reply_file_url")
+            if r_url and not r_url.startswith("http"):
+                try:
+                    s = supabase.storage.from_("digitute").create_signed_url(r_url, 86400 * 7)
+                    d["reply_file_signed_url"] = s.get("signedURL") or s.get("signedUrl")
+                except Exception:
+                    d["reply_file_signed_url"] = None
+            elif r_url:
+                d["reply_file_signed_url"] = r_url
+
+        return doubts
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

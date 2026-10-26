@@ -21,9 +21,35 @@ export default function MeritListPage({ test, onBack, showToast }) {
     st.roll.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const top1 = fullMeritList.find(x => x.rank === 1) || fullMeritList[0];
   const top2 = fullMeritList.find(x => x.rank === 2) || fullMeritList[1];
   const top3 = fullMeritList.find(x => x.rank === 3) || fullMeritList[2];
+
+  const handleOpenStudentProfile = (st) => {
+    if (!st) return;
+    const cleanName = (st.name || '').replace(' (You)', '');
+    setSelectedStudentForCard({
+      ...st,
+      name: cleanName,
+      handle: '@' + cleanName.toLowerCase().replace(/[^a-z0-9]/g, ''),
+      roll: st.roll,
+      photo: st.photo || (st.isMe ? '/student-avatar.jpg' : null),
+      badge: st.rank === 1 ? 'Gold' : st.rank <= 3 ? 'Silver' : 'Bronze',
+      rank: `#${st.rank} of ${fullMeritList.length}`,
+      rankSub: 'Rank (Batch)',
+      rankTrend: st.rank === 1 ? 'Batch Topper' : st.rank <= 3 ? 'Top 3 Podium' : 'Consistent',
+      attendancePct: 88 + (st.rank % 7),
+      avgScorePct: st.pct ? parseInt(st.pct) : 80,
+      className: 'Class XII',
+      stream: 'Science',
+      batch: 'Batch A (Offline)',
+      session: '2026 (July - Dec)',
+      quote: st.rank === 1 ? '"Excellence is not an act, but a habit."' : '"Consistent study today, bigger opportunities tomorrow."',
+      testsTaken: 12,
+      totalTests: 20,
+      bestScore: `${st.score}/${st.total}`,
+      bestScoreTest: test.name
+    });
+  };
 
   return (
     <div className="sp-view-container sp-merit-page">
@@ -89,7 +115,12 @@ export default function MeritListPage({ test, onBack, showToast }) {
           {/* Top 3 Podium Showcase */}
           <div className="sp-modal-podium-mini sp-merit-podium">
             {top2 && (
-              <div className="sp-mp-col r2">
+              <div 
+                className="sp-mp-col r2"
+                onClick={() => handleOpenStudentProfile(top2)}
+                style={{ cursor: 'pointer' }}
+                title={`View ${top2.name}'s Profile`}
+              >
                 <div className="sp-mp-avatar-wrap">
                   {top2.photo ? (
                     <img src={top2.photo} alt={top2.name} className="sp-mp-avatar-img" />
@@ -103,11 +134,31 @@ export default function MeritListPage({ test, onBack, showToast }) {
                 <strong className="sp-mp-name">{top2.name}</strong>
                 <span className="sp-mp-score">{top2.score}/{top2.total} ({top2.pct})</span>
                 <span className="sp-mp-roll-sub">Roll: {top2.roll}</span>
+                <button
+                  type="button"
+                  className="sp-podium-view-profile-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleOpenStudentProfile(top2);
+                  }}
+                  title={`View ${top2.name}'s Profile`}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                    <circle cx="12" cy="7" r="4" />
+                  </svg>
+                  <span>View Profile</span>
+                </button>
               </div>
             )}
 
             {top1 && (
-              <div className="sp-mp-col r1">
+              <div 
+                className="sp-mp-col r1"
+                onClick={() => handleOpenStudentProfile(top1)}
+                style={{ cursor: 'pointer' }}
+                title={`View ${top1.name}'s Profile`}
+              >
                 <div className="sp-mp-avatar-wrap r1-wrap">
                   <div className="sp-mp-crown">⭐ 1st Position</div>
                   {top1.photo ? (
@@ -122,11 +173,31 @@ export default function MeritListPage({ test, onBack, showToast }) {
                 <strong className="sp-mp-name r1-name">{top1.name}</strong>
                 <span className="sp-mp-score r1-score">{top1.score}/{top1.total} ({top1.pct})</span>
                 <span className="sp-mp-roll-sub sp-mp-topper-text">Batch Topper · {top1.roll}</span>
+                <button
+                  type="button"
+                  className="sp-podium-view-profile-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleOpenStudentProfile(top1);
+                  }}
+                  title={`View ${top1.name}'s Profile`}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                    <circle cx="12" cy="7" r="4" />
+                  </svg>
+                  <span>View Profile</span>
+                </button>
               </div>
             )}
 
             {top3 && (
-              <div className="sp-mp-col r3">
+              <div 
+                className="sp-mp-col r3"
+                onClick={() => handleOpenStudentProfile(top3)}
+                style={{ cursor: 'pointer' }}
+                title={`View ${top3.name}'s Profile`}
+              >
                 <div className="sp-mp-avatar-wrap">
                   {top3.photo ? (
                     <img src={top3.photo} alt={top3.name} className="sp-mp-avatar-img" />
@@ -140,6 +211,21 @@ export default function MeritListPage({ test, onBack, showToast }) {
                 <strong className="sp-mp-name">{top3.name}</strong>
                 <span className="sp-mp-score">{top3.score}/{top3.total} ({top3.pct})</span>
                 <span className="sp-mp-roll-sub">Roll: {top3.roll}</span>
+                <button
+                  type="button"
+                  className="sp-podium-view-profile-btn"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleOpenStudentProfile(top3);
+                  }}
+                  title={`View ${top3.name}'s Profile`}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                    <circle cx="12" cy="7" r="4" />
+                  </svg>
+                  <span>View Profile</span>
+                </button>
               </div>
             )}
           </div>
@@ -269,29 +355,7 @@ export default function MeritListPage({ test, onBack, showToast }) {
                         <button 
                           type="button"
                           className="sp-merit-view-profile-btn"
-                          onClick={() => {
-                            setSelectedStudentForCard({
-                              name: st.name.replace(' (You)', ''),
-                              handle: '@' + st.name.toLowerCase().replace(/[^a-z0-9]/g, ''),
-                              roll: st.roll,
-                              photo: st.photo || '/student-avatar.jpg',
-                              badge: st.rank === 1 ? 'Gold' : st.rank <= 3 ? 'Silver' : 'Bronze',
-                              rank: `#${st.rank} of ${fullMeritList.length}`,
-                              rankSub: 'Rank (Batch)',
-                              rankTrend: st.rank <= 3 ? 'Topper Group' : 'Consistent',
-                              attendancePct: 88 + (st.rank % 7),
-                              avgScorePct: st.pct ? parseInt(st.pct) : 80,
-                              className: 'Class XII',
-                              stream: 'Science',
-                              batch: 'Batch A (Offline)',
-                              session: '2026 (July - Dec)',
-                              quote: st.rank === 1 ? '"Excellence is not an act, but a habit."' : '"Consistent study today, bigger opportunities tomorrow."',
-                              testsTaken: 12,
-                              totalTests: 20,
-                              bestScore: `${st.score}/${st.total}`,
-                              bestScoreTest: test.name
-                            });
-                          }}
+                          onClick={() => handleOpenStudentProfile(st)}
                           title={`View ${st.name}'s Profile`}
                         >
                           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">

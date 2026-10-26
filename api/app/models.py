@@ -265,8 +265,8 @@ class DppResponse(BaseModel):
     batches: Optional[dict[str, Any]] = None
 
 class DoubtCreate(BaseModel):
-    batch_id: str
-    student_id: str
+    batch_id: Optional[str] = None
+    student_id: Optional[str] = None
     subject: str
     question_title: str
     question_text: str

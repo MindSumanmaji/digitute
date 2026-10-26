@@ -118,37 +118,6 @@ export default function AnnouncementsTab({ showToast = () => {} }) {
             );
           })}
         </div>
-
-        {/* Search Input */}
-        <div className="sp-ann-search-wrap" style={{ position: 'relative', minWidth: '240px' }}>
-          <input
-            type="text"
-            placeholder="Search circulars..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            style={{
-              width: '100%',
-              padding: '7px 12px 7px 32px',
-              borderRadius: '20px',
-              border: '1px solid #cbd5e1',
-              fontSize: '12.5px',
-              outline: 'none',
-              background: '#ffffff'
-            }}
-          />
-          <svg
-            width="14"
-            height="14"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="#94a3b8"
-            strokeWidth="2.2"
-            style={{ position: 'absolute', left: '11px', top: '50%', transform: 'translateY(-50%)' }}
-          >
-            <circle cx="11" cy="11" r="8" />
-            <line x1="21" y1="21" x2="16.65" y2="16.65" />
-          </svg>
-        </div>
       </div>
 
       {/* 3. Announcements Stack: Each Announcement in Its OWN Distinct Box Card */}

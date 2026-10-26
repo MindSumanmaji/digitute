@@ -90,23 +90,38 @@ export default function ClassesTab({ showToast }) {
         // Auto select first available subject
         if (att?.subject_wise && Object.keys(att.subject_wise).length > 0) {
           setSelectedAttSubject(Object.keys(att.subject_wise)[0]);
-        } else if (Array.isArray(routines) && routines.length > 0) {
-          setSelectedAttSubject(routines[0].subject || 'Physics');
+        } else if (Array.isArray(routines) && routines.length > 0 && routines[0].subject) {
+          setSelectedAttSubject(routines[0].subject);
         }
 
-        // Align mini calendar month to active attendance records if current month has no records
+        // Align mini calendar month to active attendance records only if current month has no records
         if (att?.subject_wise) {
+          const currentYear = realTodayObj.getFullYear();
+          const currentMonth = realTodayObj.getMonth();
+          let currentMonthHasRecords = false;
           let latestDateStr = null;
+
           Object.values(att.subject_wise).forEach((s) => {
             (s.records || []).forEach((r) => {
-              if (r.date && (!latestDateStr || r.date > latestDateStr)) {
-                latestDateStr = r.date;
+              if (r.date) {
+                if (!latestDateStr || r.date > latestDateStr) {
+                  latestDateStr = r.date;
+                }
+                const parts = r.date.split('-');
+                if (parts.length >= 2) {
+                  const y = parseInt(parts[0], 10);
+                  const m = parseInt(parts[1], 10) - 1;
+                  if (y === currentYear && m === currentMonth) {
+                    currentMonthHasRecords = true;
+                  }
+                }
               }
             });
           });
-          if (latestDateStr) {
+
+          if (!currentMonthHasRecords && latestDateStr) {
             const recDate = new Date(latestDateStr);
-            const diff = (recDate.getFullYear() - realTodayObj.getFullYear()) * 12 + (recDate.getMonth() - realTodayObj.getMonth());
+            const diff = (recDate.getFullYear() - currentYear) * 12 + (recDate.getMonth() - currentMonth);
             setSubCalMonthOffset(diff);
           }
         }
@@ -143,9 +158,9 @@ export default function ClassesTab({ showToast }) {
     return d;
   }, [monthOffset, realTodayObj]);
 
-  // Unified class resolver for any concrete date (Strictly from real database class_sessions)
+  // Unified class resolver for any concrete date (Strictly from real database class_sessions & class_routines)
   const getDayClasses = (targetDate, targetIso) => {
-    // Match concrete sessions from class_sessions table
+    // 1. Match concrete sessions from class_sessions table
     const daySessions = sessionsList.filter((s) => s.session_date === targetIso);
     if (daySessions.length > 0) {
       return daySessions.map((s) => ({
@@ -161,6 +176,30 @@ export default function ClassesTab({ showToast }) {
         avatarColor: '#2563eb',
         status: s.student_attendance_status || (s.status === 'COMPLETED' ? 'Attended' : 'Upcoming')
       }));
+    }
+
+    // 2. Fallback: If no concrete session was generated yet, check recurring class_routines from database for current/future dates
+    if (targetIso >= realTodayIso && routinesList && routinesList.length > 0) {
+      const targetDow = (targetDate.getDay() + 6) % 7 + 1; // 1=Mon ... 7=Sun
+      const matchingRoutines = routinesList.filter((r) => parseInt(r.day_of_week, 10) === targetDow);
+      if (matchingRoutines.length > 0) {
+        return matchingRoutines.map((r) => {
+          const tName = r.users?.full_name || r.teacher?.full_name || 'Faculty';
+          return {
+            id: `routine-${r.id}`,
+            timeStart: formatTime(r.start_time),
+            timeEnd: formatTime(r.end_time),
+            barColor: getSubjectBarColor(r.subject),
+            subject: r.subject,
+            topic: `Regular Class Timetable · ${r.subject}`,
+            teacher: tName,
+            avatar: (tName || r.subject)[0].toUpperCase(),
+            avatarBg: '#eff6ff',
+            avatarColor: '#2563eb',
+            status: 'Upcoming'
+          };
+        });
+      }
     }
 
     return [];
@@ -263,7 +302,7 @@ export default function ClassesTab({ showToast }) {
           color: meta.color,
           lightBg: meta.lightBg,
           badgeBg: meta.badgeBg,
-          teacher: r.users?.full_name || 'Faculty',
+          teacher: r.users?.full_name || r.teacher?.full_name || 'Faculty',
           totalClasses: 0,
           attended: 0,
           missed: 0,
@@ -375,7 +414,40 @@ export default function ClassesTab({ showToast }) {
     };
   }, [subCalMonthObj]);
 
-  let filteredRecords = currentSubj.records || [];
+  // Filter records strictly by the currently displayed month in the mini calendar
+  const currentMonthSubjRecords = useMemo(() => {
+    const list = (currentSubj.records || []).filter((r) => {
+      if (!r?.fullDate) return false;
+      const parts = r.fullDate.split('-');
+      if (parts.length >= 2) {
+        const y = parseInt(parts[0], 10);
+        const m = parseInt(parts[1], 10) - 1; // 0-indexed month
+        return y === subCalCells.year && m === subCalCells.month;
+      }
+      const d = new Date(r.fullDate);
+      return d.getFullYear() === subCalCells.year && d.getMonth() === subCalCells.month;
+    });
+
+    // Sort chronologically ascending by fullDate
+    return [...list].sort((a, b) => (a.fullDate || '').localeCompare(b.fullDate || ''));
+  }, [currentSubj, subCalCells.year, subCalCells.month]);
+
+  // Attendance metrics for the active calendar month
+  const monthSubjAttended = useMemo(() => {
+    return currentMonthSubjRecords.filter((r) => r.status === 'Present').length;
+  }, [currentMonthSubjRecords]);
+
+  const monthSubjMissed = useMemo(() => {
+    return currentMonthSubjRecords.filter((r) => r.status === 'Absent').length;
+  }, [currentMonthSubjRecords]);
+
+  const monthSubjTotal = currentMonthSubjRecords.length;
+  const monthSubjRate = monthSubjTotal > 0
+    ? Math.round((monthSubjAttended / monthSubjTotal) * 100 * 10) / 10
+    : 0;
+
+  // Filter records by status and selected date within the displayed month
+  let filteredRecords = currentMonthSubjRecords;
   if (attStatusFilter !== 'All') {
     filteredRecords = filteredRecords.filter((r) => r.status === attStatusFilter);
   }
@@ -466,15 +538,6 @@ export default function ClassesTab({ showToast }) {
             <p className="sp-page-subtitle">View your real-time class schedule and track attendance records.</p>
           </div>
         </div>
-
-        {/* Dedicated Attendance Analysis Navigation Button */}
-        <button
-          className="sp-header-analysis-btn"
-          onClick={() => setShowAnalysisView(true)}
-          title="Open Full Attendance Analysis & Graphs (Week, Month, Year)"
-        >
-          <span>📊</span> Attendance Analysis
-        </button>
       </div>
 
       {/* 3 Metric Cards */}
@@ -965,9 +1028,11 @@ export default function ClassesTab({ showToast }) {
             <p className="sp-sub-att-desc">Track attended and missed classes by subject</p>
           </div>
           <div className="sp-sub-att-stat-inline">
-            <span className="sp-stat-inline-item text-green">● {currentSubj.attended} Present</span>
-            <span className="sp-stat-inline-item text-red">● {currentSubj.missed} Absent</span>
-            <span className="sp-stat-inline-item text-dark"><strong>{currentSubj.totalClasses > 0 ? `${currentSubj.percentage}%` : '0%'}</strong> Rate</span>
+            <span className="sp-stat-inline-item text-green">● {monthSubjAttended} Present</span>
+            <span className="sp-stat-inline-item text-red">● {monthSubjMissed} Absent</span>
+            <span className="sp-stat-inline-item text-dark">
+              <strong>{monthSubjTotal > 0 ? `${monthSubjRate}%` : '0%'}</strong> Rate
+            </span>
           </div>
         </div>
 
@@ -999,8 +1064,26 @@ export default function ClassesTab({ showToast }) {
             <div className="sp-cal-nav-row">
               <strong className="sp-cal-month-title">{subCalCells.fullMonthName}</strong>
               <div className="sp-cal-arrows">
-                <button className="sp-cal-btn-mini" onClick={() => setSubCalMonthOffset((prev) => prev - 1)} title="Previous Month">⟨</button>
-                <button className="sp-cal-btn-mini" onClick={() => setSubCalMonthOffset((prev) => prev + 1)} title="Next Month">⟩</button>
+                <button 
+                  className="sp-cal-btn-mini" 
+                  onClick={() => {
+                    setSubCalMonthOffset((prev) => prev - 1);
+                    setSelectedAttIso(null);
+                  }} 
+                  title="Previous Month"
+                >
+                  ⟨
+                </button>
+                <button 
+                  className="sp-cal-btn-mini" 
+                  onClick={() => {
+                    setSubCalMonthOffset((prev) => prev + 1);
+                    setSelectedAttIso(null);
+                  }} 
+                  title="Next Month"
+                >
+                  ⟩
+                </button>
               </div>
             </div>
 
@@ -1050,10 +1133,10 @@ export default function ClassesTab({ showToast }) {
             {/* Minimal Legend */}
             <div className="sp-cal-clean-legend">
               <span className="sp-legend-label">
-                <i className="sp-dot-indicator dot-present" /> Present ({currentSubj.attended})
+                <i className="sp-dot-indicator dot-present" /> Present ({monthSubjAttended})
               </span>
               <span className="sp-legend-label">
-                <i className="sp-dot-indicator dot-absent" /> Absent ({currentSubj.missed})
+                <i className="sp-dot-indicator dot-absent" /> Absent ({monthSubjMissed})
               </span>
             </div>
           </div>
@@ -1091,8 +1174,18 @@ export default function ClassesTab({ showToast }) {
 
             {selectedAttIso && (
               <div className="sp-date-filter-chip">
-                <span>Showing: {selectedAttIso}</span>
-                <button onClick={() => setSelectedAttIso(null)}>✕ Reset</button>
+                <span>
+                  Showing: {(() => {
+                    try {
+                      const [y, m, d] = selectedAttIso.split('-');
+                      const dt = new Date(parseInt(y, 10), parseInt(m, 10) - 1, parseInt(d, 10));
+                      return dt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+                    } catch {
+                      return selectedAttIso;
+                    }
+                  })()}
+                </span>
+                <button onClick={() => setSelectedAttIso(null)} title="Clear date filter">✕ Show Full Month</button>
               </div>
             )}
 
@@ -1100,10 +1193,17 @@ export default function ClassesTab({ showToast }) {
             <div className="sp-log-rows-wrap">
               {filteredRecords.length === 0 ? (
                 <div className="sp-log-empty-clean">
-                  No class records for this selection.
-                  <button onClick={() => { setAttStatusFilter('All'); setSelectedAttIso(null); }}>
-                    Show all
-                  </button>
+                  <p style={{ margin: '0 0 6px 0', fontWeight: 600, color: '#475569' }}>
+                    {currentMonthSubjRecords.length === 0
+                      ? `No ${currentSubj.name} classes scheduled in ${subCalCells.fullMonthName}.`
+                      : `No ${attStatusFilter !== 'All' ? attStatusFilter.toLowerCase() : ''} classes found for this selection.`
+                    }
+                  </p>
+                  {(attStatusFilter !== 'All' || selectedAttIso) && (
+                    <button onClick={() => { setAttStatusFilter('All'); setSelectedAttIso(null); }}>
+                      Show all {subCalCells.fullMonthName} classes
+                    </button>
+                  )}
                 </div>
               ) : (
                 filteredRecords.map((item, idx) => {

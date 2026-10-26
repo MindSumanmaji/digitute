@@ -10034,6 +10034,36 @@ select:focus {
     font-size: 11px !important;
   }
 
+  .sp-podium-view-profile-btn {
+    font-size: 10px !important;
+    padding: 3px 8px !important;
+    gap: 4px !important;
+    margin-top: 5px !important;
+  }
+
+  .sp-podium-view-profile-btn svg {
+    width: 10px !important;
+    height: 10px !important;
+  }
+
+  .sp-rrc-right {
+    display: flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+  }
+
+  .sp-rrc-profile-btn {
+    padding: 4px 8px !important;
+    font-size: 11px !important;
+    gap: 4px !important;
+    border-radius: 6px !important;
+  }
+
+  .sp-rrc-profile-btn svg {
+    width: 11px !important;
+    height: 11px !important;
+  }
+
   /* Scorecard Breakdown Tab */
   .sp-scorecard-grid {
     display: grid !important;
@@ -10087,6 +10117,45 @@ select:focus {
     overflow: hidden !important;
     text-overflow: ellipsis !important;
     white-space: nowrap !important;
+  }
+
+  .sp-podium-view-profile-btn {
+    font-size: 8.5px !important;
+    padding: 2px 6px !important;
+    gap: 3px !important;
+    margin-top: 4px !important;
+    border-radius: 12px !important;
+  }
+
+  .sp-podium-view-profile-btn svg {
+    width: 8.5px !important;
+    height: 8.5px !important;
+  }
+
+  .sp-mp-col .sp-podium-view-profile-btn {
+    margin-top: 4px !important;
+    font-size: 8.5px !important;
+    padding: 2px 5px !important;
+  }
+
+  .sp-rank-row-card {
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+    padding: 10px 12px !important;
+  }
+
+  .sp-rrc-left {
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+  }
+
+  .sp-rrc-right {
+    width: 100% !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    padding-top: 6px !important;
+    border-top: 1px dashed #e2e8f0 !important;
   }
 
   .sp-modal-podium-mini {
@@ -10602,6 +10671,10 @@ select:focus {
     box-sizing: border-box !important;
     margin-bottom: 4px !important;
     padding: 20px 18px !important;
+  }
+
+  .sp-ask-doubt-card.sp-hide-on-mobile-filter {
+    display: none !important;
   }
 
   .sp-doubts-feed-list {
@@ -11380,6 +11453,49 @@ select:focus {
   white-space: nowrap;
 }
 
+.sp-podium-circle-col {
+  cursor: pointer;
+  transition: transform 0.16s ease;
+}
+
+.sp-podium-circle-col:hover {
+  transform: translateY(-2px);
+}
+
+.sp-podium-view-profile-btn {
+  margin-top: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #2563eb;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.16s ease;
+  box-shadow: 0 1px 3px rgba(37, 99, 235, 0.08);
+  white-space: nowrap;
+}
+
+.sp-podium-view-profile-btn:hover {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: #ffffff;
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px rgba(37, 99, 235, 0.25);
+}
+
+.sp-podium-view-profile-btn:active {
+  transform: translateY(0);
+}
+
+.sp-podium-view-profile-btn svg {
+  flex-shrink: 0;
+}
+
 /* --------------------------------------------------------------------------
    ROUNDED PILL CARD ROWS FOR SUBSEQUENT RANKS (#4, #5, #6...)
    -------------------------------------------------------------------------- */
@@ -11516,6 +11632,27 @@ select:focus {
 .sp-rrc-score-badge small {
   color: #64748b;
   font-weight: 600;
+}
+
+.sp-rrc-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.sp-rrc-profile-btn {
+  background: #ffffff !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #2563eb !important;
+  flex-shrink: 0 !important;
+  font-weight: 700 !important;
+}
+
+.sp-rrc-profile-btn:hover {
+  background: #eff6ff !important;
+  border-color: #93c5fd !important;
+  color: #1d4ed8 !important;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.15) !important;
 }
 
 .sp-rrc-view-all-btn {
