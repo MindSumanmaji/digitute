@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { apiRequest } from '../../api';
 import {
   getStoredDoubts,
   getGroupedPendingDoubts,
@@ -8,7 +9,6 @@ import {
   markDoubtAsOffline,
   resolveOfflineDoubt,
 } from '../../data/doubtData';
-import { BATCHES, BATCH_SUBJECTS_MAP } from '../../data/academicData';
 /**
  * Word count helper
  */
@@ -22,6 +22,9 @@ export default function DoubtCorner({ onBack, initialBatch = null, initialSubjec
   // 1. Top Configuration States
   const [selectedBatch, setSelectedBatch] = useState(initialBatch || '');
   const [selectedSubject, setSelectedSubject] = useState(initialSubject || '');
+  const [batchesList, setBatchesList] = useState([]);
+  const [isLoadingBatches, setIsLoadingBatches] = useState(true);
+  const [batchesError, setBatchesError] = useState(null);
 
   // 2. 3 Side-by-side Tabs: 'pending' (default) | 'offline' | 'solved'
   const [activeTab, setActiveTab] = useState('pending');
@@ -47,9 +50,6 @@ export default function DoubtCorner({ onBack, initialBatch = null, initialSubjec
   const [offlineModalDoubt, setOfflineModalDoubt] = useState(null);
   const [offlineNoteInput, setOfflineNoteInput] = useState('');
 
-  // Quick answer modal for offline doubts
-  const [answerOfflineModalDoubt, setAnswerOfflineModalDoubt] = useState(null);
-  const [offlineAnswerText, setOfflineAnswerText] = useState('');
 
   // Force re-render on data update
   const [refreshKey, setRefreshKey] = useState(0);
@@ -66,17 +66,73 @@ export default function DoubtCorner({ onBack, initialBatch = null, initialSubjec
     return () => window.removeEventListener('digitute_doubts_updated', handleSync);
   }, []);
 
-  // Update initial parameters if passed externally
+  // Fetch teacher's assigned batches & subjects from Supabase via backend API
   useEffect(() => {
-    if (initialBatch) setSelectedBatch(initialBatch);
-    if (initialSubject) setSelectedSubject(initialSubject);
+    let isMounted = true;
+    setIsLoadingBatches(true);
+    setBatchesError(null);
+
+    apiRequest('/api/teacher/my-batches')
+      .then((data) => {
+        if (!isMounted) return;
+        if (Array.isArray(data)) {
+          setBatchesList(data);
+          if (initialBatch) {
+            const matched = data.find(
+              (b) => b.batch_id === initialBatch || b.batch_name === initialBatch
+            );
+            if (matched) {
+              setSelectedBatch(matched.batch_id);
+              if (initialSubject) {
+                const subjs = (matched.subjects || []).map((s) =>
+                  typeof s === 'string' ? s : s.name
+                );
+                if (subjs.includes(initialSubject)) {
+                  setSelectedSubject(initialSubject);
+                }
+              }
+            }
+          }
+        } else {
+          setBatchesList([]);
+        }
+      })
+      .catch((err) => {
+        if (!isMounted) return;
+        console.error('Failed to load teacher batches:', err);
+        setBatchesError('Failed to load assigned batches from server.');
+        setBatchesList([]);
+      })
+      .finally(() => {
+        if (isMounted) {
+          setIsLoadingBatches(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
   }, [initialBatch, initialSubject]);
 
-  // Available subjects for the selected batch
+  // Available subjects for the selected batch assigned to this teacher
   const availableSubjects = useMemo(() => {
     if (!selectedBatch) return [];
-    return BATCH_SUBJECTS_MAP[selectedBatch] || [];
-  }, [selectedBatch]);
+    const currentBatch = batchesList.find(
+      (b) => b.batch_id === selectedBatch || b.batch_name === selectedBatch
+    );
+    if (!currentBatch || !currentBatch.subjects) return [];
+    return currentBatch.subjects
+      .map((s) => (typeof s === 'string' ? s : s.name))
+      .filter(Boolean);
+  }, [batchesList, selectedBatch]);
+
+  // Human-friendly batch label for headers and status tags
+  const selectedBatchLabel = useMemo(() => {
+    const found = batchesList.find(
+      (b) => b.batch_id === selectedBatch || b.batch_name === selectedBatch
+    );
+    return found ? found.batch_name : selectedBatch;
+  }, [batchesList, selectedBatch]);
 
   // Is batch and subject selection complete?
   const isSelectionComplete = Boolean(selectedBatch && selectedSubject);
@@ -84,18 +140,18 @@ export default function DoubtCorner({ onBack, initialBatch = null, initialSubjec
   // Read data for the chosen batch and subject
   const groupedPending = useMemo(() => {
     if (!isSelectionComplete) return [];
-    return getGroupedPendingDoubts(selectedBatch, selectedSubject);
-  }, [selectedBatch, selectedSubject, isSelectionComplete, refreshKey]);
+    return getGroupedPendingDoubts(selectedBatchLabel || selectedBatch, selectedSubject);
+  }, [selectedBatchLabel, selectedBatch, selectedSubject, isSelectionComplete, refreshKey]);
 
   const offlineDoubts = useMemo(() => {
     if (!isSelectionComplete) return [];
-    return getOfflineDoubts(selectedBatch, selectedSubject);
-  }, [selectedBatch, selectedSubject, isSelectionComplete, refreshKey]);
+    return getOfflineDoubts(selectedBatchLabel || selectedBatch, selectedSubject);
+  }, [selectedBatchLabel, selectedBatch, selectedSubject, isSelectionComplete, refreshKey]);
 
   const solvedDoubts = useMemo(() => {
     if (!isSelectionComplete) return [];
-    return getSolvedDoubts(selectedBatch, selectedSubject);
-  }, [selectedBatch, selectedSubject, isSelectionComplete, refreshKey]);
+    return getSolvedDoubts(selectedBatchLabel || selectedBatch, selectedSubject);
+  }, [selectedBatchLabel, selectedBatch, selectedSubject, isSelectionComplete, refreshKey]);
 
   // Total pending questions count
   const totalPendingCount = useMemo(() => {
@@ -270,17 +326,6 @@ export default function DoubtCorner({ onBack, initialBatch = null, initialSubjec
     }
   };
 
-  // Action: Submit online solution for an offline doubt
-  const handleConfirmAnswerOfflineModal = () => {
-    if (answerOfflineModalDoubt && offlineAnswerText.trim()) {
-      submitDoubtSolution(answerOfflineModalDoubt.id, {
-        answer: offlineAnswerText.trim()
-      });
-      showToast('Offline doubt solved and answered online!');
-      setAnswerOfflineModalDoubt(null);
-      setOfflineAnswerText('');
-    }
-  };
 
   return (
     <div className="dc-container">
@@ -332,10 +377,21 @@ export default function DoubtCorner({ onBack, initialBatch = null, initialSubjec
                     setSelectedSubject('');
                     setActiveSolvingStudent(null);
                   }}
+                  disabled={isLoadingBatches || (batchesList.length === 0 && !batchesError)}
                 >
-                  <option value="">-- Select Batch --</option>
-                  {BATCHES.map((b) => (
-                    <option key={b} value={b}>{b}</option>
+                  <option value="">
+                    {isLoadingBatches
+                      ? '-- Loading Batches... --'
+                      : batchesError
+                      ? '-- Error Loading Batches --'
+                      : batchesList.length === 0
+                      ? '-- No Batches Assigned --'
+                      : '-- Select Batch --'}
+                  </option>
+                  {batchesList.map((b) => (
+                    <option key={b.batch_id} value={b.batch_id}>
+                      {b.batch_name}
+                    </option>
                   ))}
                 </select>
                 <div className="dc-select-caret" aria-hidden="true">
@@ -364,10 +420,14 @@ export default function DoubtCorner({ onBack, initialBatch = null, initialSubjec
                     setSelectedSubject(e.target.value);
                     setActiveSolvingStudent(null);
                   }}
-                  disabled={!selectedBatch}
+                  disabled={!selectedBatch || availableSubjects.length === 0}
                 >
                   <option value="">
-                    {selectedBatch ? '-- Select Subject --' : '-- Select Batch First --'}
+                    {!selectedBatch
+                      ? '-- Select Batch First --'
+                      : availableSubjects.length === 0
+                      ? '-- No Subjects Assigned --'
+                      : '-- Select Subject --'}
                   </option>
                   {availableSubjects.map((s) => (
                     <option key={s} value={s}>{s}</option>
@@ -384,10 +444,19 @@ export default function DoubtCorner({ onBack, initialBatch = null, initialSubjec
 
           {/* Selection Status indicator */}
           <div className="dc-selection-status-strip">
-            {isSelectionComplete ? (
+            {batchesError ? (
+              <span className="dc-status-hint" style={{ color: '#DC2626' }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="8" x2="12" y2="12" />
+                  <line x1="12" y1="16" x2="12.01" y2="16" />
+                </svg>
+                {batchesError}
+              </span>
+            ) : isSelectionComplete ? (
               <span className="dc-status-active">
                 <span className="dc-pulse-dot" />
-                Active: <strong>{selectedBatch}</strong> &bull; <strong>{selectedSubject}</strong>
+                Active: <strong>{selectedBatchLabel}</strong> &bull; <strong>{selectedSubject}</strong>
               </span>
             ) : (
               <span className="dc-status-hint">
@@ -470,55 +539,6 @@ export default function DoubtCorner({ onBack, initialBatch = null, initialSubjec
         )}
       </header>
 
-      {/* --- PROMPT STATE WHEN BATCH/SUBJECT NOT SELECTED --- */}
-      {!isSelectionComplete && (
-        <section className="dc-prompt-section">
-          <div className="dc-empty-prompt-card">
-            <div className="dc-prompt-icon-box">
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M22 10v6M2 10l10-5 10 5-10 5z"/>
-                <path d="M6 12v5c3 3 9 3 12 0v-5"/>
-              </svg>
-            </div>
-            <h2 className="dc-prompt-title">Select a Batch &amp; Subject to Begin</h2>
-            <p className="dc-prompt-desc">
-              Choose your course batch and subject from the dropdown above to manage Pending Doubts, Classroom Offline Doubts, and Solved solutions.
-            </p>
-            <div className="dc-quick-select-pills">
-              <button
-                type="button"
-                className="dc-quick-pill"
-                onClick={() => {
-                  setSelectedBatch('B.Sc 6th Sem');
-                  setSelectedSubject('Computer Network');
-                }}
-              >
-                <span>B.Sc 6th Sem - Computer Network</span>
-              </button>
-              <button
-                type="button"
-                className="dc-quick-pill"
-                onClick={() => {
-                  setSelectedBatch('MCA 2nd Sem');
-                  setSelectedSubject('Software Engineering');
-                }}
-              >
-                <span>MCA 2nd Sem - Software Engineering</span>
-              </button>
-              <button
-                type="button"
-                className="dc-quick-pill"
-                onClick={() => {
-                  setSelectedBatch('B.Sc 4th Sem');
-                  setSelectedSubject('DBMS');
-                }}
-              >
-                <span>B.Sc 4th Sem - DBMS</span>
-              </button>
-            </div>
-          </div>
-        </section>
-      )}
 
       {/* --- CONTENT ONCE BATCH AND SUBJECT ARE SELECTED --- */}
       {isSelectionComplete && (
@@ -568,7 +588,7 @@ export default function DoubtCorner({ onBack, initialBatch = null, initialSubjec
                   </div>
                   <h3>No Pending Doubts</h3>
                   <p>
-                    All doubts for <strong>{selectedBatch}</strong> ({selectedSubject}) have been solved or marked for classroom offline discussion.
+                    All doubts for <strong>{selectedBatchLabel}</strong> ({selectedSubject}) have been solved or marked for classroom offline discussion.
                   </p>
                 </div>
               ) : (
@@ -877,7 +897,7 @@ export default function DoubtCorner({ onBack, initialBatch = null, initialSubjec
                   </div>
                   <h3>No Offline Doubts</h3>
                   <p>
-                    There are no doubts marked for classroom discussion in <strong>{selectedBatch}</strong> &bull; {selectedSubject}.
+                    There are no doubts marked for classroom discussion in <strong>{selectedBatchLabel}</strong> &bull; {selectedSubject}.
                   </p>
                 </div>
               ) : (
@@ -929,20 +949,6 @@ export default function DoubtCorner({ onBack, initialBatch = null, initialSubjec
                           </svg>
                           <span>Mark Resolved in Class</span>
                         </button>
-
-                        <button
-                          type="button"
-                          className="dc-answer-instead-btn"
-                          onClick={() => {
-                            setAnswerOfflineModalDoubt(d);
-                            setOfflineAnswerText('');
-                          }}
-                        >
-                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>
-                          </svg>
-                          <span>Answer Online</span>
-                        </button>
                       </div>
                     </article>
                   ))}
@@ -964,7 +970,7 @@ export default function DoubtCorner({ onBack, initialBatch = null, initialSubjec
                   </div>
                   <h3>No Solved Records</h3>
                   <p>
-                    No resolved doubts yet for <strong>{selectedBatch}</strong> &bull; {selectedSubject}.
+                    No resolved doubts yet for <strong>{selectedBatchLabel}</strong> &bull; {selectedSubject}.
                   </p>
                 </div>
               ) : (
@@ -1087,55 +1093,7 @@ export default function DoubtCorner({ onBack, initialBatch = null, initialSubjec
         </div>
       )}
 
-      {/* --- QUICK ANSWER OFFLINE MODAL --- */}
-      {answerOfflineModalDoubt && (
-        <div className="dc-modal-overlay" onClick={() => setAnswerOfflineModalDoubt(null)}>
-          <div className="dc-modal-card sm" onClick={(e) => e.stopPropagation()}>
-            <div className="dc-modal-header">
-              <h3>Answer Offline Doubt Online</h3>
-              <button
-                type="button"
-                className="dc-modal-close-btn"
-                onClick={() => setAnswerOfflineModalDoubt(null)}
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                  <line x1="18" y1="6" x2="6" y2="18"/>
-                  <line x1="6" y1="6" x2="18" y2="18"/>
-                </svg>
-              </button>
-            </div>
-            <div className="dc-modal-body">
-              <p className="dc-modal-qinfo">
-                <strong>{answerOfflineModalDoubt.studentName}</strong>: {answerOfflineModalDoubt.questionTitle}
-              </p>
-              <textarea
-                className="dc-answer-textarea"
-                rows={4}
-                placeholder="Write your explanation (max 200 words)..."
-                value={offlineAnswerText}
-                onChange={(e) => setOfflineAnswerText(e.target.value)}
-              />
-            </div>
-            <div className="dc-modal-footer">
-              <button
-                type="button"
-                className="dc-cancel-btn"
-                onClick={() => setAnswerOfflineModalDoubt(null)}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="dc-primary-btn"
-                onClick={handleConfirmAnswerOfflineModal}
-                disabled={!offlineAnswerText.trim() || countWords(offlineAnswerText) > 200}
-              >
-                Submit Solution
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+
     </div>
   );
 }

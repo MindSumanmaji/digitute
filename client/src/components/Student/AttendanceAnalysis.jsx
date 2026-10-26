@@ -77,8 +77,9 @@ export default function AttendanceAnalysis({ onBack, showToast, attendanceData: 
   const resolvedTeachers = useMemo(() => {
     const map = {};
     (liveRoutines || []).forEach((r) => {
-      if (r.subject && r.users?.full_name) {
-        map[r.subject] = r.users.full_name;
+      const tName = r.users?.full_name || r.teacher?.full_name;
+      if (r.subject && tName) {
+        map[r.subject] = tName;
       }
     });
     (liveSessions || []).forEach((s) => {
@@ -1736,11 +1737,37 @@ export default function AttendanceAnalysis({ onBack, showToast, attendanceData: 
     const R_gauge = 104;
     const gaugeStroke = 14;
     const gaugeCircumference = 2 * Math.PI * R_gauge;
-    const gaugeProgress = (overallYearRate / 100) * gaugeCircumference;
+
+    // Dynamically resolve rate, text and stats for selected month or overall year
+    const activeSelectedMonth = selectedYearMonth !== null ? yearMonths[selectedYearMonth] : null;
+
+    const displayRate = activeSelectedMonth
+      ? (activeSelectedMonth.hasData && activeSelectedMonth.rate !== null ? activeSelectedMonth.rate : 0)
+      : overallYearRate;
+
+    const displayRateText = activeSelectedMonth
+      ? (activeSelectedMonth.hasData && activeSelectedMonth.rate !== null ? `${activeSelectedMonth.rate}%` : '-')
+      : `${overallYearRate}%`;
+
+    const displayLabel1 = activeSelectedMonth ? activeSelectedMonth.monthFull : 'Overall';
+    const displayLabel2 = 'Attendance';
+
+    const displaySub1 = activeSelectedMonth
+      ? (activeSelectedMonth.hasData ? `${activeSelectedMonth.totalAttended} / ${activeSelectedMonth.totalHeld} classes` : 'No classes held')
+      : `${goodMonthsCount} / 12 months`;
+
+    const displaySub2 = activeSelectedMonth
+      ? (activeSelectedMonth.hasData ? (activeSelectedMonth.rate >= 75 ? 'Good Standing' : activeSelectedMonth.rate >= 50 ? 'Average' : 'Low Attendance') : `${currentYear}`)
+      : '≥ 75%';
+
+    const arcColor = displayRate >= 75 ? '#10b981' : displayRate >= 50 ? '#f59e0b' : displayRate > 0 ? '#ef4444' : '#10b981';
+    const gaugeProgress = ((displayRate || 0) / 100) * gaugeCircumference;
 
     return (
       <div className="sp-year-dial-container">
-        <svg viewBox={`0 0 ${svgWidth} ${svgHeight}`} className="sp-year-dial-svg">
+        {/* Desktop Clock Dial View (Shown on screens > 768px) */}
+        <div className="sp-year-dial-desktop-wrap">
+          <svg viewBox={`0 0 ${svgWidth} ${svgHeight}`} className="sp-year-dial-svg">
           <defs>
             {/* Premium elevation drop shadows */}
             <filter id="nodeShadow" x="-30%" y="-30%" width="160%" height="160%">
@@ -1809,72 +1836,81 @@ export default function AttendanceAnalysis({ onBack, showToast, attendanceData: 
             cy={cy}
             r={R_gauge}
             fill="none"
-            stroke="#10b981"
+            stroke={arcColor}
             strokeWidth={gaugeStroke}
             strokeLinecap="round"
             strokeDasharray={`${gaugeProgress} ${gaugeCircumference}`}
             transform={`rotate(-90 ${cx} ${cy})`}
-            style={{ transition: 'stroke-dasharray 0.6s cubic-bezier(0.16, 1, 0.3, 1)' }}
+            style={{ transition: 'stroke-dasharray 0.5s cubic-bezier(0.16, 1, 0.3, 1), stroke 0.3s ease' }}
           />
 
           {/* 4. Center Inner Circle with Elevation Shadow */}
-          <circle
-            cx={cx}
-            cy={cy}
-            r={R_gauge - gaugeStroke / 2 - 4}
-            fill="#ffffff"
-            filter="url(#centerDiscShadow)"
-          />
-          <text
-            x={cx}
-            y={cy - 12}
-            textAnchor="middle"
-            fontSize="36"
-            fontWeight="800"
-            fill="#0f172a"
+          <g
+            style={{ cursor: selectedYearMonth !== null ? 'pointer' : 'default' }}
+            onClick={() => {
+              if (selectedYearMonth !== null) {
+                setSelectedYearMonth(null);
+              }
+            }}
           >
-            {overallYearRate}%
-          </text>
-          <text
-            x={cx}
-            y={cy + 10}
-            textAnchor="middle"
-            fontSize="13"
-            fontWeight="600"
-            fill="#64748b"
-          >
-            Overall
-          </text>
-          <text
-            x={cx}
-            y={cy + 26}
-            textAnchor="middle"
-            fontSize="13"
-            fontWeight="600"
-            fill="#64748b"
-          >
-            Attendance
-          </text>
-          <text
-            x={cx}
-            y={cy + 48}
-            textAnchor="middle"
-            fontSize="12"
-            fontWeight="700"
-            fill="#1e293b"
-          >
-            {goodMonthsCount} / 12 months
-          </text>
-          <text
-            x={cx}
-            y={cy + 63}
-            textAnchor="middle"
-            fontSize="11.5"
-            fontWeight="600"
-            fill="#64748b"
-          >
-            ≥ 75%
-          </text>
+            <circle
+              cx={cx}
+              cy={cy}
+              r={R_gauge - gaugeStroke / 2 - 4}
+              fill="#ffffff"
+              filter="url(#centerDiscShadow)"
+            />
+            <text
+              x={cx}
+              y={cy - 24}
+              textAnchor="middle"
+              fontSize="36"
+              fontWeight="800"
+              fill={activeSelectedMonth && !activeSelectedMonth.hasData ? '#94a3b8' : '#0f172a'}
+            >
+              {displayRateText}
+            </text>
+            <text
+              x={cx}
+              y={cy - 1}
+              textAnchor="middle"
+              fontSize="14"
+              fontWeight="700"
+              fill={activeSelectedMonth ? '#2563eb' : '#64748b'}
+            >
+              {displayLabel1}
+            </text>
+            <text
+              x={cx}
+              y={cy + 15}
+              textAnchor="middle"
+              fontSize="13"
+              fontWeight="600"
+              fill="#64748b"
+            >
+              {displayLabel2}
+            </text>
+            <text
+              x={cx}
+              y={cy + 36}
+              textAnchor="middle"
+              fontSize="12"
+              fontWeight="700"
+              fill="#1e293b"
+            >
+              {displaySub1}
+            </text>
+            <text
+              x={cx}
+              y={cy + 51}
+              textAnchor="middle"
+              fontSize="11.5"
+              fontWeight="600"
+              fill={activeSelectedMonth && activeSelectedMonth.hasData ? (activeSelectedMonth.rate >= 75 ? '#15803d' : activeSelectedMonth.rate >= 50 ? '#b45309' : '#dc2626') : '#64748b'}
+            >
+              {displaySub2}
+            </text>
+          </g>
 
           {/* 5. The 12 Month Nodes in Clockwise Order (Jan at 12 o'clock ... Dec at 11 o'clock) */}
           <g>
@@ -2103,6 +2139,112 @@ export default function AttendanceAnalysis({ onBack, showToast, attendanceData: 
             );
           })()}
         </svg>
+      </div>
+
+      {/* Mobile Year Performance Hub (Shown on screens <= 768px) */}
+      <div className="sp-year-dial-mobile-wrap">
+        {/* 1. Central Gauge Summary Card */}
+        <div className="sp-year-mobile-summary-card">
+          <div className="sp-yms-circle-gauge">
+            <svg width="110" height="110" viewBox="0 0 120 120">
+              <circle cx="60" cy="60" r="48" fill="none" stroke="#f1f5f9" strokeWidth="10" />
+              <circle
+                cx="60"
+                cy="60"
+                r="48"
+                fill="none"
+                stroke={arcColor}
+                strokeWidth="10"
+                strokeLinecap="round"
+                strokeDasharray={`${((displayRate || 0) / 100) * (2 * Math.PI * 48)} ${2 * Math.PI * 48}`}
+                transform="rotate(-90 60 60)"
+                style={{ transition: 'stroke-dasharray 0.5s ease, stroke 0.3s ease' }}
+              />
+              <text x="60" y="58" textAnchor="middle" fontSize="24" fontWeight="800" fill={activeSelectedMonth && !activeSelectedMonth.hasData ? '#94a3b8' : '#0f172a'}>
+                {displayRateText}
+              </text>
+              <text x="60" y="74" textAnchor="middle" fontSize="9.5" fontWeight="700" fill={activeSelectedMonth ? '#2563eb' : '#64748b'}>
+                {activeSelectedMonth ? activeSelectedMonth.monthShort : 'Attendance'}
+              </text>
+            </svg>
+          </div>
+          <div className="sp-yms-info">
+            <h4>
+              {activeSelectedMonth
+                ? `${activeSelectedMonth.monthFull} ${currentYear}`
+                : `${currentYear} Annual Standing`}
+            </h4>
+            <p className="sp-yms-sub">
+              {activeSelectedMonth
+                ? (activeSelectedMonth.hasData
+                    ? `${activeSelectedMonth.totalAttended} of ${activeSelectedMonth.totalHeld} classes attended`
+                    : 'No classes held this month')
+                : `${goodMonthsCount} of 12 months with ≥ 75% rate`}
+            </p>
+            <div className="sp-yms-stats-row">
+              <div className="sp-yms-stat">
+                <span>Total Held</span>
+                <strong>{activeSelectedMonth ? (activeSelectedMonth.totalHeld || 0) : totalHeldInYear}</strong>
+              </div>
+              <div className="sp-yms-stat">
+                <span>Attended</span>
+                <strong style={{ color: '#16a34a' }}>
+                  {activeSelectedMonth ? (activeSelectedMonth.totalAttended || 0) : totalAttendedInYear}
+                </strong>
+              </div>
+              <div className="sp-yms-stat">
+                <span>Missed</span>
+                <strong style={{ color: '#ef4444' }}>
+                  {activeSelectedMonth
+                    ? Math.max(0, (activeSelectedMonth.totalHeld || 0) - (activeSelectedMonth.totalAttended || 0))
+                    : Math.max(0, totalHeldInYear - totalAttendedInYear)}
+                </strong>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* 2. 12-Month Touch Matrix Grid (3 cols x 4 rows) */}
+        <div className="sp-year-mobile-matrix-header">
+          <span>Tap any month to view class log:</span>
+        </div>
+        <div className="sp-year-mobile-months-grid">
+          {yearMonths.map((m, idx) => {
+            const isSelected = selectedYearMonth === idx;
+            let badgeBg = '#f1f5f9';
+            let badgeColor = '#64748b';
+            let badgeText = '-';
+
+            if (m.hasData && m.rate !== null) {
+              badgeText = `${m.rate}%`;
+              if (m.rate >= 75) {
+                badgeBg = '#dcfce7';
+                badgeColor = '#15803d';
+              } else if (m.rate >= 50) {
+                badgeBg = '#fef3c7';
+                badgeColor = '#b45309';
+              } else {
+                badgeBg = '#fee2e2';
+                badgeColor = '#dc2626';
+              }
+            }
+
+            return (
+              <button
+                key={m.monthShort}
+                type="button"
+                className={`sp-ym-grid-item ${isSelected ? 'selected' : ''}`}
+                onClick={() => setSelectedYearMonth((prev) => (prev === idx ? null : idx))}
+              >
+                <span className="sp-ym-month-name">{m.monthShort}</span>
+                <span className="sp-ym-badge" style={{ backgroundColor: badgeBg, color: badgeColor }}>
+                  {badgeText}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
         {/* Hover Tooltip */}
         {hoveredBar && hoveredBar.isYear && (

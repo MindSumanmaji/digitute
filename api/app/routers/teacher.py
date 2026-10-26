@@ -6,13 +6,19 @@ from app.models import (
     MarkAttendanceRequest,
     StudyMaterialCreate,
     StudyMaterialResponse,
-    DoubtResolve
+    DppCreate,
+    DppManualCreate,
+    DppResponse,
+    DoubtResolve,
+    SyllabusSaveRequest,
+    SyllabusToggleChapterRequest
 )
 from datetime import date
 from typing import Any, Optional
 import uuid
 import os
 import re
+import traceback
 
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50 MiB limit
 
@@ -26,6 +32,16 @@ ALLOWED_EXTENSIONS = {
     ".mkv": "video/x-matroska",
 }
 
+ALLOWED_DPP_EXTENSIONS = {
+    ".pdf": "application/pdf",
+    ".doc": "application/msword",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
+}
+
 def validate_magic_bytes(ext: str, header: bytes) -> bool:
     if ext == ".pdf":
         return header.startswith(b"%PDF")
@@ -33,6 +49,12 @@ def validate_magic_bytes(ext: str, header: bytes) -> bool:
         return header.startswith(b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1")
     elif ext == ".docx":
         return header.startswith(b"PK\x03\x04")
+    elif ext == ".png":
+        return header.startswith(b"\x89PNG\r\n\x1a\n")
+    elif ext in (".jpg", ".jpeg"):
+        return header.startswith(b"\xff\xd8\xff")
+    elif ext == ".webp":
+        return len(header) >= 12 and header.startswith(b"RIFF") and header[8:12] == b"WEBP"
     elif ext == ".mp4":
         return len(header) >= 8 and (b"ftyp" in header[:16] or b"moov" in header[:16])
     elif ext in (".webm", ".mkv"):
@@ -123,6 +145,222 @@ def get_my_batches(current_user: dict = Depends(get_current_user)):
         return assigned
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/batch-summary", summary="Get Live Student Count and Doubt Stats for Batch & Subject")
+def get_batch_summary(
+    batch_id: Optional[str] = None,
+    batch_name: Optional[str] = None,
+    subject: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    try:
+        supabase = get_supabase_client()
+        target_batch_id = batch_id
+        if not target_batch_id and batch_name:
+            b_res = supabase.table("batches").select("id").ilike("name", batch_name.strip()).execute()
+            if b_res.data:
+                target_batch_id = b_res.data[0]["id"]
+                
+        student_count = 0
+        if target_batch_id:
+            st_res = supabase.table("users").select("id", count="exact").eq("role", "STUDENT").eq("batch_id", target_batch_id).eq("is_active", True).execute()
+            student_count = st_res.count if st_res.count is not None else len(st_res.data or [])
+
+        doubt_query = supabase.table("doubts").select("id, status, subject, batch_id")
+        if target_batch_id:
+            doubt_query = doubt_query.eq("batch_id", target_batch_id)
+        if subject:
+            doubt_query = doubt_query.ilike("subject", subject.strip())
+            
+        d_res = doubt_query.execute()
+        doubts = d_res.data or []
+        
+        total_doubts = len(doubts)
+        resolved_doubts = sum(1 for d in doubts if d.get("status") == "RESOLVED")
+        pending_doubts = sum(1 for d in doubts if d.get("status") != "RESOLVED")
+        solved_pct = round((resolved_doubts / total_doubts) * 100) if total_doubts > 0 else 100
+
+        return {
+            "batch_id": target_batch_id,
+            "students": student_count,
+            "doubts": {
+                "total": total_doubts,
+                "resolved": resolved_doubts,
+                "pending": pending_doubts,
+                "solved_pct": solved_pct
+            }
+        }
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==============================================================================
+# 1.1 ENROLLED BATCH STUDENTS FOR TEACHER
+# ==============================================================================
+@router.get("/students", summary="Get Enrolled Students for Batch & Subject")
+def get_batch_students(
+    batch_id: Optional[str] = None,
+    batch_name: Optional[str] = None,
+    subject: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    try:
+        supabase = get_supabase_client()
+        target_batch_id = batch_id
+        target_batch_name = batch_name
+
+        if target_batch_id:
+            try:
+                uuid.UUID(target_batch_id)
+                b_res = supabase.table("batches").select("id, name").eq("id", target_batch_id).execute()
+                if b_res.data:
+                    target_batch_name = b_res.data[0].get("name")
+            except ValueError:
+                # If target_batch_id was passed as a batch name string instead of UUID
+                b_res = supabase.table("batches").select("id, name").ilike("name", target_batch_id.strip()).execute()
+                if b_res.data:
+                    target_batch_id = b_res.data[0].get("id")
+                    target_batch_name = b_res.data[0].get("name")
+        elif target_batch_name:
+            b_res = supabase.table("batches").select("id, name").ilike("name", target_batch_name.strip()).execute()
+            if b_res.data:
+                target_batch_id = b_res.data[0].get("id")
+                target_batch_name = b_res.data[0].get("name")
+
+        if not target_batch_id:
+            return []
+
+        # 1. Fetch only enrolled active students for this specific batch from the database
+        st_res = supabase.table("users").select(
+            "id, full_name, email, phone, avatar_url, batch_id, created_at, role, is_active"
+        ).eq("role", "STUDENT").eq("batch_id", target_batch_id).eq("is_active", True).order("full_name").execute()
+
+        student_rows = st_res.data or []
+        if not student_rows:
+            return []
+
+        # 2. Query attendance for sessions of this batch and subject
+        student_att = {}
+        try:
+            session_query = supabase.table("class_sessions").select("id, session_date, subject").eq("batch_id", target_batch_id)
+            if subject:
+                session_query = session_query.ilike("subject", subject.strip())
+            session_res = session_query.execute()
+            sessions = session_res.data or []
+            session_ids = [s["id"] for s in sessions if s.get("id")]
+
+            if session_ids:
+                att_res = supabase.table("attendance").select("student_id, status").in_("session_id", session_ids).execute()
+                for a in att_res.data or []:
+                    sid = a.get("student_id")
+                    if sid:
+                        if sid not in student_att:
+                            student_att[sid] = {"total": 0, "present": 0}
+                        student_att[sid]["total"] += 1
+                        if a.get("status") == "PRESENT":
+                            student_att[sid]["present"] += 1
+        except Exception as att_err:
+            print("Attendance lookup warning:", att_err)
+
+        # 3. Query exams for this batch and subject
+        student_exam_scores = {}
+        try:
+            exam_query = supabase.table("exams").select("id, title, total_marks, exam_date, results").eq("batch_id", target_batch_id)
+            if subject:
+                exam_query = exam_query.ilike("subject", subject.strip())
+            exam_res = exam_query.execute()
+            for ex in exam_res.data or []:
+                results = ex.get("results") or []
+                try:
+                    total_m = float(ex.get("total_marks") or 100)
+                except (ValueError, TypeError):
+                    total_m = 100.0
+                for r in results:
+                    sid = r.get("student_id")
+                    obtained = r.get("marks_obtained")
+                    if sid and obtained is not None and not r.get("is_absent"):
+                        try:
+                            obt = float(obtained)
+                            pct = (obt / total_m) * 100 if total_m > 0 else 0
+                            if sid not in student_exam_scores:
+                                student_exam_scores[sid] = []
+                            student_exam_scores[sid].append(pct)
+                        except (ValueError, TypeError):
+                            pass
+        except Exception as exam_err:
+            print("Exam lookup warning:", exam_err)
+
+        # 4. Format students list strictly matching database records
+        formatted_students = []
+        for idx, s in enumerate(student_rows):
+            sid = s.get("id")
+
+            # Calculate attendance status & percentage
+            att_info = student_att.get(sid)
+            if att_info and att_info["total"] > 0:
+                att_pct = round((att_info["present"] / att_info["total"]) * 100)
+            else:
+                att_pct = 100
+
+            if att_pct >= 90:
+                att_status = "Excellent"
+            elif att_pct >= 80:
+                att_status = "Good"
+            elif att_pct >= 70:
+                att_status = "Average"
+            else:
+                att_status = "Below Average"
+
+            # Calculate grade from actual exam scores
+            scores = student_exam_scores.get(sid, [])
+            if scores:
+                avg_score = sum(scores) / len(scores)
+                if avg_score >= 90:
+                    grade = "A+"
+                elif avg_score >= 80:
+                    grade = "A"
+                elif avg_score >= 70:
+                    grade = "B+"
+                elif avg_score >= 60:
+                    grade = "B"
+                elif avg_score >= 50:
+                    grade = "C"
+                else:
+                    grade = "D"
+            else:
+                grade = "A"
+
+            clean_phone = s.get("phone") or ""
+            if clean_phone.startswith("+91"):
+                clean_phone = clean_phone[3:].strip()
+            elif clean_phone.startswith("91") and len(clean_phone) == 12:
+                clean_phone = clean_phone[2:]
+
+            formatted_students.append({
+                "id": sid,
+                "roll": f"CS-{idx+1:02d}",
+                "name": s.get("full_name") or "Enrolled Student",
+                "phone": clean_phone,
+                "email": s.get("email") or "",
+                "avatar_url": s.get("avatar_url"),
+                "batch_id": target_batch_id,
+                "batch_name": target_batch_name or "Assigned Batch",
+                "attendance": att_status,
+                "attendancePct": att_pct,
+                "grade": grade,
+                "total_classes": att_info["total"] if att_info else 0,
+                "present_classes": att_info["present"] if att_info else 0,
+                "exams_count": len(scores)
+            })
+
+        return formatted_students
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 # ==============================================================================
 # 2. CLASS SESSIONS & ATTENDANCE
@@ -460,8 +698,247 @@ def delete_study_material(material_id: str, current_user: dict = Depends(get_cur
         raise HTTPException(status_code=500, detail=str(e))
 
 
+
 # ==============================================================================
-# 4. DOUBTS & QUESTION RESOLUTION
+# 4. DAILY PRACTICE PROBLEMS (DPPS)
+# ==============================================================================
+@router.post("/dpps", summary="Upload DPP / Worksheet for Batch")
+async def upload_dpp(
+    file: UploadFile = File(...),
+    batch_id: str = Form(...),
+    subject: str = Form(...),
+    title: Optional[str] = Form(None),
+    current_user: dict = Depends(get_current_user)
+):
+    supabase = get_supabase_client()
+    teacher_id = current_user.get("id")
+    teacher_name = current_user.get("full_name", "")
+    user_role = current_user.get("role", "TEACHER")
+
+    # 1. Authorize teacher for batch and exact subject
+    verify_teacher_batch_and_subject(supabase, teacher_id, teacher_name, batch_id, subject, user_role)
+
+    # 2. Validate filename and extension
+    original_filename = file.filename or "dpp_worksheet"
+    clean_filename = os.path.basename(original_filename)
+    ext = os.path.splitext(clean_filename)[1].lower()
+
+    if ext not in ALLOWED_DPP_EXTENSIONS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unsupported file extension '{ext}'. Allowed extensions: PDF, DOC, DOCX, PNG, JPG, JPEG, WEBP"
+        )
+
+    # 3. Read content & validate file size
+    contents = await file.read()
+    if not contents or len(contents) == 0:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Uploaded file is empty")
+
+    if len(contents) > MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            detail="File size exceeds the maximum limit of 50 MiB"
+        )
+
+    # 4. Validate file content magic bytes
+    if not validate_magic_bytes(ext, contents[:32]):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"File signature/content does not match declared extension '{ext}'"
+        )
+
+    # 5. Prepare storage object path
+    safe_name = re.sub(r'[^a-zA-Z0-9_.-]', '_', clean_filename)
+    object_name = f"{uuid.uuid4().hex[:12]}_{safe_name}"
+    storage_path = f"dpps/{batch_id}/{object_name}"
+
+    content_type = file.content_type or ALLOWED_DPP_EXTENSIONS[ext]
+    if content_type == "application/octet-stream":
+        content_type = ALLOWED_DPP_EXTENSIONS[ext]
+
+    # 6. Upload file to Supabase Storage
+    try:
+        supabase.storage.from_("digitute").upload(
+            path=storage_path,
+            file=contents,
+            file_options={"content-type": content_type, "upsert": "true"}
+        )
+    except Exception as upload_err:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Storage upload failed: {str(upload_err)}"
+        )
+
+    # 7. Insert record in dpps table
+    doc_title = title.strip() if title and title.strip() else clean_filename
+    payload = {
+        "batch_id": batch_id,
+        "teacher_id": teacher_id,
+        "subject": subject.strip(),
+        "title": doc_title,
+        "file_url": storage_path
+    }
+
+    # Include content_type only after migration has been applied (column exists)
+    try:
+        supabase.table("dpps").select("content_type").limit(1).execute()
+        payload["content_type"] = "FILE"
+    except Exception:
+        pass  # Column not yet present; migration pending
+
+    try:
+        res = supabase.table("dpps").insert(payload).execute()
+        record = res.data[0] if res.data else payload
+    except Exception as db_err:
+        # Rollback: delete uploaded file from storage to avoid orphaned objects
+        try:
+            supabase.storage.from_("digitute").remove([storage_path])
+        except Exception:
+            pass
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to save DPP record: {str(db_err)}"
+        )
+
+    # 8. Generate signed URL for immediate usage (3600 seconds)
+    try:
+        signed = supabase.storage.from_("digitute").create_signed_url(storage_path, 3600)
+        record["signed_url"] = signed.get("signedURL") or signed.get("signedUrl")
+    except Exception:
+        record["signed_url"] = None
+
+    return record
+
+@router.post("/dpps/manual", summary="Create Manual Typed DPP (JSONB)")
+def create_manual_dpp(
+    data: DppManualCreate,
+    current_user: dict = Depends(get_current_user)
+):
+    supabase = get_supabase_client()
+    teacher_id = current_user.get("id")
+    teacher_name = current_user.get("full_name", "")
+    user_role = current_user.get("role", "TEACHER")
+
+    # 1. Authorize teacher for batch and exact subject
+    verify_teacher_batch_and_subject(supabase, teacher_id, teacher_name, data.batch_id, data.subject, user_role)
+
+    # 2. Validate questions payload: must be non-empty dict or list
+    if not isinstance(data.questions, (dict, list)) or len(data.questions) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Questions must be a non-empty JSON object or array"
+        )
+
+    title = data.title.strip() if data.title and data.title.strip() else f"Manual DPP — {data.subject.strip()}"
+    payload = {
+        "batch_id": data.batch_id,
+        "teacher_id": teacher_id,
+        "subject": data.subject.strip(),
+        "title": title,
+        "content_type": "MANUAL",
+        "file_url": None,
+        "questions": data.questions
+    }
+
+    try:
+        res = supabase.table("dpps").insert(payload).execute()
+        record = res.data[0] if res.data else payload
+        record["signed_url"] = None
+        return record
+    except Exception as db_err:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to save manual DPP: {str(db_err)}"
+        )
+
+@router.get("/dpps", summary="List DPPs Uploaded by Teacher")
+def list_my_dpps(current_user: dict = Depends(get_current_user)):
+    try:
+        supabase = get_supabase_client()
+        teacher_id = current_user.get("id")
+        user_role = current_user.get("role")
+
+        query = supabase.table("dpps").select("*, batches(name)")
+        if user_role != "ADMIN":
+            query = query.eq("teacher_id", teacher_id)
+
+        res = query.order("created_at", desc=True).execute()
+        dpps = res.data or []
+
+        # Generate signed URLs (3600 seconds expiration)
+        for item in dpps:
+            file_path = item.get("file_url")
+            if file_path:
+                try:
+                    signed = supabase.storage.from_("digitute").create_signed_url(file_path, 3600)
+                    item["signed_url"] = signed.get("signedURL") or signed.get("signedUrl")
+                except Exception:
+                    item["signed_url"] = None
+        return dpps
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/dpps/{dpp_id}/access-url", summary="Get Fresh Signed URL for DPP")
+def get_dpp_access_url(dpp_id: str, current_user: dict = Depends(get_current_user)):
+    try:
+        supabase = get_supabase_client()
+        teacher_id = current_user.get("id")
+        user_role = current_user.get("role")
+
+        res = supabase.table("dpps").select("*").eq("id", dpp_id).execute()
+        if not res.data:
+            raise HTTPException(status_code=404, detail="DPP not found")
+
+        dpp = res.data[0]
+        if user_role != "ADMIN" and dpp.get("teacher_id") != teacher_id:
+            raise HTTPException(status_code=403, detail="Not authorized to access this DPP")
+
+        file_path = dpp.get("file_url")
+        if not file_path or dpp.get("content_type") == "MANUAL":
+            raise HTTPException(status_code=400, detail="No file path associated with this DPP")
+
+        signed = supabase.storage.from_("digitute").create_signed_url(file_path, 3600)
+        signed_url = signed.get("signedURL") or signed.get("signedUrl")
+        return {"signed_url": signed_url, "expires_in": 3600}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/dpps/{dpp_id}", summary="Delete DPP")
+def delete_dpp(dpp_id: str, current_user: dict = Depends(get_current_user)):
+    try:
+        supabase = get_supabase_client()
+        teacher_id = current_user.get("id")
+        user_role = current_user.get("role")
+
+        res = supabase.table("dpps").select("*").eq("id", dpp_id).execute()
+        if not res.data:
+            raise HTTPException(status_code=404, detail="DPP not found")
+
+        dpp = res.data[0]
+        if user_role != "ADMIN" and dpp.get("teacher_id") != teacher_id:
+            raise HTTPException(status_code=403, detail="Not authorized to delete this DPP")
+
+        file_path = dpp.get("file_url")
+
+        supabase.table("dpps").delete().eq("id", dpp_id).execute()
+
+        if file_path:
+            try:
+                supabase.storage.from_("digitute").remove([file_path])
+            except Exception:
+                pass
+
+        return {"message": "DPP deleted successfully", "id": dpp_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==============================================================================
+# 5. DOUBTS & QUESTION RESOLUTION
 # ==============================================================================
 @router.get("/doubts", summary="List Student Doubts in Assigned Batches")
 def list_student_doubts(current_user: dict = Depends(get_current_user)):
@@ -490,3 +967,283 @@ def resolve_doubt(resolve: DoubtResolve, current_user: dict = Depends(get_curren
         return {"message": "Doubt resolved successfully"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==============================================================================
+# 5. SYLLABUS & CHAPTER PROGRESS MANAGEMENT
+# ==============================================================================
+@router.get("/syllabus", summary="Get Syllabus and Chapter Progress for Batch & Subject")
+def get_syllabus(
+    subject: str,
+    batch_name: Optional[str] = None,
+    batch_id: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    try:
+        supabase = get_supabase_client()
+        query = supabase.table("batches").select("id, name, subjects")
+        if batch_id:
+            query = query.eq("id", batch_id)
+        elif batch_name:
+            query = query.ilike("name", batch_name.strip())
+        else:
+            raise HTTPException(status_code=400, detail="batch_id or batch_name required")
+            
+        res = query.execute()
+        batches = res.data or []
+        
+        target_subject = subject.strip().lower()
+        
+        if batches:
+            batch = batches[0]
+            subjects = batch.get("subjects") or []
+            for s in subjects:
+                if isinstance(s, dict):
+                    s_name = (s.get("name") or "").strip().lower()
+                    chapters = s.get("chapters") or []
+                    display_name = s.get("name") or subject
+                elif isinstance(s, str):
+                    s_name = s.strip().lower()
+                    chapters = []
+                    display_name = s
+                else:
+                    continue
+
+                if s_name == target_subject:
+                    formatted_chapters = []
+                    for idx, ch in enumerate(chapters):
+                        if isinstance(ch, dict):
+                            formatted_chapters.append({
+                                "id": ch.get("id") or f"ch-{idx+1}",
+                                "num": ch.get("num") or idx + 1,
+                                "title": ch.get("title") or ch.get("name") or f"Chapter {idx+1}",
+                                "completed": bool(ch.get("completed") or ch.get("status") == "COMPLETED")
+                            })
+                        elif isinstance(ch, str):
+                            formatted_chapters.append({
+                                "id": f"ch-{idx+1}",
+                                "num": idx + 1,
+                                "title": ch,
+                                "completed": False
+                            })
+                    completed_count = sum(1 for c in formatted_chapters if c["completed"])
+                    total_count = len(formatted_chapters)
+                    pct = round((completed_count / total_count) * 100) if total_count > 0 else 0
+                    return {
+                        "batch_id": batch.get("id"),
+                        "batch_name": batch.get("name"),
+                        "subject": display_name,
+                        "chapters": formatted_chapters,
+                        "total": total_count,
+                        "completed": completed_count,
+                        "pct": pct
+                    }
+        
+        return {
+            "batch_id": batch_id,
+            "batch_name": batch_name,
+            "subject": subject,
+            "chapters": [],
+            "total": 0,
+            "completed": 0,
+            "pct": 0
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/syllabus", summary="Save or Update Syllabus Chapters in Database")
+def save_syllabus(
+    req: SyllabusSaveRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    try:
+        supabase = get_supabase_client()
+        batch_name = (req.batch_name or "").strip()
+        subject_name = (req.subject or "").strip()
+        
+        query = supabase.table("batches").select("*")
+        if req.batch_id:
+            query = query.eq("id", req.batch_id)
+        elif batch_name:
+            query = query.ilike("name", batch_name)
+        else:
+            raise HTTPException(status_code=400, detail="batch_id or batch_name required")
+            
+        res = query.execute()
+        batches = res.data or []
+        
+        formatted_chapters = []
+        for idx, ch in enumerate(req.chapters):
+            formatted_chapters.append({
+                "id": ch.get("id") or f"ch-{idx+1}",
+                "num": ch.get("num") or idx + 1,
+                "title": ch.get("title") or ch.get("name") or f"Chapter {idx+1}",
+                "completed": bool(ch.get("completed"))
+            })
+            
+        completed_count = sum(1 for c in formatted_chapters if c["completed"])
+        total_count = len(formatted_chapters)
+        pct = round((completed_count / total_count) * 100) if total_count > 0 else 0
+        teacher_id = current_user.get("id")
+
+        if batches:
+            batch = batches[0]
+            subjects = batch.get("subjects") or []
+            found = False
+            for idx, s in enumerate(subjects):
+                if isinstance(s, dict) and (s.get("name") or "").strip().lower() == subject_name.lower():
+                    # Preserve existing completed status for chapters already saved as completed in DB
+                    existing_completed = set()
+                    for old_ch in (s.get("chapters") or []):
+                        if isinstance(old_ch, dict) and (old_ch.get("completed") or old_ch.get("status") == "COMPLETED"):
+                            if old_ch.get("id"):
+                                existing_completed.add(str(old_ch.get("id")))
+                            if old_ch.get("num"):
+                                existing_completed.add(str(old_ch.get("num")))
+
+                    for ch in formatted_chapters:
+                        ch_id_str = str(ch.get("id"))
+                        ch_num_str = str(ch.get("num"))
+                        if ch_id_str in existing_completed or ch_num_str in existing_completed:
+                            ch["completed"] = True
+
+                    s["chapters"] = formatted_chapters
+                    found = True
+                    break
+                elif isinstance(s, str) and s.strip().lower() == subject_name.lower():
+                    subjects[idx] = {
+                        "name": s,
+                        "teacher_id": teacher_id,
+                        "share_percent": 30.0,
+                        "chapters": formatted_chapters
+                    }
+                    found = True
+                    break
+
+            if not found:
+                subjects.append({
+                    "name": subject_name,
+                    "teacher_id": teacher_id,
+                    "share_percent": 30.0,
+                    "chapters": formatted_chapters
+                })
+            supabase.table("batches").update({
+                "subjects": subjects,
+                "updated_at": "now()"
+            }).eq("id", batch["id"]).execute()
+            batch_id = batch["id"]
+            batch_name = batch.get("name", batch_name)
+        else:
+            # Upsert/Create batch in database so it is persistent in PostgreSQL
+            new_batch = {
+                "name": batch_name or "New Batch",
+                "fee_type": "MONTHLY",
+                "fee_amount": 0.00,
+                "is_active": True,
+                "subjects": [
+                    {
+                        "name": subject_name,
+                        "teacher_id": teacher_id,
+                        "share_percent": 30.0,
+                        "chapters": formatted_chapters
+                    }
+                ]
+            }
+            insert_res = supabase.table("batches").insert(new_batch).execute()
+            batch_id = insert_res.data[0]["id"] if insert_res.data else None
+
+        return {
+            "message": "Syllabus saved successfully",
+            "batch_id": batch_id,
+            "batch_name": batch_name,
+            "subject": subject_name,
+            "chapters": formatted_chapters,
+            "total": total_count,
+            "completed": completed_count,
+            "pct": pct
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.patch("/syllabus/toggle-chapter", summary="Toggle Single Chapter Completion in Database")
+def toggle_chapter(
+    req: SyllabusToggleChapterRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    try:
+        supabase = get_supabase_client()
+        batch_name = (req.batch_name or "").strip()
+        subject_name = req.subject.strip()
+        
+        query = supabase.table("batches").select("*")
+        if req.batch_id:
+            query = query.eq("id", req.batch_id)
+        elif batch_name:
+            query = query.ilike("name", batch_name)
+        else:
+            raise HTTPException(status_code=400, detail="batch_id or batch_name required")
+            
+        res = query.execute()
+        batches = res.data or []
+        
+        if not batches:
+            raise HTTPException(status_code=404, detail="Batch not found")
+            
+        batch = batches[0]
+        subjects = batch.get("subjects") or []
+        target_subject = None
+        for s in subjects:
+            if isinstance(s, dict) and (s.get("name") or "").strip().lower() == subject_name.lower():
+                target_subject = s
+                break
+                
+        if not target_subject:
+            raise HTTPException(status_code=404, detail=f"Subject '{subject_name}' not found in batch")
+            
+        chapters = target_subject.get("chapters") or []
+        target_ch = None
+        for ch in chapters:
+            if isinstance(ch, dict) and (str(ch.get("id")) == str(req.chapter_id) or str(ch.get("num")) == str(req.chapter_id)):
+                if ch.get("completed") and not req.completed:
+                    raise HTTPException(status_code=400, detail="Completed chapters cannot be unmarked as incomplete")
+                ch["completed"] = req.completed
+                ch["status"] = "COMPLETED" if req.completed else "IN_PROGRESS"
+                target_ch = ch
+                break
+                
+        if not target_ch:
+            raise HTTPException(status_code=404, detail=f"Chapter '{req.chapter_id}' not found")
+            
+        supabase.table("batches").update({
+            "subjects": subjects,
+            "updated_at": "now()"
+        }).eq("id", batch["id"]).execute()
+        
+        comp = sum(1 for c in chapters if isinstance(c, dict) and (c.get("completed") or c.get("status") == "COMPLETED"))
+        tot = len(chapters)
+        pct = round((comp / tot) * 100) if tot > 0 else 0
+        
+        return {
+            "message": "Chapter updated successfully",
+            "batch_id": batch["id"],
+            "batch_name": batch.get("name"),
+            "subject": subject_name,
+            "chapter": target_ch,
+            "completed": comp,
+            "total": tot,
+            "pct": pct,
+            "chapters": chapters
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+
+        raise HTTPException(status_code=500, detail=str(e))
+

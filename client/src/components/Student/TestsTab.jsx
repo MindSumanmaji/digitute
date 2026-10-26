@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import MeritListPage from './MeritListPage';
+import StudentProfileCardModal from './StudentProfileCardModal';
 
 export const toppersData = {
   'Unit Test 1 - Physics': [
@@ -217,12 +218,59 @@ export default function TestsTab({
   const [perfChartSubject, setPerfChartSubject] = useState('All Subjects');
   const [hoveredPerfPoint, setHoveredPerfPoint] = useState(null);
   const [viewingMeritTest, setViewingMeritTest] = useState(null);
+  const [selectedStudentForCard, setSelectedStudentForCard] = useState(null);
   const [isMobile, setIsMobile] = useState(() => {
     if (typeof window !== 'undefined') {
       return window.innerWidth <= 768;
     }
     return false;
   });
+
+  const handleOpenStudentProfile = (st) => {
+    if (!st) return;
+    const cleanName = (st.name || '').replace(' (You)', '');
+    const cleanHandle = '@' + cleanName.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const examData = toppersData['Unit Test 1 - Physics'] || [];
+    const totalStudents = examData.length || 48;
+
+    setSelectedStudentForCard({
+      ...st,
+      name: cleanName,
+      handle: cleanHandle,
+      roll: st.roll || '12-SCI-015',
+      photo: st.photo || (st.isMe ? '/student-avatar.jpg' : null),
+      initial: st.initial || cleanName.charAt(0),
+      bg: st.bg || '#eff6ff',
+      color: st.color || '#2563eb',
+      badge: st.rank === 1 ? 'Gold' : st.rank <= 3 ? 'Silver' : 'Bronze',
+      rank: `#${st.rank} of ${totalStudents}`,
+      rankSub: 'Rank (Batch)',
+      rankTrend: st.rank === 1 ? 'Batch Topper' : st.rank <= 3 ? 'Podium Topper' : st.rank <= 5 ? 'Top 5 Elite' : 'Consistent Performer',
+      attendancePct: 88 + (st.rank % 7),
+      attendanceDetail: `${40 + (st.rank % 5)} / 48 classes`,
+      avgScorePct: st.pct ? parseInt(st.pct) : (st.score || 85),
+      avgScoreDetail: `Latest: ${st.score || 85}/100`,
+      className: 'Class XII',
+      stream: 'Science',
+      batch: 'Class XII - Science (Batch A)',
+      session: '2026 (July - Dec)',
+      quote: st.rank === 1 
+        ? '"Excellence is not an act, but a habit."' 
+        : st.rank <= 3 
+          ? '"Consistency in daily practice is the true superpower."' 
+          : '"Consistent study today, bigger opportunities tomorrow."',
+      testsTaken: 12,
+      totalTests: 20,
+      bestScore: `${st.score || 85}/${st.total || 100}`,
+      bestScoreTest: 'Unit Test 1 - Physics',
+      subjects: [
+        { id: 'sub_physics', name: 'Physics', pct: st.score || 85, color: '#3b82f6', bg: '#eff6ff', icon: '⚛️' },
+        { id: 'sub_chemistry', name: 'Chemistry', pct: Math.max(60, (st.score || 85) - 4), color: '#10b981', bg: '#ecfdf5', icon: '🧪' },
+        { id: 'sub_math', name: 'Mathematics', pct: Math.max(60, (st.score || 85) - 6), color: '#8b5cf6', bg: '#f5f3ff', icon: '📐' },
+        { id: 'sub_overall', name: 'Overall', pct: st.pct ? parseInt(st.pct) : (st.score || 80), color: '#f43f5e', bg: '#fff1f2', icon: '⭐' }
+      ]
+    });
+  };
 
   useEffect(() => {
     const handleResize = () => {
@@ -265,71 +313,6 @@ export default function TestsTab({
       {/* ======================================================= */}
       {!isResultsView && (
         <div className="sp-subview-content">
-          {/* 4 Metric Cards */}
-          <div className="sp-metrics-grid-4">
-            <div className="sp-metric-card">
-              <div className="sp-metric-circle-icon sp-circle-blue">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect width="18" height="18" x="3" y="4" rx="2" ry="2"/>
-                  <line x1="16" x2="16" y1="2" y2="6"/>
-                  <line x1="8" x2="8" y1="2" y2="6"/>
-                  <polyline points="9 13 11 15 15 11"/>
-                </svg>
-              </div>
-              <div className="sp-metric-info">
-                <span className="sp-metric-label">Scheduled Tests</span>
-                <strong className="sp-metric-value">3 Upcoming</strong>
-                <span className="sp-metric-sub">Next: 12 Oct 2026</span>
-              </div>
-            </div>
-
-            <div className="sp-metric-card">
-              <div className="sp-metric-circle-icon sp-circle-gold">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/>
-                  <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/>
-                  <path d="M4 22h16"/>
-                  <path d="M10 14.66V17c0 .55-.45 1-1 1H8c-.55 0-1 .45-1 1v1c0 .55.45 1 1 1h8c.55 0 1-.45 1-1v-1c0-.55-.45-1-1-1h-1c-.55 0-1-.45-1-1v-2.34"/>
-                  <path d="M18 2H6v7a6 6 0 0 0 12 0V2z"/>
-                </svg>
-              </div>
-              <div className="sp-metric-info">
-                <span className="sp-metric-label">Average Score</span>
-                <strong className="sp-metric-value">78%</strong>
-                <span className="sp-metric-sub sp-text-green">↑ +12% from last month</span>
-              </div>
-            </div>
-
-            <div className="sp-metric-card">
-              <div className="sp-metric-circle-icon sp-circle-green">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2.2">
-                  <circle cx="12" cy="12" r="10" />
-                  <path d="m9 12 2 2 4-4" />
-                </svg>
-              </div>
-              <div className="sp-metric-info">
-                <span className="sp-metric-label">Exam Readiness</span>
-                <strong className="sp-metric-value">86%</strong>
-                <span className="sp-metric-sub sp-text-green">High Accuracy Rate</span>
-              </div>
-            </div>
-
-            <div className="sp-metric-card">
-              <div className="sp-metric-circle-icon sp-circle-cyan">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0284c7" strokeWidth="2.2">
-                  <circle cx="12" cy="12" r="10"/>
-                  <circle cx="12" cy="12" r="6"/>
-                  <circle cx="12" cy="12" r="2"/>
-                </svg>
-              </div>
-              <div className="sp-metric-info">
-                <span className="sp-metric-label">Enrolled Subjects</span>
-                <strong className="sp-metric-value">4</strong>
-                <span className="sp-metric-sub">Physics, Chemistry, Maths, Bio</span>
-              </div>
-            </div>
-          </div>
-
           {/* Vertical Layout: Upcoming Tests on top, Subject Performance Trend below */}
           <div className="sp-tests-vertical-layout">
             {/* 1. Upcoming Tests Schedule */}
@@ -741,7 +724,11 @@ export default function TestsTab({
                   <>
                     {/* RANK 2 */}
                     {rank2 && (
-                      <div className="sp-podium-circle-col rank-2-col">
+                      <div 
+                        className="sp-podium-circle-col rank-2-col"
+                        onClick={() => handleOpenStudentProfile(rank2)}
+                        title={`View ${rank2.name}'s Profile`}
+                      >
                         <div className="sp-circle-avatar-wrap">
                           {rank2.photo ? (
                             <img 
@@ -763,12 +750,31 @@ export default function TestsTab({
                           <div className="sp-circle-rank-badge badge-rank-2">2</div>
                         </div>
                         <strong className="sp-podium-circle-name">{rank2.name}</strong>
+                        <button
+                          type="button"
+                          className="sp-podium-view-profile-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenStudentProfile(rank2);
+                          }}
+                          title={`View ${rank2.name}'s Profile`}
+                        >
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                            <circle cx="12" cy="7" r="4" />
+                          </svg>
+                          <span>View Profile</span>
+                        </button>
                       </div>
                     )}
 
                     {/* RANK 1 */}
                     {rank1 && (
-                      <div className="sp-podium-circle-col is-rank-1">
+                      <div 
+                        className="sp-podium-circle-col is-rank-1"
+                        onClick={() => handleOpenStudentProfile(rank1)}
+                        title={`View ${rank1.name}'s Profile`}
+                      >
                         <div className="sp-circle-avatar-wrap-r1">
                           <div className="sp-r1-star-badge" title="Batch Top Ranker">
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
@@ -784,12 +790,31 @@ export default function TestsTab({
                           <div className="sp-circle-rank-badge badge-rank-1">1</div>
                         </div>
                         <strong className="sp-podium-circle-name">{rank1.name}</strong>
+                        <button
+                          type="button"
+                          className="sp-podium-view-profile-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenStudentProfile(rank1);
+                          }}
+                          title={`View ${rank1.name}'s Profile`}
+                        >
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                            <circle cx="12" cy="7" r="4" />
+                          </svg>
+                          <span>View Profile</span>
+                        </button>
                       </div>
                     )}
 
                     {/* RANK 3 */}
                     {rank3 && (
-                      <div className="sp-podium-circle-col rank-3-col">
+                      <div 
+                        className="sp-podium-circle-col rank-3-col"
+                        onClick={() => handleOpenStudentProfile(rank3)}
+                        title={`View ${rank3.name}'s Profile`}
+                      >
                         <div className="sp-circle-avatar-wrap">
                           {rank3.photo ? (
                             <img 
@@ -811,6 +836,21 @@ export default function TestsTab({
                           <div className="sp-circle-rank-badge badge-rank-3">3</div>
                         </div>
                         <strong className="sp-podium-circle-name">{rank3.name}</strong>
+                        <button
+                          type="button"
+                          className="sp-podium-view-profile-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenStudentProfile(rank3);
+                          }}
+                          title={`View ${rank3.name}'s Profile`}
+                        >
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                            <circle cx="12" cy="7" r="4" />
+                          </svg>
+                          <span>View Profile</span>
+                        </button>
                       </div>
                     )}
                   </>
@@ -829,6 +869,8 @@ export default function TestsTab({
                   <div 
                     key={item.rank} 
                     className={`sp-rank-row-card ${item.isMe ? 'is-me-row' : ''}`}
+                    onClick={() => handleOpenStudentProfile(item)}
+                    title={`View ${item.name}'s Profile`}
                   >
                     <div className="sp-rrc-left">
                       <span className="sp-rrc-rank">#{item.rank}</span>
@@ -879,6 +921,23 @@ export default function TestsTab({
                           <small>({item.pct})</small>
                         </div>
                       )}
+
+                      {/* View Profile Button */}
+                      <button 
+                        type="button"
+                        className="sp-merit-view-profile-btn sp-rrc-profile-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenStudentProfile(item);
+                        }}
+                        title={`View ${item.name}'s Profile`}
+                      >
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                          <circle cx="12" cy="7" r="4" />
+                        </svg>
+                        <span>View Profile</span>
+                      </button>
                     </div>
                   </div>
                 ));
@@ -1008,6 +1067,14 @@ export default function TestsTab({
           </div>
         </div>
       )}
+
+      {/* Profile Card Modal for Viewed Student */}
+      <StudentProfileCardModal 
+        isOpen={Boolean(selectedStudentForCard)}
+        onClose={() => setSelectedStudentForCard(null)}
+        studentData={selectedStudentForCard}
+        showToast={showToast}
+      />
     </div>
   );
 }

@@ -45,16 +45,38 @@ export default function StudentProfileCardModal({ isOpen, onClose, studentData, 
   // Persisted Quote
   const [quote, setQuote] = useState(() => {
     try {
-      const saved = localStorage.getItem('digitute_student_quote');
-      return saved !== null ? saved : student.quote;
+      if (student.isMe) {
+        const saved = localStorage.getItem('digitute_student_quote');
+        return saved !== null ? saved : student.quote;
+      }
+      return student.quote || '"Consistent study today, bigger opportunities tomorrow."';
     } catch {
-      return student.quote;
+      return student.quote || '"Consistent study today, bigger opportunities tomorrow."';
     }
   });
 
   // Edit Mode Toggle (Only when pencil is clicked)
   const [isEditMode, setIsEditMode] = useState(false);
   const [draftQuote, setDraftQuote] = useState(quote);
+
+  useEffect(() => {
+    try {
+      if (student.isMe) {
+        const saved = localStorage.getItem('digitute_student_quote');
+        const q = saved !== null ? saved : student.quote;
+        setQuote(q);
+        setDraftQuote(q);
+      } else {
+        const q = student.quote || '"Consistent study today, bigger opportunities tomorrow."';
+        setQuote(q);
+        setDraftQuote(q);
+      }
+    } catch {
+      const q = student.quote || '"Consistent study today, bigger opportunities tomorrow."';
+      setQuote(q);
+      setDraftQuote(q);
+    }
+  }, [student.name, student.isMe, student.quote]);
 
   // Individual visible items state
   const defaultVisibility = {

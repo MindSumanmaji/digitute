@@ -156,6 +156,99 @@ export const validateOrRefreshSession = async () => {
 };
 
 /**
+ * Safely extracts a concise, human-readable error message from diverse API error payloads:
+ * - FastAPI / Pydantic validation errors where `detail` is an array of error objects
+ * - FastAPI HTTPException string or object details
+ * - Standard JSON message / error fields
+ * - Network / TypeError exceptions
+ * - HTTP status code fallbacks
+ */
+export const formatApiErrorMessage = (data, status = null) => {
+  if (!data) {
+    return status ? `Request failed with status ${status}` : 'Unknown error occurred';
+  }
+
+  // Handle Error instances (e.g. network errors or caught exceptions)
+  if (data instanceof Error || (typeof data === 'object' && typeof data.message === 'string')) {
+    if (data.data) {
+      return formatApiErrorMessage(data.data, data.status || status);
+    }
+    const msg = data.message;
+    if (msg && !msg.includes('[object Object]')) {
+      if (msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
+        return 'Network error: Unable to reach the server. Please check your connection or server status.';
+      }
+      return msg.trim();
+    }
+  }
+
+  // Direct string payload
+  if (typeof data === 'string') {
+    const trimmed = data.trim();
+    if (trimmed && !trimmed.includes('[object Object]')) return trimmed;
+  }
+
+  // FastAPI validation errors: `detail` is an array of error objects
+  if (Array.isArray(data.detail)) {
+    const errorItems = data.detail.map((item) => {
+      if (typeof item === 'string') return item.trim();
+      if (item && typeof item === 'object') {
+        const field = Array.isArray(item.loc)
+          ? item.loc.filter((loc) => loc !== 'body').join('.')
+          : item.loc || '';
+        const msg = item.msg || item.message || '';
+        if (field && msg) {
+          return `${field}: ${msg}`;
+        }
+        return msg || field || JSON.stringify(item);
+      }
+      return String(item);
+    }).filter(Boolean);
+
+    if (errorItems.length > 0) {
+      return errorItems.join('; ');
+    }
+  }
+
+  // Detail is a string
+  if (typeof data.detail === 'string' && data.detail.trim()) {
+    return data.detail.trim();
+  }
+
+  // Detail is a nested object
+  if (data.detail && typeof data.detail === 'object') {
+    const inner = data.detail.message || data.detail.error || data.detail.msg || data.detail.detail;
+    if (typeof inner === 'string' && inner.trim()) {
+      return inner.trim();
+    }
+    try {
+      return JSON.stringify(data.detail);
+    } catch {
+      // ignore
+    }
+  }
+
+  // Common message or error keys at root
+  const candidate = data.message || data.error_description || data.error || data.msg;
+  if (typeof candidate === 'string' && candidate.trim()) {
+    return candidate.trim();
+  }
+  if (candidate && typeof candidate === 'object') {
+    const innerMsg = candidate.message || candidate.error || candidate.msg;
+    if (typeof innerMsg === 'string' && innerMsg.trim()) {
+      return innerMsg.trim();
+    }
+    try {
+      return JSON.stringify(candidate);
+    } catch {
+      // ignore
+    }
+  }
+
+  return status ? `Request failed with status ${status}` : 'Unexpected server error';
+};
+
+/**
  * Enterprise standard fetch wrapper with Mobile-Grade JWT Auto-Refresh:
  * - Automatically injects JWT Bearer token
  * - Intercepts 401 Unauthorized errors
@@ -202,8 +295,11 @@ export const apiRequest = async (endpoint, options = {}, isRetry = false) => {
         const retryData = await retryResponse.json().catch(() => null);
 
         if (!retryResponse.ok) {
-          const errorMsg = retryData?.detail || retryData?.message || `Request failed with status ${retryResponse.status}`;
-          throw new Error(errorMsg);
+          const errorMsg = formatApiErrorMessage(retryData, retryResponse.status);
+          const error = new Error(errorMsg);
+          error.status = retryResponse.status;
+          error.data = retryData;
+          throw error;
         }
 
         return retryData;
@@ -219,8 +315,11 @@ export const apiRequest = async (endpoint, options = {}, isRetry = false) => {
   const data = await response.json().catch(() => null);
 
   if (!response.ok) {
-    const errorMsg = data?.detail || data?.message || `Request failed with status ${response.status}`;
-    throw new Error(errorMsg);
+    const errorMsg = formatApiErrorMessage(data, response.status);
+    const error = new Error(errorMsg);
+    error.status = response.status;
+    error.data = data;
+    throw error;
   }
 
   return data;

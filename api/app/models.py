@@ -1,5 +1,5 @@
-from pydantic import BaseModel, EmailStr, Field
-from typing import Optional, Any, Literal
+from pydantic import BaseModel, EmailStr, Field, field_validator
+from typing import Optional, Any, Literal, Union
 from datetime import datetime, date, time
 
 # ==============================================================================
@@ -218,9 +218,55 @@ class StudyMaterialResponse(BaseModel):
     signed_url: Optional[str] = None
     created_at: Optional[str] = None
 
-class DoubtCreate(BaseModel):
+class DppCreate(BaseModel):
     batch_id: str
-    student_id: str
+    teacher_id: Optional[str] = None
+    subject: str
+    title: str
+    file_url: str
+
+class DppManualCreate(BaseModel):
+    batch_id: str
+    subject: str
+    title: Optional[str] = None
+    questions: Union[dict[str, Any], list[Any]]
+
+    @field_validator("questions")
+    @classmethod
+    def validate_questions_not_empty(cls, v: Union[dict[str, Any], list[Any]]) -> Union[dict[str, Any], list[Any]]:
+        if isinstance(v, dict):
+            if not v:
+                raise ValueError("questions JSON object cannot be empty")
+        elif isinstance(v, list):
+            if len(v) == 0:
+                raise ValueError("questions JSON array cannot be empty")
+        else:
+            raise ValueError("questions must be a non-empty JSON object or array")
+        return v
+
+    @field_validator("subject", "batch_id")
+    @classmethod
+    def validate_non_empty_strings(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("Field cannot be empty")
+        return v.strip()
+
+class DppResponse(BaseModel):
+    id: str
+    batch_id: str
+    teacher_id: Optional[str] = None
+    subject: str
+    title: str
+    content_type: str = "FILE"
+    file_url: Optional[str] = None
+    questions: Optional[Union[dict[str, Any], list[Any]]] = None
+    signed_url: Optional[str] = None
+    created_at: Optional[str] = None
+    batches: Optional[dict[str, Any]] = None
+
+class DoubtCreate(BaseModel):
+    batch_id: Optional[str] = None
+    student_id: Optional[str] = None
     subject: str
     question_title: str
     question_text: str
@@ -239,3 +285,21 @@ class ExamCreate(BaseModel):
     total_marks: float
     exam_date: Optional[date] = None
     results: Optional[list[dict[str, Any]]] = []
+
+# ==============================================================================
+# 8. SYLLABUS & CHAPTER PROGRESS MODELS
+# ==============================================================================
+class SyllabusSaveRequest(BaseModel):
+    subject: str
+    batch_name: Optional[str] = None
+    batch_id: Optional[str] = None
+    total_chapters: Optional[int] = None
+    chapters: list[dict[str, Any]] = []
+
+class SyllabusToggleChapterRequest(BaseModel):
+    subject: str
+    chapter_id: str
+    completed: bool
+    batch_name: Optional[str] = None
+    batch_id: Optional[str] = None
+

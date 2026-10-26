@@ -1,89 +1,55 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { apiRequest } from '../../api';
 import { getStudentOverallPerformance } from '../../data/academicData';
 import AcademicPerformanceModal from './AcademicPerformanceModal';
-/* ══════════════════════════════════════════════════════════════════════════
-   BATCHES & SUBJECTS
-   ══════════════════════════════════════════════════════════════════════════ */
-const BATCHES = [
-  'B.Sc 6th Sem',
-  'B.Sc 4th Sem',
-  'MCA 2nd Sem',
-  'B.Tech CS 3rd Sem',
-];
-
-const BATCH_SUBJECTS_MAP = {
-  'B.Sc 6th Sem':      ['Computer Network', 'Operating Systems', 'Database Systems'],
-  'B.Sc 4th Sem':      ['DBMS', 'Data Structures', 'Computer Architecture'],
-  'MCA 2nd Sem':       ['Software Engineering', 'Computer Graphics', 'Web Technologies'],
-  'B.Tech CS 3rd Sem': ['Data Structures', 'Digital Electronics', 'Discrete Mathematics'],
-};
 
 /* ══════════════════════════════════════════════════════════════════════════
-   20 MOCK STUDENTS (user-specified 4 + 16 others) — sorted alphabetically
-   ══════════════════════════════════════════════════════════════════════════ */
-const ALL_STUDENTS = [
-  { id: 'st-01', roll: 'CS-01', name: 'Amitava Dutta',    phone: '8240567891', attendance: 'Below Average', attendancePct: 55, grade: 'B'  },
-  { id: 'st-02', roll: 'CS-02', name: 'Ananya Ghosh',     phone: '9874561230', attendance: 'Good',          attendancePct: 88, grade: 'A'  },
-  { id: 'st-03', roll: 'CS-03', name: 'Arijit Bose',      phone: '9831204567', attendance: 'Excellent',     attendancePct: 93, grade: 'A+' },
-  { id: 'st-04', roll: 'CS-04', name: 'Arnab Chatterjee', phone: '7001238945', attendance: 'Average',       attendancePct: 70, grade: 'B+' },
-  { id: 'st-05', roll: 'CS-05', name: 'Dev Sen',          phone: '8134236754', attendance: 'Below Average', attendancePct: 58, grade: 'B'  },
-  { id: 'st-06', roll: 'CS-06', name: 'Dipankar Mitra',   phone: '9432801256', attendance: 'Good',          attendancePct: 84, grade: 'A'  },
-  { id: 'st-07', roll: 'CS-07', name: 'Indrani Das',      phone: '8967453201', attendance: 'Average',       attendancePct: 75, grade: 'B+' },
-  { id: 'st-08', roll: 'CS-08', name: 'Kamal Roy',        phone: '9712342367', attendance: 'Average',       attendancePct: 74, grade: 'B+' },
-  { id: 'st-09', roll: 'CS-09', name: 'Koushik Nandi',    phone: '9903451278', attendance: 'Excellent',     attendancePct: 97, grade: 'A+' },
-  { id: 'st-10', roll: 'CS-10', name: 'Madhuri Haldar',   phone: '7890231456', attendance: 'Good',          attendancePct: 80, grade: 'A'  },
-  { id: 'st-11', roll: 'CS-11', name: 'Moumita Saha',     phone: '9674512390', attendance: 'Excellent',     attendancePct: 91, grade: 'A+' },
-  { id: 'st-12', roll: 'CS-12', name: 'Nayan Patra',      phone: '8012349876', attendance: 'Below Average', attendancePct: 61, grade: 'B'  },
-  { id: 'st-13', roll: 'CS-13', name: 'Priya Sharma',     phone: '9830112456', attendance: 'Excellent',     attendancePct: 94, grade: 'A+' },
-  { id: 'st-14', roll: 'CS-14', name: 'Rahul Sen',        phone: '9734253411', attendance: 'Good',          attendancePct: 86, grade: 'A+' },
-  { id: 'st-15', roll: 'CS-15', name: 'Ram Das',          phone: '9002324534', attendance: 'Excellent',     attendancePct: 96, grade: 'A'  },
-  { id: 'st-16', roll: 'CS-16', name: 'Rohan Paul',       phone: '7003412985', attendance: 'Good',          attendancePct: 82, grade: 'B'  },
-  { id: 'st-17', roll: 'CS-17', name: 'Santanu Ghosh',    phone: '9123490012', attendance: 'Average',       attendancePct: 69, grade: 'B+' },
-  { id: 'st-18', roll: 'CS-18', name: 'Sneha Mukherjee',  phone: '9123894561', attendance: 'Excellent',     attendancePct: 98, grade: 'A+' },
-  { id: 'st-19', roll: 'CS-19', name: 'Sourav Banerjee',  phone: '8910452367', attendance: 'Average',       attendancePct: 72, grade: 'B+' },
-  { id: 'st-20', roll: 'CS-20', name: 'Tanmoy Biswas',    phone: '9560123478', attendance: 'Good',          attendancePct: 85, grade: 'A'  },
-];
-
-/* Deterministic seeded shuffle — same batch+subject always gives same subset */
-function seededShuffle(arr, seed) {
-  let h = 0;
-  for (let i = 0; i < seed.length; i++) {
-    h = (Math.imul(31, h) + seed.charCodeAt(i)) | 0;
-  }
-  const copy = [...arr];
-  for (let i = copy.length - 1; i > 0; i--) {
-    h = (Math.imul(h, 1664525) + 1013904223) | 0;
-    const j = Math.abs(h) % (i + 1);
-    [copy[i], copy[j]] = [copy[j], copy[i]];
-  }
-  return copy;
-}
-
-/* Returns 12-16 students for a given combo, alphabetically sorted */
-function getStudentsForCombo(batch, subject) {
-  const seed = `${batch}::${subject}`;
-  const shuffled = seededShuffle(ALL_STUDENTS, seed);
-  const h = seed.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
-  const count = 12 + (h % 5); // 12, 13, 14, 15, or 16
-  return shuffled
-    .slice(0, count)
-    .sort((a, b) => a.name.localeCompare(b.name));
-}
-
-/* ══════════════════════════════════════════════════════════════════════════
-   COMPONENT
+   STUDENT INFO (TEACHER PANEL)
+   Fetches assigned batches, subjects, and enrolled students strictly
+   from the database. All dummy arrays have been removed.
    ══════════════════════════════════════════════════════════════════════════ */
 export function StudentInfo({ onBack }) {
-  const [selectedBatch,   setSelectedBatch]   = useState('');   // blank on mount
-  const [selectedSubject, setSelectedSubject] = useState('');   // blank on mount
-  const [searchQuery,     setSearchQuery]     = useState('');
-  const [statusFilter,    setStatusFilter]    = useState('All');
-  const [copiedId,        setCopiedId]        = useState(null);
-  const [isLoading,       setIsLoading]       = useState(false);
-  const [listVisible,     setListVisible]     = useState(false);
+  // Batches state from database
+  const [batchesList, setBatchesList] = useState([]);
+  const [loadingBatches, setLoadingBatches] = useState(true);
+
+  // Selected filters
+  const [selectedBatch, setSelectedBatch] = useState(''); // Holds batch_id
+  const [selectedSubject, setSelectedSubject] = useState(''); // Holds subject name
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('All');
+  const [copiedId, setCopiedId] = useState(null);
+
+  // Loading & students list from database
+  const [isLoading, setIsLoading] = useState(false);
+  const [listVisible, setListVisible] = useState(false);
+  const [comboStudents, setComboStudents] = useState([]);
   const [selectedPerformanceStudent, setSelectedPerformanceStudent] = useState(null);
   const [, setUpdateTrigger] = useState(0);
-  const loadTimerRef = useRef(null);
+
+  // 1. Fetch teacher's assigned batches directly from database on mount
+  useEffect(() => {
+    let isMounted = true;
+    setLoadingBatches(true);
+
+    apiRequest('/api/teacher/my-batches')
+      .then((data) => {
+        if (!isMounted) return;
+        if (Array.isArray(data)) {
+          setBatchesList(data);
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to load teacher batches for Student Info:', err);
+      })
+      .finally(() => {
+        if (isMounted) setLoadingBatches(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // Re-sync when exams or attendance are updated elsewhere
   useEffect(() => {
@@ -96,32 +62,71 @@ export function StudentInfo({ onBack }) {
     };
   }, []);
 
-  const currentSubjects = selectedBatch ? (BATCH_SUBJECTS_MAP[selectedBatch] || []) : [];
-  const readyToShow = !!(selectedBatch && selectedSubject);
+  // Derived selected batch object and batch name
+  const selectedBatchObj = useMemo(() => {
+    return batchesList.find((b) => b.batch_id === selectedBatch || b.batch_name === selectedBatch) || null;
+  }, [batchesList, selectedBatch]);
 
-  /* Trigger loading animation whenever a valid combo is set */
+  const selectedBatchName = selectedBatchObj ? selectedBatchObj.batch_name : (selectedBatch || '');
+
+  // Derived available subjects for the selected batch from database
+  const availableSubjects = useMemo(() => {
+    if (!selectedBatchObj || !selectedBatchObj.subjects) return [];
+    return selectedBatchObj.subjects
+      .map((s) => (typeof s === 'string' ? s : s.name))
+      .filter(Boolean);
+  }, [selectedBatchObj]);
+
+  const readyToShow = Boolean(selectedBatch && selectedSubject);
+
+  // 2. Fetch enrolled students directly from database when batch and subject are selected
   useEffect(() => {
     if (!readyToShow) {
       setListVisible(false);
       setIsLoading(false);
+      setComboStudents([]);
       return;
     }
+
+    let isMounted = true;
     setIsLoading(true);
     setListVisible(false);
-    if (loadTimerRef.current) clearTimeout(loadTimerRef.current);
-    loadTimerRef.current = setTimeout(() => {
-      setIsLoading(false);
-      setListVisible(true);
-    }, 720);
-    return () => clearTimeout(loadTimerRef.current);
-  }, [selectedBatch, selectedSubject]);
 
-  const handleBatchChange = (newBatch) => {
-    setSelectedBatch(newBatch);
+    const params = new URLSearchParams({
+      batch_id: selectedBatch || '',
+      batch_name: selectedBatchName || '',
+      subject: selectedSubject || '',
+    });
+
+    apiRequest(`/api/teacher/students?${params.toString()}`)
+      .then((data) => {
+        if (!isMounted) return;
+        const list = Array.isArray(data) ? data : [];
+        setComboStudents(list);
+      })
+      .catch((err) => {
+        console.error('Failed to load enrolled students from database:', err);
+        if (isMounted) setComboStudents([]);
+      })
+      .finally(() => {
+        if (isMounted) {
+          setIsLoading(false);
+          setListVisible(true);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedBatch, selectedBatchName, selectedSubject, readyToShow]);
+
+  const handleBatchChange = (newBatchId) => {
+    setSelectedBatch(newBatchId);
     setSelectedSubject('');
     setSearchQuery('');
     setStatusFilter('All');
     setListVisible(false);
+    setComboStudents([]);
   };
 
   const handleSubjectChange = (newSubject) => {
@@ -130,18 +135,17 @@ export function StudentInfo({ onBack }) {
     setStatusFilter('All');
   };
 
-  const comboStudents = useMemo(() => {
-    if (!readyToShow) return [];
-    return getStudentsForCombo(selectedBatch, selectedSubject);
-  }, [selectedBatch, selectedSubject, readyToShow]);
-
   const filteredStudents = useMemo(() => {
-    const q = searchQuery.toLowerCase();
+    const q = searchQuery.toLowerCase().trim();
     return comboStudents.filter((s) => {
+      const name = (s.name || '').toLowerCase();
+      const phone = (s.phone || '');
+      const roll = (s.roll || '').toLowerCase();
       const matchesSearch =
-        s.name.toLowerCase().includes(q) ||
-        s.phone.includes(searchQuery) ||
-        s.roll.toLowerCase().includes(q);
+        !q ||
+        name.includes(q) ||
+        phone.includes(q) ||
+        roll.includes(q);
       const matchesStatus = statusFilter === 'All' || s.attendance === statusFilter;
       return matchesSearch && matchesStatus;
     });
@@ -149,7 +153,9 @@ export function StudentInfo({ onBack }) {
 
   const statusCounts = useMemo(() => {
     const counts = { All: comboStudents.length, Excellent: 0, Good: 0, Average: 0, 'Below Average': 0 };
-    comboStudents.forEach((s) => { if (counts[s.attendance] !== undefined) counts[s.attendance]++; });
+    comboStudents.forEach((s) => {
+      if (counts[s.attendance] !== undefined) counts[s.attendance]++;
+    });
     return counts;
   }, [comboStudents]);
 
@@ -160,26 +166,36 @@ export function StudentInfo({ onBack }) {
   };
 
   const getAttendanceClass = (status) => {
-    const map = { Excellent: 'att-badge-excellent', Good: 'att-badge-good', Average: 'att-badge-average', 'Below Average': 'att-badge-below-average' };
+    const map = {
+      Excellent: 'att-badge-excellent',
+      Good: 'att-badge-good',
+      Average: 'att-badge-average',
+      'Below Average': 'att-badge-below-average'
+    };
     return map[status] || 'att-badge-default';
   };
 
   const getGradeClass = (grade) => {
-    const map = { 'A+': 'grade-badge-aplus', A: 'grade-badge-a', 'B+': 'grade-badge-bplus', B: 'grade-badge-b' };
+    const map = {
+      'A+': 'grade-badge-aplus',
+      A: 'grade-badge-a',
+      'B+': 'grade-badge-bplus',
+      B: 'grade-badge-b',
+      C: 'grade-badge-b',
+      D: 'grade-badge-below-average'
+    };
     return map[grade] || 'grade-badge-default';
   };
 
   const getInitials = (name) => {
-    const parts = name.trim().split(' ');
+    if (!name) return 'ST';
+    const parts = name.trim().split(' ').filter(Boolean);
     return parts.length >= 2 ? (parts[0][0] + parts[1][0]).toUpperCase() : name.slice(0, 2).toUpperCase();
   };
 
   /* ── RENDER ── */
   return (
     <div className="si-wrapper">
-
-
-
       {/* ── SELECTORS ── */}
       <section className="si-selector-card" aria-label="Batch and Subject Selectors">
         {/* Batch */}
@@ -193,10 +209,20 @@ export function StudentInfo({ onBack }) {
             <span>SELECT BATCH</span>
           </label>
           <div className="si-select-dropdown-wrap">
-            <select id="batch-select" className="si-native-select"
-              value={selectedBatch} onChange={(e) => handleBatchChange(e.target.value)}>
-              <option value="" disabled>— Choose a batch —</option>
-              {BATCHES.map((b) => <option key={b} value={b}>{b}</option>)}
+            <select
+              id="batch-select"
+              className="si-native-select"
+              value={selectedBatch}
+              onChange={(e) => handleBatchChange(e.target.value)}
+            >
+              <option value="" disabled>
+                {loadingBatches ? '— Loading batches… —' : '— Choose a batch —'}
+              </option>
+              {batchesList.map((b) => (
+                <option key={b.batch_id} value={b.batch_id}>
+                  {b.batch_name}
+                </option>
+              ))}
             </select>
             <div className="si-select-caret" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"
@@ -218,14 +244,23 @@ export function StudentInfo({ onBack }) {
             <span>SELECT SUBJECT</span>
           </label>
           <div className="si-select-dropdown-wrap">
-            <select id="subject-select" className="si-native-select"
+            <select
+              id="subject-select"
+              className="si-native-select"
               value={selectedSubject}
               onChange={(e) => handleSubjectChange(e.target.value)}
-              disabled={!selectedBatch}>
+              disabled={!selectedBatch || availableSubjects.length === 0}
+            >
               <option value="" disabled>
-                {selectedBatch ? '— Choose a subject —' : '— Select batch first —'}
+                {!selectedBatch
+                  ? '— Select batch first —'
+                  : availableSubjects.length === 0
+                  ? '— No subjects in this batch —'
+                  : '— Choose a subject —'}
               </option>
-              {currentSubjects.map((s) => <option key={s} value={s}>{s}</option>)}
+              {availableSubjects.map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
             </select>
             <div className="si-select-caret" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"
@@ -255,7 +290,7 @@ export function StudentInfo({ onBack }) {
           <div className="si-prompt-hint">
             {!selectedBatch
               ? 'Choose your batch from the dropdown above'
-              : `${currentSubjects.length} subjects available for ${selectedBatch}`}
+              : `${availableSubjects.length} subject${availableSubjects.length === 1 ? '' : 's'} available for ${selectedBatchName}`}
           </div>
         </div>
       )}
@@ -265,10 +300,10 @@ export function StudentInfo({ onBack }) {
         <div className="si-loading-wrapper" aria-live="polite" aria-label="Loading students">
           <div className="si-loading-label">
             <div className="si-loading-spinner" aria-hidden="true" />
-            <span>Fetching students for <strong>{selectedSubject}</strong>…</span>
+            <span>Fetching enrolled students for <strong>{selectedSubject}</strong> from database…</span>
           </div>
           <div className="si-skeleton-header" />
-          {[...Array(6)].map((_, i) => (
+          {[...Array(4)].map((_, i) => (
             <div key={i} className="si-skeleton-row" style={{ animationDelay: `${i * 70}ms` }} />
           ))}
         </div>
@@ -282,22 +317,35 @@ export function StudentInfo({ onBack }) {
               strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
             </svg>
-            <input type="text" className="si-search-input"
+            <input
+              type="text"
+              className="si-search-input"
               placeholder="Search by name, contact or roll no…"
-              value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
             {searchQuery && (
-              <button type="button" className="si-search-clear"
-                onClick={() => setSearchQuery('')} aria-label="Clear search">✕</button>
+              <button
+                type="button"
+                className="si-search-clear"
+                onClick={() => setSearchQuery('')}
+                aria-label="Clear search"
+              >
+                ✕
+              </button>
             )}
           </div>
 
           <div className="si-filter-pills" role="tablist" aria-label="Attendance status filter">
             {['All', 'Excellent', 'Good', 'Average', 'Below Average'].map((fk) => (
-              <button key={fk} type="button"
+              <button
+                key={fk}
+                type="button"
                 className={`si-filter-pill ${statusFilter === fk ? 'active' : ''} ${
                   fk !== 'All' ? `pill-${fk.toLowerCase().replace(/\s+/g, '-')}` : ''
                 }`}
-                onClick={() => setStatusFilter(fk)}>
+                onClick={() => setStatusFilter(fk)}
+              >
                 <span>{fk}</span>
                 <span className="si-pill-badge">{statusCounts[fk] || 0}</span>
               </button>
@@ -317,19 +365,30 @@ export function StudentInfo({ onBack }) {
                   <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
                 </svg>
               </div>
-              <h3 className="si-empty-title">No students found</h3>
-              <p className="si-empty-desc">Try adjusting your search or filter.</p>
-              <button type="button" className="si-empty-reset-btn"
-                onClick={() => { setSearchQuery(''); setStatusFilter('All'); }}>
-                Reset Filters
-              </button>
+              <h3 className="si-empty-title">
+                {comboStudents.length === 0 ? 'No students enrolled in this batch' : 'No students found'}
+              </h3>
+              <p className="si-empty-desc">
+                {comboStudents.length === 0
+                  ? `There are currently no active students assigned to ${selectedBatchName} in the database.`
+                  : 'Try adjusting your search or filter.'}
+              </p>
+              {comboStudents.length > 0 && (
+                <button
+                  type="button"
+                  className="si-empty-reset-btn"
+                  onClick={() => { setSearchQuery(''); setStatusFilter('All'); }}
+                >
+                  Reset Filters
+                </button>
+              )}
             </div>
           ) : (
             <>
               <div className="si-result-meta">
-                Showing <strong>{filteredStudents.length}</strong> of <strong>{comboStudents.length}</strong> students
+                Showing <strong>{filteredStudents.length}</strong> of <strong>{comboStudents.length}</strong> student{comboStudents.length === 1 ? '' : 's'}
                 {selectedSubject && <> &mdash; <em>{selectedSubject}</em></>}
-                {selectedBatch && <> &middot; <em>{selectedBatch}</em></>}
+                {selectedBatchName && <> &middot; <em>{selectedBatchName}</em></>}
               </div>
 
               {/* DESKTOP TABLE */}
@@ -347,15 +406,18 @@ export function StudentInfo({ onBack }) {
                   </thead>
                   <tbody>
                     {filteredStudents.map((student, idx) => (
-                      <tr key={student.id} className="si-table-row si-row-animate"
-                        style={{ animationDelay: `${idx * 35}ms` }}>
+                      <tr
+                        key={student.id}
+                        className="si-table-row si-row-animate"
+                        style={{ animationDelay: `${idx * 35}ms` }}
+                      >
                         <td className="col-index"><span className="si-row-num">{idx + 1}</span></td>
                         <td className="col-name">
                           <div className="si-student-cell">
                             <div className="si-student-avatar" aria-hidden="true">{getInitials(student.name)}</div>
                             <div className="si-student-info">
                               <span className="si-student-name">{student.name}</span>
-                              <span className="si-student-roll">{student.roll} · {selectedBatch}</span>
+                              <span className="si-student-roll">{student.roll} · {selectedBatchName}</span>
                             </div>
                           </div>
                         </td>
@@ -368,17 +430,21 @@ export function StudentInfo({ onBack }) {
                               </svg>
                               <span>+91 {student.phone}</span>
                             </a>
-                            <button type="button" className="si-copy-btn"
+                            <button
+                              type="button"
+                              className="si-copy-btn"
                               onClick={() => handleCopyPhone(student.phone, student.id)}
-                              aria-label={`Copy phone for ${student.name}`}>
-                              {copiedId === student.id
-                                ? <span className="si-copied-text">Copied!</span>
-                                : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                                  </svg>
-                              }
+                              aria-label={`Copy phone for ${student.name}`}
+                            >
+                              {copiedId === student.id ? (
+                                <span className="si-copied-text">Copied!</span>
+                              ) : (
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                  strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                                </svg>
+                              )}
                             </button>
                           </div>
                         </td>
@@ -391,7 +457,7 @@ export function StudentInfo({ onBack }) {
                         </td>
                         <td className="col-grade">
                           {(() => {
-                            const perf = getStudentOverallPerformance(student.id, selectedBatch, student.grade);
+                            const perf = getStudentOverallPerformance(student.id, selectedBatchName, student.grade);
                             const displayGrade = perf.overallGrade;
                             return (
                               <button
@@ -428,8 +494,11 @@ export function StudentInfo({ onBack }) {
                                 <path d="M8 17l2-5 2 5" />
                               </svg>
                             </button>
-                            <a href={`tel:${student.phone}`} className="si-action-icon-btn call-action"
-                              aria-label={`Call ${student.name}`}>
+                            <a
+                              href={`tel:${student.phone}`}
+                              className="si-action-icon-btn call-action"
+                              aria-label={`Call ${student.name}`}
+                            >
                               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
                                 strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                                 <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
@@ -446,12 +515,15 @@ export function StudentInfo({ onBack }) {
               {/* MOBILE CARDS */}
               <div className="si-mobile-cards-list">
                 {filteredStudents.map((student, idx) => {
-                  const perf = getStudentOverallPerformance(student.id, selectedBatch, student.grade);
+                  const perf = getStudentOverallPerformance(student.id, selectedBatchName, student.grade);
                   const displayGrade = perf.overallGrade;
 
                   return (
-                    <div key={student.id} className="si-mobile-card si-row-animate"
-                      style={{ animationDelay: `${idx * 40}ms` }}>
+                    <div
+                      key={student.id}
+                      className="si-mobile-card si-row-animate"
+                      style={{ animationDelay: `${idx * 40}ms` }}
+                    >
                       <div className="si-mcard-header">
                         <div className="si-mcard-user">
                           <div className="si-student-avatar" aria-hidden="true">{getInitials(student.name)}</div>
@@ -460,7 +532,7 @@ export function StudentInfo({ onBack }) {
                               <h4 className="si-student-name">{student.name}</h4>
                               <span className="si-mcard-idx">#{idx + 1}</span>
                             </div>
-                            <span className="si-student-roll">{student.roll} · {selectedBatch}</span>
+                            <span className="si-student-roll">{student.roll} · {selectedBatchName}</span>
                           </div>
                         </div>
                       </div>
@@ -473,8 +545,11 @@ export function StudentInfo({ onBack }) {
                           </svg>
                           <span>+91 {student.phone}</span>
                         </a>
-                        <button type="button" className="si-mcard-copy-btn"
-                          onClick={() => handleCopyPhone(student.phone, student.id)}>
+                        <button
+                          type="button"
+                          className="si-mcard-copy-btn"
+                          onClick={() => handleCopyPhone(student.phone, student.id)}
+                        >
                           {copiedId === student.id ? 'Copied' : 'Copy'}
                         </button>
                       </div>
@@ -520,7 +595,7 @@ export function StudentInfo({ onBack }) {
       {selectedPerformanceStudent && (
         <AcademicPerformanceModal
           student={selectedPerformanceStudent}
-          batch={selectedBatch}
+          batch={selectedBatchName}
           onClose={() => setSelectedPerformanceStudent(null)}
         />
       )}
@@ -529,4 +604,3 @@ export function StudentInfo({ onBack }) {
 }
 
 export default StudentInfo;
-
