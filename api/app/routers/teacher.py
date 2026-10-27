@@ -11,7 +11,9 @@ from app.models import (
     DppResponse,
     DoubtResolve,
     SyllabusSaveRequest,
-    SyllabusToggleChapterRequest
+    SyllabusToggleChapterRequest,
+    ExamCreate,
+    ExamUpdate
 )
 from datetime import date, datetime, timezone
 from typing import Any, Optional
@@ -1460,6 +1462,181 @@ def toggle_chapter(
         raise
     except Exception as e:
         traceback.print_exc()
-
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==============================================================================
+# 10. EXAMS & EVALUATION ENDPOINTS (schema.sql Table 11)
+# ==============================================================================
+@router.get("/exams", summary="List Exams for Teacher or Batch")
+def list_teacher_exams(
+    batch_id: Optional[str] = None,
+    subject: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    try:
+        supabase = get_supabase_client()
+        teacher_id = current_user.get("id")
+        user_role = current_user.get("role")
+
+        query = supabase.table("exams").select("*, batches(name)").order("exam_date", desc=True)
+        if user_role != "ADMIN":
+            query = query.eq("created_by", teacher_id)
+
+        if batch_id:
+            query = query.eq("batch_id", batch_id)
+        if subject:
+            query = query.ilike("subject", subject.strip())
+
+        res = query.execute()
+        return res.data or []
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/exams", summary="Create Exam and Save Evaluation Results")
+def create_teacher_exam(
+    payload: ExamCreate,
+    current_user: dict = Depends(get_current_user)
+):
+    try:
+        supabase = get_supabase_client()
+        teacher_id = current_user.get("id")
+
+        if payload.total_marks <= 0:
+            raise HTTPException(status_code=400, detail="Total marks must be greater than 0")
+
+        if payload.passing_marks is not None:
+            if payload.passing_marks < 0 or payload.passing_marks > payload.total_marks:
+                raise HTTPException(status_code=400, detail="Passing marks must be between 0 and total marks")
+
+        # Format results JSONB: strictly [{ "student_id": "uuid", "marks_obtained": 92.00 }]
+        formatted_results = []
+        for r in (payload.results or []):
+            formatted_results.append({
+                "student_id": r.student_id,
+                "marks_obtained": float(r.marks_obtained) if r.marks_obtained is not None else None
+            })
+
+        exam_date_str = str(payload.exam_date) if payload.exam_date else datetime.now().date().isoformat()
+        
+        insert_data = {
+            "batch_id": payload.batch_id,
+            "created_by": teacher_id,
+            "subject": payload.subject.strip(),
+            "title": payload.title.strip(),
+            "syllabus": payload.syllabus.strip() if payload.syllabus else None,
+            "exam_date": exam_date_str,
+            "start_time": payload.start_time or None,
+            "end_time": payload.end_time or None,
+            "duration_minutes": payload.duration_minutes or None,
+            "total_marks": payload.total_marks,
+            "passing_marks": payload.passing_marks,
+            "status": payload.status or "completed",
+            "is_published": bool(payload.is_published),
+            "results_published": bool(payload.results_published),
+            "results_published_at": datetime.now(timezone.utc).isoformat() if payload.results_published else None,
+            "results": formatted_results
+        }
+
+        res = supabase.table("exams").insert(insert_data).execute()
+        if not res.data:
+            raise HTTPException(status_code=500, detail="Failed to save exam record in database")
+
+        return res.data[0]
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.put("/exams/{exam_id}", summary="Update Exam Record or Evaluation Results")
+def update_teacher_exam(
+    exam_id: str,
+    payload: ExamUpdate,
+    current_user: dict = Depends(get_current_user)
+):
+    try:
+        supabase = get_supabase_client()
+        teacher_id = current_user.get("id")
+        user_role = current_user.get("role")
+
+        existing = supabase.table("exams").select("*").eq("id", exam_id).execute()
+        if not existing.data:
+            raise HTTPException(status_code=404, detail="Exam not found")
+
+        ex = existing.data[0]
+        if user_role != "ADMIN" and ex.get("created_by") != teacher_id:
+            raise HTTPException(status_code=403, detail="Not authorized to edit this exam")
+
+        update_data = {}
+        if payload.title is not None:
+            update_data["title"] = payload.title.strip()
+        if payload.syllabus is not None:
+            update_data["syllabus"] = payload.syllabus.strip()
+        if payload.exam_date is not None:
+            update_data["exam_date"] = str(payload.exam_date)
+        if payload.start_time is not None:
+            update_data["start_time"] = payload.start_time
+        if payload.end_time is not None:
+            update_data["end_time"] = payload.end_time
+        if payload.duration_minutes is not None:
+            update_data["duration_minutes"] = payload.duration_minutes
+        if payload.total_marks is not None:
+            update_data["total_marks"] = payload.total_marks
+        if payload.passing_marks is not None:
+            update_data["passing_marks"] = payload.passing_marks
+        if payload.status is not None:
+            update_data["status"] = payload.status
+        if payload.is_published is not None:
+            update_data["is_published"] = payload.is_published
+        if payload.results_published is not None:
+            update_data["results_published"] = payload.results_published
+            if payload.results_published and not ex.get("results_published_at"):
+                update_data["results_published_at"] = datetime.now(timezone.utc).isoformat()
+        if payload.results is not None:
+            update_data["results"] = [
+                {"student_id": r.student_id, "marks_obtained": float(r.marks_obtained) if r.marks_obtained is not None else None}
+                for r in payload.results
+            ]
+
+        update_data["updated_at"] = "now()"
+
+        res = supabase.table("exams").update(update_data).eq("id", exam_id).execute()
+        return res.data[0] if res.data else {"message": "Updated successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/exams/{exam_id}", summary="Delete Exam Record")
+def delete_teacher_exam(
+    exam_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    try:
+        supabase = get_supabase_client()
+        teacher_id = current_user.get("id")
+        user_role = current_user.get("role")
+
+        existing = supabase.table("exams").select("*").eq("id", exam_id).execute()
+        if not existing.data:
+            raise HTTPException(status_code=404, detail="Exam not found")
+
+        ex = existing.data[0]
+        if user_role != "ADMIN" and ex.get("created_by") != teacher_id:
+            raise HTTPException(status_code=403, detail="Not authorized to delete this exam")
+
+        supabase.table("exams").delete().eq("id", exam_id).execute()
+        return {"message": "Exam deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
 

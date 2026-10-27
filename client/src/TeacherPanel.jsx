@@ -17,7 +17,6 @@ import SyllabusSetup from './components/Teacher/SyllabusSetup';
 import ExamEvaluation from './components/Teacher/ExamEvaluation';
 import DoubtCorner from './components/Teacher/DoubtCorner';
 import DppManagement from './components/Teacher/DppManagement';
-import ClassTestNotice from './components/Teacher/ClassTestNotice';
 
 const tabToRoute = {
   dashboard: '/',
@@ -30,7 +29,6 @@ const tabToRoute = {
   exams: '/academics/exam-evaluation',
   'doubt-corner': '/academics/doubt-corner',
   'dpp-management': '/academics/dpp-management',
-  'class-test-notice': '/academics/class-test-notice',
   'study-material': '/study-material',
   finance: '/finance',
   notice: '/notice',
@@ -50,7 +48,6 @@ const routeToTab = {
   '/academics/exam-evaluation': 'exam-evaluation',
   '/academics/doubt-corner': 'doubt-corner',
   '/academics/dpp-management': 'dpp-management',
-  '/academics/class-test-notice': 'class-test-notice',
   '/study-material': 'study-material',
   '/finance': 'finance',
   '/notice': 'notice',
@@ -204,14 +201,6 @@ export function TeacherPanel({ onBackToLanding }) {
                     initialBatch={navParams.batch} 
                     initialSubject={navParams.subject} 
                   />
-                </div>
-              } 
-            />
-            <Route 
-              path="/academics/class-test-notice" 
-              element={
-                <div className="dt-academics-page dt-subpage">
-                  <ClassTestNotice onBack={() => handleTabChange('dashboard')} />
                 </div>
               } 
             />

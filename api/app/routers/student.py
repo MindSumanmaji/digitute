@@ -369,7 +369,7 @@ def get_dashboard_summary(current_user: dict = Depends(get_current_user)):
         percent = round((present_classes / total_classes * 100), 1) if total_classes > 0 else 100.0
 
         # 3. Pending Fee Due
-        inv_res = supabase.table("invoices").select("payable_amount, amount_paid, due_date").eq("student_id", student_id).eq("status", "PENDING").execute()
+        inv_res = supabase.table("invoices").select("payable_amount, amount_paid").eq("student_id", student_id).eq("status", "PENDING").execute()
         total_due = sum(max(0.0, float(i.get("payable_amount", 0)) - float(i.get("amount_paid", 0))) for i in (inv_res.data or []))
 
         # 4. Upcoming tests
@@ -400,7 +400,7 @@ def get_my_invoices(current_user: dict = Depends(get_current_user)):
         
         res = supabase.table("invoices").select(
             "*, batches(name)"
-        ).eq("student_id", student_id).order("due_date", desc=True).execute()
+        ).eq("student_id", student_id).order("created_at", desc=True).execute()
         
         invoices = res.data or []
         total_outstanding = sum(
@@ -723,88 +723,3 @@ async def upload_student_doubt_attachment(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Attachment upload failed: {str(e)}")
-
-# ==============================================================================
-# 11. EXAM RESULTS & LEADERBOARD (Table 11 in schema.sql)
-# ==============================================================================
-@router.get("/my-exams", summary="Get My Exam Marks, Rank & Feedback")
-def get_my_exams(current_user: dict = Depends(get_current_user)):
-    try:
-        supabase = get_supabase_client()
-        student_id = current_user.get("id")
-        batch_id = current_user.get("batch_id")
-        
-        if not batch_id:
-            return []
-            
-        res = supabase.table("exams").select("*").eq("batch_id", batch_id).order("exam_date", desc=True).execute()
-        
-        my_results = []
-        for exam in res.data or []:
-            results = exam.get("results") or []
-            matched = next((r for r in results if r.get("student_id") == student_id), None)
-            if matched:
-                my_results.append({
-                    "exam_id": exam.get("id"),
-                    "title": exam.get("title"),
-                    "subject": exam.get("subject"),
-                    "exam_date": exam.get("exam_date"),
-                    "total_marks": exam.get("total_marks"),
-                    "marks_obtained": matched.get("marks_obtained"),
-                    "rank": matched.get("rank"),
-                    "feedback": matched.get("feedback")
-                })
-        return my_results
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@router.get("/exams/{exam_id}/merit-list", summary="Get Exam Leaderboard & Toppers for Batch")
-def get_exam_merit_list(exam_id: str, current_user: dict = Depends(get_current_user)):
-    try:
-        supabase = get_supabase_client()
-        student_id = current_user.get("id")
-        
-        res = supabase.table("exams").select("*").eq("id", exam_id).execute()
-        if not res.data:
-            raise HTTPException(status_code=404, detail="Exam not found")
-            
-        exam = res.data[0]
-        results = exam.get("results") or []
-        
-        sorted_results = sorted(results, key=lambda x: (x.get("rank") or 999, -float(x.get("marks_obtained") or 0)))
-        
-        student_ids = [r["student_id"] for r in sorted_results if r.get("student_id")]
-        user_names = {}
-        if student_ids:
-            u_res = supabase.table("users").select("id, full_name, avatar_url").in_("id", student_ids).execute()
-            for u in (u_res.data or []):
-                user_names[u["id"]] = u
-                
-        leaderboard = []
-        for r in sorted_results:
-            uid = r.get("student_id")
-            u_info = user_names.get(uid, {})
-            leaderboard.append({
-                "student_id": uid,
-                "name": u_info.get("full_name") or "Student",
-                "avatar_url": u_info.get("avatar_url"),
-                "marks_obtained": r.get("marks_obtained"),
-                "total_marks": exam.get("total_marks"),
-                "rank": r.get("rank"),
-                "feedback": r.get("feedback"),
-                "is_me": uid == student_id
-            })
-            
-        return {
-            "exam_id": exam.get("id"),
-            "title": exam.get("title"),
-            "subject": exam.get("subject"),
-            "exam_date": exam.get("exam_date"),
-            "total_marks": exam.get("total_marks"),
-            "toppers": leaderboard[:10],
-            "full_leaderboard": leaderboard
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))

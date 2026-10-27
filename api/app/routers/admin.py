@@ -8,10 +8,11 @@ from app.models import (
     StudentUpdate,
     TeacherCreate,
     TeacherUpdate,
-    PaymentCollectRequest,
     SessionCreate,
     GenerateMonthSessionsRequest,
-    SessionActionRequest
+    SessionActionRequest,
+    BatchInvoiceDemandRequest,
+    SingleInvoiceDemandRequest
 )
 from datetime import date, datetime
 import calendar
@@ -1204,5 +1205,515 @@ def update_teacher(teacher_id: str, req: TeacherUpdate):
     except HTTPException:
         raise
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==============================================================================
+# 5. INVOICES & TUITION FEE DEMANDS
+# ==============================================================================
+
+def _parse_billing_period(raw_month: Any = None, raw_year: Any = None) -> tuple[int, int]:
+    """
+    Parses and returns (month: int 1-12, year: int >= 2020).
+    Handles:
+      - raw_month=10, raw_year=2026
+      - raw_month="2026-10", raw_year=None
+      - defaults to current month & year
+    """
+    today = date.today()
+    if raw_month is None and raw_year is None:
+        return today.month, today.year
+
+    if isinstance(raw_month, str) and "-" in raw_month.strip():
+        parts = raw_month.strip().split("-")
+        try:
+            y = int(parts[0])
+            m = int(parts[1])
+            if 1 <= m <= 12 and y >= 2020:
+                return m, y
+        except (ValueError, IndexError):
+            pass
+
+    try:
+        m = int(raw_month) if raw_month is not None and str(raw_month).strip() != "" else today.month
+        y = int(raw_year) if raw_year is not None and str(raw_year).strip() != "" else today.year
+        if not (1 <= m <= 12):
+            raise ValueError()
+        if y < 2020:
+            raise ValueError()
+        return m, y
+    except Exception:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid billing period: month='{raw_month}', year='{raw_year}'. Expected month (1-12) and year >= 2020."
+        )
+
+
+def _safe_insert_invoice(supabase, payload: dict) -> dict:
+    """
+    Safely inserts invoice record with fallback handling if remote Supabase schema migration
+    has not yet added billing_year or invoice_type, or still requires old columns.
+    """
+    try:
+        res = supabase.table("invoices").insert(payload).execute()
+        return res.data[0] if res.data else None
+    except Exception as e:
+        err_msg = str(e).lower()
+        modified = dict(payload)
+        changed = False
+
+        # If invoice_type column is not yet created in remote DB
+        if "invoice_type" in err_msg and "invoice_type" in modified:
+            del modified["invoice_type"]
+            changed = True
+
+        # If billing_year column is not yet created in remote DB (fallback to billing_month DATE string)
+        if "billing_year" in err_msg and "billing_year" in modified:
+            b_m = modified.pop("billing_month", None)
+            b_y = modified.pop("billing_year", None)
+            if b_m and b_y:
+                modified["billing_month"] = f"{int(b_y):04d}-{int(b_m):02d}-01"
+            else:
+                modified["billing_month"] = None
+            changed = True
+
+        # If due_date not-null constraint still exists in remote DB before migration
+        if "due_date" in err_msg and "due_date" not in modified:
+            modified["due_date"] = date.today().strftime("%Y-%m-%d")
+            changed = True
+
+        # If late_fine is required or expected before migration
+        if "late_fine" in err_msg and "late_fine" not in modified:
+            modified["late_fine"] = 0.0
+            changed = True
+
+        if changed:
+            res = supabase.table("invoices").insert(modified).execute()
+            return res.data[0] if res.data else None
+        raise
+
+
+@router.post("/invoices/generate-batch", summary="Demand Tuition Fee Invoices for Batch")
+def generate_batch_invoices(req: BatchInvoiceDemandRequest):
+    try:
+        supabase = get_supabase_client()
+        b_month, b_year = _parse_billing_period(req.billing_month, req.billing_year)
+        month_prefix = f"{b_year}{str(b_month).zfill(2)}"
+
+        is_all_batches = req.batch_id.strip().upper() == "ALL"
+        if is_all_batches:
+            batches_res = supabase.table("batches").select("id, name, fee_amount, fee_type").eq("is_active", True).execute()
+            target_batches = batches_res.data or []
+            if not target_batches:
+                raise HTTPException(status_code=400, detail="No active batches found.")
+            batch_map = {b["id"]: b for b in target_batches}
+            st_res = supabase.table("users").select(
+                "id, full_name, email, phone, batch_id, custom_monthly_fee, discount_amount"
+            ).eq("role", "STUDENT").eq("is_active", True).not_.is_("batch_id", "null").execute()
+            students = st_res.data or []
+        else:
+            b_res = supabase.table("batches").select("id, name, fee_amount, fee_type").eq("id", req.batch_id).execute()
+            if not b_res.data:
+                raise HTTPException(status_code=404, detail="Batch not found.")
+            target_batch = b_res.data[0]
+            batch_map = {target_batch["id"]: target_batch}
+            st_res = supabase.table("users").select(
+                "id, full_name, email, phone, batch_id, custom_monthly_fee, discount_amount"
+            ).eq("role", "STUDENT").eq("is_active", True).eq("batch_id", req.batch_id).execute()
+            students = st_res.data or []
+
+        if not students:
+            return {
+                "message": "No active students enrolled in target batch.",
+                "billing_month": b_month,
+                "billing_year": b_year,
+                "total_students": 0,
+                "created_count": 0,
+                "skipped_count": 0,
+                "created_invoices": [],
+                "skipped": []
+            }
+
+        # Query existing invoices to prevent duplicate demands
+        exist_res = supabase.table("invoices").select("id, student_id, batch_id, invoice_number, billing_month").execute()
+        existing_invoices = exist_res.data or []
+        
+        existing_monthly = {}
+        existing_onetime = {}
+        for inv in existing_invoices:
+            s_id = inv.get("student_id")
+            b_id = inv.get("batch_id")
+            inv_type = (inv.get("invoice_type") or "MONTHLY").upper()
+            if inv_type == "ONE_TIME":
+                existing_onetime[(s_id, b_id)] = inv.get("invoice_number")
+            else:
+                inv_bm = inv.get("billing_month")
+                inv_by = inv.get("billing_year")
+                if inv_by is not None and inv_bm is not None:
+                    existing_monthly[(s_id, b_id, int(inv_by), int(inv_bm))] = inv.get("invoice_number")
+                elif inv_bm:
+                    existing_monthly[(s_id, b_id, str(inv_bm)[:7])] = inv.get("invoice_number")
+
+        seq_start = len(existing_invoices) + 1
+        created = []
+        skipped = []
+
+        for student in students:
+            s_id = student["id"]
+            b_id = student.get("batch_id")
+            if not b_id or b_id not in batch_map:
+                continue
+
+            batch_info = batch_map[b_id]
+            fee_type = (batch_info.get("fee_type") or "MONTHLY").upper()
+
+            if fee_type == "ONE_TIME":
+                inv_type = "ONE_TIME"
+                inv_billing_month = None
+                inv_billing_year = None
+                if (s_id, b_id) in existing_onetime:
+                    skipped.append({
+                        "student_id": s_id,
+                        "student_name": student["full_name"],
+                        "invoice_number": existing_onetime[(s_id, b_id)],
+                        "reason": "One-time package invoice already issued for this student"
+                    })
+                    continue
+                inv_no = f"INV-OT-{str(seq_start).zfill(4)}"
+            else:
+                inv_type = "MONTHLY"
+                inv_billing_month = b_month
+                inv_billing_year = b_year
+                month_key = (s_id, b_id, b_year, b_month)
+                month_str_key = (s_id, b_id, f"{b_year}-{str(b_month).zfill(2)}")
+                if month_key in existing_monthly or month_str_key in existing_monthly:
+                    existing_num = existing_monthly.get(month_key) or existing_monthly.get(month_str_key)
+                    skipped.append({
+                        "student_id": s_id,
+                        "student_name": student["full_name"],
+                        "invoice_number": existing_num,
+                        "reason": f"Monthly invoice already issued for {b_month}/{b_year}"
+                    })
+                    continue
+                inv_no = f"INV-{month_prefix}-{str(seq_start).zfill(4)}"
+
+            seq_start += 1
+
+            custom_fee = student.get("custom_monthly_fee")
+            if custom_fee is not None and float(custom_fee) > 0:
+                base_amt = round(float(custom_fee), 2)
+            else:
+                base_amt = round(float(batch_info.get("fee_amount") or 0.0), 2)
+
+            discount_amt = round(float(student.get("discount_amount") or 0.0), 2)
+            payable_amt = max(0.0, round(base_amt - discount_amt, 2))
+
+            inv_payload = {
+                "student_id": s_id,
+                "batch_id": b_id,
+                "invoice_number": inv_no,
+                "invoice_type": inv_type,
+                "billing_month": inv_billing_month,
+                "billing_year": inv_billing_year,
+                "base_amount": base_amt,
+                "discount_amount": discount_amt,
+                "payable_amount": payable_amt,
+                "amount_paid": 0.00,
+                "status": "PENDING"
+            }
+
+            try:
+                row = _safe_insert_invoice(supabase, inv_payload)
+                if row:
+                    row["student_name"] = student["full_name"]
+                    row["batch_name"] = batch_info.get("name")
+                    row["invoice_type"] = inv_type
+                    created.append(row)
+                    if inv_type == "ONE_TIME":
+                        existing_onetime[(s_id, b_id)] = inv_no
+                    else:
+                        existing_monthly[(s_id, b_id, b_year, b_month)] = inv_no
+            except Exception as insert_err:
+                skipped.append({
+                    "student_id": s_id,
+                    "student_name": student["full_name"],
+                    "reason": str(insert_err)
+                })
+
+        total_demanded = sum(float(i.get("payable_amount", 0)) for i in created)
+
+        return {
+            "message": f"Demanded tuition fee for {b_month}/{b_year}. Created {len(created)} invoices, skipped {len(skipped)} students.",
+            "billing_month": b_month,
+            "billing_year": b_year,
+            "total_students": len(students),
+            "created_count": len(created),
+            "skipped_count": len(skipped),
+            "total_demanded_amount": total_demanded,
+            "created_invoices": created,
+            "skipped": skipped
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/invoices/generate-single", summary="Demand Single Student Tuition Fee Invoice")
+def generate_single_invoice(req: SingleInvoiceDemandRequest):
+    try:
+        supabase = get_supabase_client()
+
+        st_res = supabase.table("users").select("*").eq("id", req.student_id).eq("role", "STUDENT").execute()
+        if not st_res.data:
+            raise HTTPException(status_code=404, detail="Student not found.")
+        student = st_res.data[0]
+
+        target_batch_id = req.batch_id or student.get("batch_id")
+        if not target_batch_id:
+            raise HTTPException(status_code=400, detail="Student is not assigned to any batch. Please assign a batch first.")
+
+        b_res = supabase.table("batches").select("*").eq("id", target_batch_id).execute()
+        if not b_res.data:
+            raise HTTPException(status_code=404, detail="Course batch not found.")
+        batch = b_res.data[0]
+        fee_type = (batch.get("fee_type") or "MONTHLY").upper()
+
+        if fee_type == "ONE_TIME":
+            inv_type = "ONE_TIME"
+            inv_billing_month = None
+            inv_billing_year = None
+            existing = supabase.table("invoices").select("id, invoice_number").eq("student_id", req.student_id).eq("batch_id", target_batch_id).execute()
+            if existing.data:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"A course invoice ({existing.data[0]['invoice_number']}) already exists for {student['full_name']} in {batch.get('name')}."
+                )
+            prefix = f"INV-OT-{date.today().strftime('%Y%m')}"
+        else:
+            inv_type = "MONTHLY"
+            inv_billing_month, inv_billing_year = _parse_billing_period(req.billing_month, req.billing_year)
+            prefix = f"INV-{inv_billing_year}{str(inv_billing_month).zfill(2)}"
+
+            # Duplicate check
+            q = supabase.table("invoices").select("id, invoice_number").eq("student_id", req.student_id).eq("batch_id", target_batch_id)
+            try:
+                existing = q.eq("billing_year", inv_billing_year).eq("billing_month", inv_billing_month).execute()
+            except Exception:
+                existing = q.eq("billing_month", f"{inv_billing_year:04d}-{inv_billing_month:02d}-01").execute()
+
+            if existing.data:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"An invoice ({existing.data[0]['invoice_number']}) for {student['full_name']} for {inv_billing_month}/{inv_billing_year} already exists."
+                )
+
+        if req.base_amount is not None:
+            base_amt = round(float(req.base_amount), 2)
+        elif student.get("custom_monthly_fee") is not None and float(student.get("custom_monthly_fee")) > 0:
+            base_amt = round(float(student["custom_monthly_fee"]), 2)
+        else:
+            base_amt = round(float(batch.get("fee_amount") or 0.0), 2)
+
+        discount_amt = round(float(req.discount_amount if req.discount_amount is not None else (student.get("discount_amount") or 0.0)), 2)
+        payable_amt = max(0.0, round(base_amt - discount_amt, 2))
+
+        cnt_res = supabase.table("invoices").select("id", count="exact").execute()
+        seq = (cnt_res.count if cnt_res.count is not None else 0) + 1
+        inv_no = f"{prefix}-{str(seq).zfill(4)}"
+
+        payload = {
+            "student_id": req.student_id,
+            "batch_id": target_batch_id,
+            "invoice_number": inv_no,
+            "invoice_type": inv_type,
+            "billing_month": inv_billing_month,
+            "billing_year": inv_billing_year,
+            "base_amount": base_amt,
+            "discount_amount": discount_amt,
+            "payable_amount": payable_amt,
+            "amount_paid": 0.00,
+            "status": "PENDING"
+        }
+
+        created = _safe_insert_invoice(supabase, payload)
+        if not created:
+            raise HTTPException(status_code=500, detail="Failed to create invoice in database.")
+
+        created["student_name"] = student["full_name"]
+        created["batch_name"] = batch.get("name")
+        created["invoice_type"] = inv_type
+        return created
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/invoices", summary="List All Demanded Invoices & Summary Metrics")
+def list_invoices(
+    billing_month: str = None,
+    billing_year: str = None,
+    batch_id: str = None,
+    status: str = None,
+    search: str = None
+):
+    try:
+        supabase = get_supabase_client()
+        query = supabase.table("invoices").select(
+            "*, batches(id, name, fee_amount, fee_type), users!invoices_student_id_fkey(id, full_name, email, phone, guardian_name, guardian_phone, custom_monthly_fee, discount_amount), payments(*)"
+        ).order("created_at", desc=True)
+
+        if billing_month and billing_month.upper() != "ALL":
+            if "-" in billing_month:
+                parts = billing_month.split("-")
+                try:
+                    query = query.eq("billing_year", int(parts[0])).eq("billing_month", int(parts[1]))
+                except Exception:
+                    pass
+            else:
+                try:
+                    query = query.eq("billing_month", int(billing_month))
+                except Exception:
+                    pass
+
+        if billing_year and billing_year.upper() != "ALL":
+            try:
+                query = query.eq("billing_year", int(billing_year))
+            except Exception:
+                pass
+
+        if batch_id and batch_id.upper() != "ALL":
+            query = query.eq("batch_id", batch_id)
+
+        if status and status.upper() != "ALL":
+            query = query.eq("status", status.upper())
+
+        res = query.execute()
+        raw_invoices = res.data or []
+
+        enriched = []
+
+        for inv in raw_invoices:
+            student_info = inv.get("users") or {}
+            batch_info = inv.get("batches") or {}
+            
+            s_name = student_info.get("full_name") or "Unknown Student"
+            s_phone = student_info.get("phone") or ""
+            g_phone = student_info.get("guardian_phone") or s_phone
+            b_name = batch_info.get("name") or "Course Batch"
+            inv_num = inv.get("invoice_number") or ""
+
+            if search and search.strip():
+                term = search.strip().lower()
+                matches = (
+                    term in s_name.lower() or
+                    term in inv_num.lower() or
+                    term in s_phone or
+                    term in g_phone or
+                    term in b_name.lower()
+                )
+                if not matches:
+                    continue
+
+            inv_status = inv.get("status") or "PENDING"
+            inv_type = inv.get("invoice_type") or batch_info.get("fee_type") or "MONTHLY"
+
+            raw_bm = inv.get("billing_month")
+            raw_by = inv.get("billing_year")
+            parsed_bm = None
+            parsed_by = None
+            if isinstance(raw_bm, str) and "-" in raw_bm:
+                parts = raw_bm.split("-")
+                try:
+                    parsed_by = int(parts[0])
+                    parsed_bm = int(parts[1])
+                except Exception:
+                    pass
+            else:
+                try:
+                    parsed_bm = int(raw_bm) if raw_bm is not None else None
+                except Exception:
+                    pass
+                try:
+                    parsed_by = int(raw_by) if raw_by is not None else None
+                except Exception:
+                    pass
+
+            enriched.append({
+                "id": inv["id"],
+                "invoice_number": inv_num,
+                "invoice_type": inv_type,
+                "student_id": inv["student_id"],
+                "student_name": s_name,
+                "student_phone": s_phone,
+                "guardian_name": student_info.get("guardian_name"),
+                "guardian_phone": g_phone,
+                "batch_id": inv["batch_id"],
+                "batch_name": b_name,
+                "billing_month": parsed_bm,
+                "billing_year": parsed_by,
+                "base_amount": float(inv.get("base_amount") or 0.0),
+                "discount_amount": float(inv.get("discount_amount") or 0.0),
+                "payable_amount": float(inv.get("payable_amount") or 0.0),
+                "amount_paid": float(inv.get("amount_paid") or 0.0),
+                "outstanding_amount": max(0.0, float(inv.get("payable_amount") or 0.0) - float(inv.get("amount_paid") or 0.0)),
+                "status": inv_status,
+                "created_at": inv.get("created_at"),
+                "payments": inv.get("payments") or []
+            })
+
+        total_invoices = len(enriched)
+        total_demanded = sum(i["payable_amount"] for i in enriched)
+        total_collected = sum(i["amount_paid"] for i in enriched)
+        total_outstanding = sum(i["outstanding_amount"] for i in enriched if i["status"] == "PENDING")
+        pending_count = sum(1 for i in enriched if i["status"] == "PENDING")
+        paid_count = sum(1 for i in enriched if i["status"] == "PAID")
+
+        recovery_rate = round((total_collected / total_demanded * 100), 1) if total_demanded > 0 else 0.0
+
+        return {
+            "invoices": enriched,
+            "summary": {
+                "total_invoices_count": total_invoices,
+                "total_demanded_amount": total_demanded,
+                "total_collected_amount": total_collected,
+                "total_outstanding_amount": total_outstanding,
+                "pending_count": pending_count,
+                "paid_count": paid_count,
+                "recovery_rate_percent": recovery_rate
+            }
+        }
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/invoices/{invoice_id}", summary="Delete or Cancel Demanded Invoice")
+def delete_invoice(invoice_id: str):
+    try:
+        supabase = get_supabase_client()
+        inv_res = supabase.table("invoices").select("*").eq("id", invoice_id).execute()
+        if not inv_res.data:
+            raise HTTPException(status_code=404, detail="Invoice not found.")
+        invoice = inv_res.data[0]
+
+        if float(invoice.get("amount_paid") or 0.0) > 0:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot delete invoice {invoice['invoice_number']} because payment of ₹{invoice['amount_paid']} has already been collected."
+            )
+
+        del_res = supabase.table("invoices").delete().eq("id", invoice_id).execute()
+        return {
+            "message": f"Invoice {invoice['invoice_number']} successfully deleted.",
+            "id": invoice_id
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 

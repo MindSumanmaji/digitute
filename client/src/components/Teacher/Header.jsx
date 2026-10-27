@@ -87,8 +87,6 @@ export function Header({
         return 'Doubt Corner';
       case 'dpp-management':
         return 'DPP Management';
-      case 'class-test-notice':
-        return 'Class Test Notice';
       case 'study-material':
         return 'Study Materials';
       case 'finance':

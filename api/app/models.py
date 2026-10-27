@@ -175,26 +175,32 @@ class MarkAttendanceRequest(BaseModel):
 # ==============================================================================
 # 6. INVOICES, PAYMENTS & TRANSACTIONS
 # ==============================================================================
+class BatchInvoiceDemandRequest(BaseModel):
+    batch_id: str = Field(..., description="Target course batch ID or 'ALL'")
+    billing_month: Optional[Union[int, str]] = Field(None, description="Billing month (1-12) or 'YYYY-MM'")
+    billing_year: Optional[int] = Field(None, description="Billing year e.g. 2026")
+
+class SingleInvoiceDemandRequest(BaseModel):
+    student_id: str = Field(..., description="Target student UUID")
+    batch_id: Optional[str] = Field(None, description="Batch UUID. If omitted, uses student's assigned batch.")
+    billing_month: Optional[Union[int, str]] = Field(None, description="Billing month (1-12) or 'YYYY-MM'")
+    billing_year: Optional[int] = Field(None, description="Billing year e.g. 2026")
+    base_amount: Optional[float] = Field(None, description="Base tuition fee. If None, uses custom_monthly_fee or batch.fee_amount")
+    discount_amount: Optional[float] = Field(0.0, description="Concession/scholarship discount")
+
 class InvoiceResponse(BaseModel):
     id: str
     invoice_number: str
     student_id: str
     batch_id: str
-    billing_month: date
+    invoice_type: Literal["MONTHLY", "ONE_TIME"] = "MONTHLY"
+    billing_month: Optional[int] = None
+    billing_year: Optional[int] = None
     base_amount: float
     discount_amount: float
-    late_fine: float
     payable_amount: float
     amount_paid: float
-    due_date: date
     status: Literal["PENDING", "PAID", "CANCELLED"]
-
-class PaymentCollectRequest(BaseModel):
-    invoice_id: str
-    student_id: str
-    amount: float
-    payment_mode: Literal["CASH", "RAZORPAY"] = "CASH"
-    remarks: Optional[str] = None
 
 # ==============================================================================
 # 7. STUDY MATERIALS, DPPS, DOUBTS & EXAMS
@@ -279,14 +285,6 @@ class DoubtResolve(BaseModel):
     reply_file_url: Optional[str] = None
     status: Optional[str] = "RESOLVED"
 
-class ExamCreate(BaseModel):
-    batch_id: str
-    subject: str
-    title: str
-    total_marks: float
-    exam_date: Optional[date] = None
-    results: Optional[list[dict[str, Any]]] = []
-
 # ==============================================================================
 # 8. SYLLABUS & CHAPTER PROGRESS MODELS
 # ==============================================================================
@@ -303,4 +301,43 @@ class SyllabusToggleChapterRequest(BaseModel):
     completed: bool
     batch_name: Optional[str] = None
     batch_id: Optional[str] = None
+
+
+# ==============================================================================
+# 9. EXAM MODELS (schema.sql Table 11)
+# ==============================================================================
+class ExamStudentResult(BaseModel):
+    student_id: str
+    marks_obtained: Optional[float] = None
+
+class ExamCreate(BaseModel):
+    batch_id: str
+    subject: str
+    title: str
+    syllabus: Optional[str] = None
+    exam_date: Optional[date] = None
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
+    duration_minutes: Optional[int] = None
+    total_marks: float
+    passing_marks: Optional[float] = None
+    status: Optional[str] = "completed"
+    is_published: Optional[bool] = False
+    results_published: Optional[bool] = False
+    results: Optional[list[ExamStudentResult]] = []
+
+class ExamUpdate(BaseModel):
+    title: Optional[str] = None
+    syllabus: Optional[str] = None
+    exam_date: Optional[date] = None
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
+    duration_minutes: Optional[int] = None
+    total_marks: Optional[float] = None
+    passing_marks: Optional[float] = None
+    status: Optional[str] = None
+    is_published: Optional[bool] = None
+    results_published: Optional[bool] = None
+    results: Optional[list[ExamStudentResult]] = None
+
 

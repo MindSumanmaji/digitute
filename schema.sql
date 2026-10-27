@@ -76,7 +76,7 @@ CREATE INDEX idx_users_role ON users(role);
 CREATE INDEX idx_users_student_batch ON users(batch_id) WHERE role = 'STUDENT';
 
 -- ==============================================================================
--- 3. INVOICES (Monthly Tuition Fee Demands & Enrolment Charges)
+-- 3. INVOICES (Monthly Tuition Fee Demands & One-Time Course Charges)
 -- ==============================================================================
 CREATE TYPE invoice_status AS ENUM ('PENDING', 'PAID', 'CANCELLED');
 
@@ -85,25 +85,34 @@ CREATE TABLE invoices (
     student_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     batch_id UUID NOT NULL REFERENCES batches(id) ON DELETE CASCADE,
     
-    invoice_number VARCHAR(100) UNIQUE NOT NULL, -- e.g. "INV-202610-008"
-    billing_month DATE NOT NULL,                 -- e.g. '2026-10-01'
+    invoice_number VARCHAR(100) UNIQUE NOT NULL, -- e.g. "INV-202610-0001" or "INV-OT-0001"
     
-    base_amount NUMERIC(10, 2) NOT NULL,       -- Batch regular fee
-    discount_amount NUMERIC(10, 2) DEFAULT 0,  -- Student discount
-    late_fine NUMERIC(10, 2) DEFAULT 0,        -- Applied if past due_date
-    payable_amount NUMERIC(10, 2) NOT NULL,   -- (base - discount + fine)
+    -- Fee Model: MONTHLY vs ONE_TIME (inherited from batch)
+    invoice_type fee_payment_type NOT NULL DEFAULT 'MONTHLY',
+    billing_month SMALLINT CHECK (billing_month BETWEEN 1 AND 12), -- 1 to 12 (Mandatory if MONTHLY, NULL if ONE_TIME)
+    billing_year SMALLINT CHECK (billing_year >= 2020),            -- e.g. 2026 (Mandatory if MONTHLY, NULL if ONE_TIME)
+    
+    base_amount NUMERIC(10, 2) NOT NULL,       -- Batch regular fee or custom monthly fee
+    discount_amount NUMERIC(10, 2) DEFAULT 0,  -- Student discount / scholarship
+    payable_amount NUMERIC(10, 2) NOT NULL,   -- (base_amount - discount_amount)
     amount_paid NUMERIC(10, 2) DEFAULT 0.00,  -- Running total paid so far
     
-    due_date DATE NOT NULL,
     status invoice_status DEFAULT 'PENDING',
     created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW(),
-
-    CONSTRAINT unique_student_monthly_invoice UNIQUE (student_id, batch_id, billing_month)
+    updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 CREATE INDEX idx_invoices_student_status ON invoices(student_id, status);
-CREATE INDEX idx_invoices_due ON invoices(status, due_date);
+
+-- Rule 1: Monthly batches prevent duplicate within the same billing month and year
+CREATE UNIQUE INDEX idx_unique_monthly_invoice 
+ON invoices (student_id, batch_id, billing_year, billing_month) 
+WHERE invoice_type = 'MONTHLY';
+
+-- Rule 2: One-Time batches prevent duplicate forever for that course
+CREATE UNIQUE INDEX idx_unique_onetime_invoice 
+ON invoices (student_id, batch_id) 
+WHERE invoice_type = 'ONE_TIME';
 
 -- ==============================================================================
 -- 4. PAYMENTS & TRANSACTIONS (Online Razorpay + Offline Cash + Receipts)
@@ -127,11 +136,6 @@ CREATE TABLE payments (
     
     -- Offline Cash Collection
     collected_by UUID REFERENCES users(id), -- Admin/Staff who received cash
-    remarks TEXT,
-    
-    -- Receipt Metadata
-    receipt_number VARCHAR(100) UNIQUE,     -- e.g. "REC-2026-0042"
-    receipt_pdf_url TEXT,                   -- Stored in Supabase Storage
     
     paid_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ DEFAULT NOW()
@@ -313,22 +317,96 @@ CREATE TABLE doubts (
 CREATE INDEX idx_doubts_batch_status ON doubts(batch_id, status);
 
 -- ==============================================================================
--- 11. EXAMS (Single Unified Table: Exam Details + Student Scores in JSONB)
+-- 11. EXAMS (Exam Scheduling, Lifecycle Management & Student Scores in JSONB)
 -- ==============================================================================
 CREATE TABLE exams (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    batch_id UUID NOT NULL REFERENCES batches(id) ON DELETE CASCADE,
+
+    -- Batch & Creator (Teacher / Admin from users table)
+    batch_id UUID NOT NULL
+        REFERENCES batches(id) ON DELETE CASCADE,
+
+    created_by UUID NOT NULL
+        REFERENCES users(id) ON DELETE RESTRICT,
+
+    -- Basic Exam Information
     subject VARCHAR(100) NOT NULL,
     title VARCHAR(255) NOT NULL, -- e.g. "Weekly Test #3 - Thermodynamics"
-    total_marks NUMERIC(6, 2) NOT NULL,
-    exam_date DATE NOT NULL DEFAULT CURRENT_DATE,
-    
-    -- Student Scores & Rankings directly stored in JSONB
-    -- Example: [{"student_id": "uuid", "marks_obtained": 82, "rank": 1, "feedback": "Excellent"}]
-    results JSONB DEFAULT '[]'::jsonb,
+    syllabus TEXT,               -- Topics covered or test guidelines (optional)
 
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
+    -- Schedule
+    exam_date DATE NOT NULL,
+    start_time TIME,
+    end_time TIME,
+    duration_minutes INTEGER,
+
+    -- Marks Configuration
+    total_marks NUMERIC(6, 2) NOT NULL
+        CHECK (total_marks > 0),
+
+    passing_marks NUMERIC(6, 2),
+
+    -- Exam Workflow & Publishing Lifecycle
+    status VARCHAR(20) NOT NULL DEFAULT 'draft'
+        CHECK (
+            status IN (
+                'draft',
+                'scheduled',
+                'completed',
+                'cancelled'
+            )
+        ),
+
+    is_published BOOLEAN NOT NULL DEFAULT FALSE,       -- Published on student dashboard / notice
+    results_published BOOLEAN NOT NULL DEFAULT FALSE,  -- Marks & merit list released to students
+    results_published_at TIMESTAMPTZ,
+
+    -- Student Scores directly stored in JSONB
+    -- (Rank & Percentage are dynamically calculated from marks_obtained & total_marks)
+    -- Example Structure:
+    -- [
+    --   { "student_id": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d", "marks_obtained": 92.00 },
+    --   { "student_id": "4c2aeb1a-1f8e-4a6c-9411-1a3b4c5d6e7f", "marks_obtained": 78.50 },
+    --   { "student_id": "3a1deb4d-1b2c-4bad-8bee-2b0d7b3dcb99", "marks_obtained": null } -- null indicates absent / not appeared
+    -- ]
+    results JSONB NOT NULL DEFAULT '[]'::jsonb
+        CHECK (jsonb_typeof(results) = 'array'),
+
+    -- Timestamps
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+
+    -- Constraints & Validations
+    CHECK (
+        end_time IS NULL
+        OR start_time IS NULL
+        OR end_time > start_time
+    ),
+
+    CHECK (
+        duration_minutes IS NULL
+        OR duration_minutes > 0
+    ),
+
+    CHECK (
+        passing_marks IS NULL
+        OR (
+            passing_marks >= 0
+            AND passing_marks <= total_marks
+        )
+    )
 );
 
-CREATE INDEX idx_exams_batch_date ON exams(batch_id, exam_date);
+-- Optimized Performance Indexes
+CREATE INDEX idx_exams_batch_date
+    ON exams(batch_id, exam_date DESC);
+
+CREATE INDEX idx_exams_teacher
+    ON exams(created_by);
+
+CREATE INDEX idx_exams_status_date
+    ON exams(status, exam_date);
+
+CREATE INDEX idx_exams_batch_published
+    ON exams(batch_id, is_published, results_published);
+

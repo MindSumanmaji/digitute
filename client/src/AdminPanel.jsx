@@ -337,7 +337,7 @@ function TodaySchedule({ onViewAll }) {
   );
 }
 
-function HomeView({ searchQuery, onQuickAction, onNavigate, onCollect, students }) {
+function HomeView({ searchQuery, onQuickAction, onNavigate, students }) {
   const [period, setPeriod] = useState('This month');
   const dueList = students.filter(s => s.dueAmount > 0);
 
@@ -375,7 +375,7 @@ function HomeView({ searchQuery, onQuickAction, onNavigate, onCollect, students 
                   <th>Batch</th>
                   <th>Outstanding</th>
                   <th>Due Date</th>
-                  <th style={{ textAlign: 'right' }}>Collect</th>
+                  <th style={{ textAlign: 'right' }}>Status</th>
                 </tr>
               </thead>
               <tbody>
@@ -398,7 +398,13 @@ function HomeView({ searchQuery, onQuickAction, onNavigate, onCollect, students 
                       <td><strong className="due-amount">₹{s.dueAmount.toLocaleString('en-IN')}</strong></td>
                       <td><span className="due-date">{s.dueDate}</span></td>
                       <td style={{ textAlign: 'right' }}>
-                        <button className="collect-row-button" onClick={() => onCollect(s)}>Collect</button>
+                        <button
+                          className="button-secondary"
+                          style={{ minHeight: 28, fontSize: 12, padding: '0 10px' }}
+                          onClick={() => onNavigate('Finance & Fees')}
+                        >
+                          View
+                        </button>
                       </td>
                     </tr>
                   ))
@@ -447,7 +453,6 @@ function Modal({ modal, onClose, onSubmit, selectedItem, batches, teachers }) {
   const isDeleteBatch = modal === 'Delete batch';
   const isTeacher = modal === 'Add teacher' || modal === 'Edit teacher';
   const isEditTeacher = modal === 'Edit teacher';
-  const isCollect = modal === 'Collect cash' || modal === 'Collect fee' || (typeof modal === 'string' && modal.startsWith('Collect for '));
   const isReceipt = typeof modal === 'string' && modal.startsWith('Receipt: ');
   const isNotice = modal === 'Broadcast notice' || modal === 'Send fee reminders';
   const isExport = modal === 'Export report';
@@ -568,10 +573,9 @@ function Modal({ modal, onClose, onSubmit, selectedItem, batches, teachers }) {
                   isBatch ? 'Create New Course Batch' :
                     isEditTeacher ? `Edit Faculty: ${selectedItem?.full_name || selectedItem?.name || ''}` :
                     isTeacher ? 'Add Faculty Member' :
-                      isCollect ? ((typeof modal === 'string' && modal.startsWith('Collect for ')) ? modal : 'Collect Tuition Fee') :
-                        isReceipt ? 'Official Payment Receipt' :
-                          isNotice ? 'Broadcast Announcement' :
-                            isExport ? 'Export Institute Report' : modal}
+                      isReceipt ? 'Official Payment Receipt' :
+                        isNotice ? 'Broadcast Announcement' :
+                          isExport ? 'Export Institute Report' : modal}
             </h2>
             <p>
               {isAdmission ? 'Enter student and guardian contact details for batch enrolment. Default password is #{initials}@123.' :
@@ -581,9 +585,8 @@ function Modal({ modal, onClose, onSubmit, selectedItem, batches, teachers }) {
                   isBatch ? 'Configure batch name, tuition fee model and faculty revenue sharing.' :
                     isEditTeacher ? 'Update faculty contact info, qualifications and academic specialization.' :
                     isTeacher ? 'Onboard teacher with qualification, subjects and payout model. Default password is #{initials}@123.' :
-                      isCollect ? 'Record counter cash payment and issue digital receipt slip.' :
-                        isReceipt ? 'Official money voucher with institute seal.' :
-                          isNotice ? 'Publish notification to student and faculty portals.' : 'Confirm action.'}
+                      isReceipt ? 'Official money voucher with institute seal.' :
+                        isNotice ? 'Publish notification to student and faculty portals.' : 'Confirm action.'}
             </p>
           </div>
           <button className="icon-button" onClick={onClose}><X size={19} /></button>
@@ -918,33 +921,6 @@ function Modal({ modal, onClose, onSubmit, selectedItem, batches, teachers }) {
               </>
             )}
 
-            {isCollect && (
-              <>
-                <div className="form-row">
-                  <label className="form-field">
-                    <span>Student / Roll Number <b>*</b></span>
-                    <input required value={form.name} onChange={(e) => update('name', e.target.value)} placeholder="Search student name or roll" />
-                  </label>
-                  <label className="form-field">
-                    <span>Amount Received (₹) <b>*</b></span>
-                    <input required type="number" min="1" value={form.amount} onChange={(e) => update('amount', e.target.value)} placeholder="2000" />
-                  </label>
-                </div>
-                <label className="form-field">
-                  <span>Payment Mode</span>
-                  <select value={form.mode} onChange={(e) => update('mode', e.target.value)}>
-                    <option>Cash (Counter)</option>
-                    <option>Offline UPI (QR Code)</option>
-                    <option>Direct Bank Transfer</option>
-                  </select>
-                </label>
-                <div className="form-info">
-                  <ShieldCheck size={16} />
-                  <span>Submitting will record this transaction, clear the student's monthly due and generate an official printable receipt.</span>
-                </div>
-              </>
-            )}
-
             {isNotice && (
               <>
                 <label className="form-field">
@@ -987,9 +963,8 @@ function Modal({ modal, onClose, onSubmit, selectedItem, batches, teachers }) {
                   isEditBatch ? 'Update Batch' :
                     isBatch ? 'Create Batch' :
                       isTeacher ? 'Add Faculty' :
-                        isCollect ? 'Confirm & Issue Receipt' :
-                          isNotice ? 'Publish Notice' :
-                            isExport ? 'Download CSV' : 'Submit'}
+                        isNotice ? 'Publish Notice' :
+                          isExport ? 'Download CSV' : 'Submit'}
                 <ChevronRight size={15} />
               </button>
             </div>
@@ -1104,16 +1079,6 @@ export default function AdminPanel({ onBackToLanding }) {
     }
     setModalItem(item);
     setModal(action);
-  }
-
-  function handleCollectFee(student) {
-    if (student) {
-      setModalItem(student);
-      setModal(`Collect for ${student.name}`);
-    } else {
-      setModalItem(null);
-      setModal('Collect fee');
-    }
   }
 
   function handleSendReminder(target = 'all') {
@@ -1327,28 +1292,6 @@ export default function AdminPanel({ onBackToLanding }) {
         console.error('Failed to update teacher on server:', err);
         showToast('Update Failed', err.message || 'Could not update faculty member.');
       }
-    } else if (type === 'Collect cash' || type === 'Collect fee' || type.startsWith('Collect for ')) {
-      const amt = Number(form.amount) || 2000;
-      const recNo = `REC-2026-${String(transactions.length + 185).padStart(4, '0')}`;
-      const newTx = {
-        id: `tx-${Date.now()}`,
-        receiptNo: recNo,
-        studentName: modalItem?.name || form.name || 'Student',
-        studentId: modalItem?.studentId || 'DT-1001',
-        batch: modalItem?.batch || form.batch || 'Class 12 · Science',
-        amount: amt,
-        mode: form.mode || 'Cash (Counter)',
-        status: 'SUCCESS',
-        date: 'Today · Just now',
-        collectedBy: 'Admin Counter',
-      };
-      setTransactions(prev => [newTx, ...prev]);
-
-      // update student due
-      if (modalItem) {
-        setStudents(prev => prev.map(s => s.id === modalItem.id ? { ...s, dueAmount: 0, status: 'Paid' } : s));
-      }
-      showToast('Fee Payment Cleared', `Issued receipt ${recNo} for ₹${amt.toLocaleString('en-IN')}.`);
     } else if (type === 'Broadcast notice') {
       const newN = {
         id: `n-${Date.now()}`,
@@ -1409,7 +1352,6 @@ export default function AdminPanel({ onBackToLanding }) {
               searchQuery={searchQuery}
               onQuickAction={openAction}
               onNavigate={navigate}
-              onCollect={handleCollectFee}
               students={students}
             />
           )}
@@ -1453,9 +1395,10 @@ export default function AdminPanel({ onBackToLanding }) {
 
           {activePage === 'Finance & Fees' && (
             <FinanceView
+              batches={batches}
               students={students}
               transactions={transactions}
-              onCollectFee={handleCollectFee}
+              showToast={showToast}
               onSendReminder={handleSendReminder}
               onPrintReceipt={handlePrintReceipt}
             />

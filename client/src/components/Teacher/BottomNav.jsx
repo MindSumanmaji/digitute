@@ -118,8 +118,7 @@ export function BottomNav({
     'syllabus-setup',
     'exam-evaluation',
     'doubt-corner',
-    'dpp-management',
-    'class-test-notice'
+    'dpp-management'
   ];
 
   return (
