@@ -13,7 +13,7 @@ from app.models import (
     SyllabusSaveRequest,
     SyllabusToggleChapterRequest
 )
-from datetime import date
+from datetime import date, datetime, timezone
 from typing import Any, Optional
 import uuid
 import os
@@ -67,9 +67,9 @@ def verify_teacher_batch_and_subject(supabase, teacher_id: str, teacher_name: st
     if role == "ADMIN":
         return
 
-    batch_res = supabase.table("batches").select("*").eq("id", batch_id).eq("is_active", True).execute()
+    batch_res = supabase.table("batches").select("*").eq("id", batch_id).execute()
     if not batch_res.data:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Batch not found or is inactive")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Batch not found")
 
     batch = batch_res.data[0]
     subjects = batch.get("subjects") or []
@@ -941,13 +941,105 @@ def delete_dpp(dpp_id: str, current_user: dict = Depends(get_current_user)):
 # 5. DOUBTS & QUESTION RESOLUTION
 # ==============================================================================
 @router.get("/doubts", summary="List Student Doubts in Assigned Batches")
-def list_student_doubts(current_user: dict = Depends(get_current_user)):
+def list_student_doubts(
+    batch_id: Optional[str] = None,
+    subject: Optional[str] = None,
+    status: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)
+):
     try:
         supabase = get_supabase_client()
-        res = supabase.table("doubts").select(
-            "*, users!doubts_student_id_fkey(full_name, email), batches(name)"
-        ).order("created_at", desc=True).execute()
-        return res.data or []
+        teacher_id = current_user.get("id")
+        teacher_name = (current_user.get("full_name") or "").strip().lower()
+        role = current_user.get("role")
+
+        # 1. Authorization: Retrieve assigned batches & subjects if not admin
+        assigned_pairs = set()  # (batch_id, subject_name_lower)
+        assigned_batch_ids = set()
+
+        if role != "ADMIN":
+            all_batches_res = supabase.table("batches").select("id, name, subjects").eq("is_active", True).execute()
+            for b in all_batches_res.data or []:
+                b_id = b.get("id")
+                for s in b.get("subjects") or []:
+                    s_name = (s.get("name") or "").strip().lower()
+                    s_tid = s.get("teacher_id")
+                    s_tname = (s.get("teacher") or "").strip().lower()
+                    if s_tid == teacher_id or (s_tname and s_tname == teacher_name):
+                        assigned_pairs.add((b_id, s_name))
+                        assigned_batch_ids.add(b_id)
+
+            if not assigned_pairs:
+                return []
+
+            # If specific batch requested, verify teacher is assigned
+            if batch_id:
+                if batch_id not in assigned_batch_ids:
+                    raise HTTPException(
+                        status_code=403,
+                        detail="You are not authorized to view doubts for this batch."
+                    )
+                if subject:
+                    subj_lower = subject.strip().lower()
+                    if (batch_id, subj_lower) not in assigned_pairs:
+                        raise HTTPException(
+                            status_code=403,
+                            detail=f"You are not authorized to view doubts for subject '{subject}' in this batch."
+                        )
+
+        # 2. Build Query
+        query = supabase.table("doubts").select(
+            "*, student:users!doubts_student_id_fkey(id, full_name, email, avatar_url), resolved_by_user:users!doubts_resolved_by_fkey(id, full_name, email), batches(id, name)"
+        )
+
+        if batch_id:
+            query = query.eq("batch_id", batch_id)
+        elif role != "ADMIN":
+            query = query.in_("batch_id", list(assigned_batch_ids))
+
+        if subject:
+            query = query.ilike("subject", subject.strip())
+
+        if status:
+            query = query.eq("status", status.upper())
+
+        res = query.order("created_at", desc=True).execute()
+        records = res.data or []
+
+        # Additional filter for non-admin if neither batch nor subject was specified
+        if role != "ADMIN" and (not batch_id or not subject):
+            records = [
+                r for r in records
+                if (r.get("batch_id"), (r.get("subject") or "").strip().lower()) in assigned_pairs
+            ]
+
+        # 3. Generate signed URLs for attachments (7-day validity)
+        for item in records:
+            q_file = item.get("question_file_url")
+            if q_file:
+                if q_file.startswith("http://") or q_file.startswith("https://"):
+                    item["question_file_signed_url"] = q_file
+                else:
+                    try:
+                        signed = supabase.storage.from_("digitute").create_signed_url(q_file, 86400 * 7)
+                        item["question_file_signed_url"] = signed.get("signedURL") or signed.get("signedUrl")
+                    except Exception:
+                        item["question_file_signed_url"] = None
+
+            r_file = item.get("reply_file_url")
+            if r_file:
+                if r_file.startswith("http://") or r_file.startswith("https://"):
+                    item["reply_file_signed_url"] = r_file
+                else:
+                    try:
+                        signed = supabase.storage.from_("digitute").create_signed_url(r_file, 86400 * 7)
+                        item["reply_file_signed_url"] = signed.get("signedURL") or signed.get("signedUrl")
+                    except Exception:
+                        item["reply_file_signed_url"] = None
+
+        return records
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -955,18 +1047,142 @@ def list_student_doubts(current_user: dict = Depends(get_current_user)):
 def resolve_doubt(resolve: DoubtResolve, current_user: dict = Depends(get_current_user)):
     try:
         supabase = get_supabase_client()
-        resolved_by = resolve.resolved_by or current_user.get("id")
-        
-        payload = {
-            "resolved_by": resolved_by,
-            "reply_text": resolve.reply_text,
-            "reply_file_url": resolve.reply_file_url,
-            "status": "RESOLVED"
-        }
+        teacher_id = current_user.get("id")
+        teacher_name = current_user.get("full_name", "")
+        role = current_user.get("role", "TEACHER")
+
+        # 1. Fetch doubt to verify authorization
+        d_res = supabase.table("doubts").select("*").eq("id", resolve.doubt_id).execute()
+        if not d_res.data:
+            raise HTTPException(status_code=404, detail="Doubt record not found.")
+
+        doubt = d_res.data[0]
+        batch_id = doubt.get("batch_id")
+        subject = doubt.get("subject")
+
+        # 2. Enforce teacher authorization for this batch & subject
+        verify_teacher_batch_and_subject(supabase, teacher_id, teacher_name, batch_id, subject, role)
+
+        # 3. Formulate update payload
+        req_status = (resolve.status or "RESOLVED").upper()
+        if req_status not in ("RESOLVED", "OFFLINE_PENDING", "OPEN"):
+            raise HTTPException(status_code=400, detail="Invalid status. Must be 'RESOLVED', 'OFFLINE_PENDING', or 'OPEN'.")
+
+        resolved_by = resolve.resolved_by or teacher_id
+
+        if req_status == "RESOLVED":
+            payload = {
+                "status": "RESOLVED",
+                "resolved_by": resolved_by,
+                "reply_text": resolve.reply_text,
+                "resolved_at": datetime.now(timezone.utc).isoformat()
+            }
+            if resolve.reply_file_url is not None:
+                payload["reply_file_url"] = resolve.reply_file_url
+        elif req_status == "OFFLINE_PENDING":
+            payload = {
+                "status": "OFFLINE_PENDING",
+                "resolved_by": resolved_by,
+                "reply_text": resolve.reply_text or "Marked for discussion in classroom session."
+            }
+        else:  # OPEN
+            payload = {
+                "status": "OPEN",
+                "resolved_by": None,
+                "resolved_at": None,
+                "reply_text": None,
+                "reply_file_url": None
+            }
+
         res = supabase.table("doubts").update(payload).eq("id", resolve.doubt_id).execute()
-        return {"message": "Doubt resolved successfully"}
+        updated_doubt = res.data[0] if res.data else payload
+        return {"message": f"Doubt updated to {req_status} successfully", "doubt": updated_doubt}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/doubts/{doubt_id}/access-url", summary="Get Fresh Signed URL for Doubt Attachment")
+def get_doubt_attachment_access_url(
+    doubt_id: str,
+    target: str = "question",
+    current_user: dict = Depends(get_current_user)
+):
+    try:
+        supabase = get_supabase_client()
+        d_res = supabase.table("doubts").select("id, question_file_url, reply_file_url").eq("id", doubt_id).execute()
+        if not d_res.data:
+            raise HTTPException(status_code=404, detail="Doubt record not found.")
+
+        doubt = d_res.data[0]
+        file_path = doubt.get("question_file_url") if target == "question" else doubt.get("reply_file_url")
+        if not file_path:
+            raise HTTPException(status_code=404, detail=f"No {target} file attachment found for this doubt.")
+
+        if file_path.startswith("http://") or file_path.startswith("https://"):
+            return {"signed_url": file_path}
+
+        signed = supabase.storage.from_("digitute").create_signed_url(file_path, 86400 * 7)
+        signed_url = signed.get("signedURL") or signed.get("signedUrl")
+        return {"signed_url": signed_url}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/doubts/upload-attachment", summary="Upload Teacher Doubt Solution Attachment")
+async def upload_teacher_doubt_attachment(
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user)
+):
+    try:
+        supabase = get_supabase_client()
+        teacher_id = current_user.get("id")
+
+        original_filename = file.filename or "solution_file"
+        clean_filename = os.path.basename(original_filename)
+        ext = os.path.splitext(clean_filename)[1].lower()
+
+        if ext not in ALLOWED_DPP_EXTENSIONS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported file extension '{ext}'. Allowed: PNG, JPG, JPEG, WEBP, PDF, DOC, DOCX"
+            )
+
+        contents = await file.read()
+        if not contents or len(contents) == 0:
+            raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+
+        if len(contents) > 15 * 1024 * 1024:
+            raise HTTPException(status_code=413, detail="File size exceeds 15 MiB limit.")
+
+        if not validate_magic_bytes(ext, contents[:32]):
+            raise HTTPException(status_code=400, detail=f"File signature does not match declared extension '{ext}'.")
+
+        safe_name = re.sub(r'[^a-zA-Z0-9_.-]', '_', clean_filename)
+        object_name = f"{uuid.uuid4().hex[:12]}_{safe_name}"
+        storage_path = f"doubts/teacher/{teacher_id}/{object_name}"
+
+        content_type = file.content_type or ALLOWED_DPP_EXTENSIONS.get(ext, "application/octet-stream")
+
+        supabase.storage.from_("digitute").upload(
+            path=storage_path,
+            file=contents,
+            file_options={"content-type": content_type, "upsert": "true"}
+        )
+
+        signed = supabase.storage.from_("digitute").create_signed_url(storage_path, 3600)
+        signed_url = signed.get("signedURL") or signed.get("signedUrl")
+
+        return {
+            "file_url": storage_path,
+            "signed_url": signed_url,
+            "filename": clean_filename
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Attachment upload failed: {str(e)}")
 
 
 # ==============================================================================

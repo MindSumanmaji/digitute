@@ -1,14 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { apiRequest } from '../../api';
-import {
-  getStoredDoubts,
-  getGroupedPendingDoubts,
-  getOfflineDoubts,
-  getSolvedDoubts,
-  submitDoubtSolution,
-  markDoubtAsOffline,
-  resolveOfflineDoubt,
-} from '../../data/doubtData';
 /**
  * Word count helper
  */
@@ -43,12 +34,19 @@ export default function DoubtCorner({ onBack, initialBatch = null, initialSubjec
   const [formError, setFormError] = useState('');
   const [toastMessage, setToastMessage] = useState('');
 
-  // Attachment preview modal state
-  const [previewAttachment, setPreviewAttachment] = useState(null);
+  // Open attachment directly in a new tab
+  const handleOpenAttachment = (att) => {
+    if (!att || !att.url) {
+      showToast('⚠️ Attachment link not available.');
+      return;
+    }
+    window.open(att.url, '_blank', 'noopener,noreferrer');
+  };
 
   // Quick offline note prompt modal
   const [offlineModalDoubt, setOfflineModalDoubt] = useState(null);
   const [offlineNoteInput, setOfflineNoteInput] = useState('');
+  const [resolvingDoubtId, setResolvingDoubtId] = useState(null);
 
 
   // Force re-render on data update
@@ -137,21 +135,173 @@ export default function DoubtCorner({ onBack, initialBatch = null, initialSubjec
   // Is batch and subject selection complete?
   const isSelectionComplete = Boolean(selectedBatch && selectedSubject);
 
-  // Read data for the chosen batch and subject
+  // Live doubts from backend database
+  const [liveDoubts, setLiveDoubts] = useState([]);
+  const [isLoadingDoubts, setIsLoadingDoubts] = useState(false);
+  const [doubtsError, setDoubtsError] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Fetch doubts for selected batch and subject from backend API
+  const fetchLiveDoubts = useCallback(async () => {
+    if (!selectedBatch || !selectedSubject) {
+      setLiveDoubts([]);
+      return;
+    }
+    setIsLoadingDoubts(true);
+    setDoubtsError(null);
+    try {
+      const data = await apiRequest(
+        `/api/teacher/doubts?batch_id=${encodeURIComponent(selectedBatch)}&subject=${encodeURIComponent(selectedSubject)}`
+      );
+      if (Array.isArray(data)) {
+        setLiveDoubts(data);
+      } else {
+        setLiveDoubts([]);
+      }
+    } catch (err) {
+      console.error('Failed to fetch doubts:', err);
+      setDoubtsError(err.message || 'Failed to load doubts.');
+      setLiveDoubts([]);
+    } finally {
+      setIsLoadingDoubts(false);
+    }
+  }, [selectedBatch, selectedSubject]);
+
+  useEffect(() => {
+    if (isSelectionComplete) {
+      fetchLiveDoubts();
+    } else {
+      setLiveDoubts([]);
+    }
+  }, [isSelectionComplete, fetchLiveDoubts, refreshKey]);
+
+  // Format live backend database records into Doubt Corner UI models
+  const formattedDoubts = useMemo(() => {
+    return liveDoubts.map((d) => {
+      const studentName = d.student?.full_name || 'Student';
+      const initials = studentName
+        .split(' ')
+        .map((n) => n[0])
+        .join('')
+        .slice(0, 2)
+        .toUpperCase() || 'ST';
+
+      let attachment = null;
+      if (d.question_file_url) {
+        const rawName = d.question_file_url.split('/').pop() || 'Attachment';
+        const cleanName = rawName.replace(/^[a-f0-9]+_/, '');
+        const isImg = /\.(png|jpe?g|webp|gif)($|\?)/i.test(d.question_file_url) || /\.(png|jpe?g|webp|gif)$/i.test(cleanName);
+        const isPdf = /\.pdf($|\?)/i.test(d.question_file_url) || /\.pdf$/i.test(cleanName);
+        attachment = {
+          name: cleanName,
+          type: isImg ? 'image' : isPdf ? 'pdf' : 'document',
+          isImg,
+          isPdf,
+          url: d.question_file_signed_url || d.question_file_url,
+          size: isPdf ? 'PDF Document' : isImg ? 'Image' : 'Document',
+        };
+      }
+
+      let teacherAttachment = null;
+      if (d.reply_file_url) {
+        const rawName = d.reply_file_url.split('/').pop() || 'Solution';
+        const cleanName = rawName.replace(/^[a-f0-9]+_/, '');
+        const isImg = /\.(png|jpe?g|webp|gif)($|\?)/i.test(d.reply_file_url) || /\.(png|jpe?g|webp|gif)$/i.test(cleanName);
+        const isPdf = /\.pdf($|\?)/i.test(d.reply_file_url) || /\.pdf$/i.test(cleanName);
+        teacherAttachment = {
+          name: cleanName,
+          type: isImg ? 'image' : isPdf ? 'pdf' : 'document',
+          isImg,
+          isPdf,
+          url: d.reply_file_signed_url || d.reply_file_url,
+          size: isPdf ? 'PDF Solution' : isImg ? 'Solution Image' : 'Solution File',
+        };
+      }
+
+      const createdDate = d.created_at
+        ? new Date(d.created_at).toLocaleDateString('en-GB', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+          })
+        : '';
+      const resolvedDate = d.resolved_at
+        ? new Date(d.resolved_at).toLocaleDateString('en-GB', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+          })
+        : '';
+
+      let status = 'pending';
+      if (d.status === 'RESOLVED') status = 'solved';
+      else if (d.status === 'OFFLINE_PENDING') status = 'offline';
+
+      const isOfflineResolved =
+        d.reply_text?.toLowerCase().includes('classroom') ||
+        d.reply_text?.toLowerCase().includes('offline');
+
+      return {
+        id: d.id,
+        studentId: d.student_id,
+        studentName: studentName,
+        studentEmail: d.student?.email || '',
+        avatarInitials: initials,
+        rollNumber: d.student?.email ? d.student.email.split('@')[0] : 'N/A',
+        batch: d.batches?.name || selectedBatchLabel,
+        batch_id: d.batch_id,
+        subject: d.subject,
+        questionTitle: d.question_title,
+        questionText: d.question_text,
+        attachment,
+        createdAt: createdDate,
+        askedAt: createdDate,
+        status,
+        rawStatus: d.status,
+        teacherAnswer: d.reply_text || '',
+        teacherAttachment,
+        offlineMarkedAt: status === 'offline' ? createdDate : null,
+        offlineNotes: d.reply_text || '',
+        solvedAt: resolvedDate,
+        resolutionType: isOfflineResolved ? 'offline' : 'online',
+      };
+    });
+  }, [liveDoubts, selectedBatchLabel]);
+
+  // Tab 1: Group pending doubts by student
   const groupedPending = useMemo(() => {
-    if (!isSelectionComplete) return [];
-    return getGroupedPendingDoubts(selectedBatchLabel || selectedBatch, selectedSubject);
-  }, [selectedBatchLabel, selectedBatch, selectedSubject, isSelectionComplete, refreshKey]);
+    const pendingList = formattedDoubts.filter((d) => d.status === 'pending');
+    const map = {};
+    pendingList.forEach((d) => {
+      if (!map[d.studentId]) {
+        map[d.studentId] = {
+          studentId: d.studentId,
+          studentName: d.studentName,
+          avatarInitials: d.avatarInitials,
+          rollNumber: d.rollNumber,
+          batch: d.batch,
+          subject: d.subject,
+          questions: [],
+        };
+      }
+      map[d.studentId].questions.push(d);
+    });
+    return Object.values(map);
+  }, [formattedDoubts]);
 
+  // Tab 2: Offline-marked doubts
   const offlineDoubts = useMemo(() => {
-    if (!isSelectionComplete) return [];
-    return getOfflineDoubts(selectedBatchLabel || selectedBatch, selectedSubject);
-  }, [selectedBatchLabel, selectedBatch, selectedSubject, isSelectionComplete, refreshKey]);
+    return formattedDoubts.filter((d) => d.status === 'offline');
+  }, [formattedDoubts]);
 
+  // Tab 3: Solved doubts
   const solvedDoubts = useMemo(() => {
-    if (!isSelectionComplete) return [];
-    return getSolvedDoubts(selectedBatchLabel || selectedBatch, selectedSubject);
-  }, [selectedBatchLabel, selectedBatch, selectedSubject, isSelectionComplete, refreshKey]);
+    return formattedDoubts.filter((d) => d.status === 'solved');
+  }, [formattedDoubts]);
 
   // Total pending questions count
   const totalPendingCount = useMemo(() => {
@@ -234,8 +384,8 @@ export default function DoubtCorner({ onBack, initialBatch = null, initialSubjec
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (file) {
-      if (file.size > 8 * 1024 * 1024) {
-        setFormError('File size must be under 8MB');
+      if (file.size > 15 * 1024 * 1024) {
+        setFormError('File size must be under 15MB');
         return;
       }
       setAttachedFile(file);
@@ -244,7 +394,7 @@ export default function DoubtCorner({ onBack, initialBatch = null, initialSubjec
         name: file.name,
         size: (file.size / 1024).toFixed(1) + ' KB',
         isImg,
-        url: isImg ? URL.createObjectURL(file) : null
+        url: isImg ? URL.createObjectURL(file) : null,
       });
       setFormError('');
     }
@@ -255,8 +405,9 @@ export default function DoubtCorner({ onBack, initialBatch = null, initialSubjec
     setAttachedFilePreview(null);
   };
 
-  // Action: Submit Answer for current question
-  const handleSubmitAnswer = () => {
+  // Action: Submit Answer for current question to database
+  const handleSubmitAnswer = async () => {
+    if (isSubmitting) return;
     if (!answerText.trim()) {
       setFormError('Please enter your answer explanation before submitting.');
       return;
@@ -265,64 +416,145 @@ export default function DoubtCorner({ onBack, initialBatch = null, initialSubjec
       setFormError('Answer cannot exceed 200 words. Please shorten your answer.');
       return;
     }
-
     if (!currentQuestion) return;
 
-    submitDoubtSolution(currentQuestion.id, {
-      answer: answerText.trim(),
-      attachment: attachedFilePreview
-        ? {
-            name: attachedFilePreview.name,
-            size: attachedFilePreview.size,
-            url: attachedFilePreview.url || null
-          }
-        : null
-    });
-
-    showToast('Answer submitted and doubt marked as solved!');
-
-    setAnswerText('');
-    setAttachedFile(null);
-    setAttachedFilePreview(null);
+    setIsSubmitting(true);
     setFormError('');
 
-    // If more questions exist for this student, advance
-    if (currentQuestionIndex < activeStudentQuestions.length - 1) {
-      setCurrentQuestionIndex((prev) => prev + 1);
-    } else {
-      setTimeout(() => {
-        handleCloseSolver();
-      }, 1200);
+    try {
+      let replyFileUrl = null;
+      if (attachedFile) {
+        const formData = new FormData();
+        formData.append('file', attachedFile);
+        const uploadRes = await apiRequest('/api/teacher/doubts/upload-attachment', {
+          method: 'POST',
+          body: formData,
+        });
+        replyFileUrl = uploadRes.file_url;
+      }
+
+      await apiRequest('/api/teacher/doubts/resolve', {
+        method: 'POST',
+        body: JSON.stringify({
+          doubt_id: currentQuestion.id,
+          status: 'RESOLVED',
+          reply_text: answerText.trim(),
+          reply_file_url: replyFileUrl,
+        }),
+      });
+
+      showToast('Answer submitted and doubt marked as solved!');
+
+      setAnswerText('');
+      setAttachedFile(null);
+      setAttachedFilePreview(null);
+      setFormError('');
+
+      await fetchLiveDoubts();
+      window.dispatchEvent(new CustomEvent('digitute_doubts_updated'));
+
+      if (currentQuestionIndex < activeStudentQuestions.length - 1) {
+        setCurrentQuestionIndex((prev) => prev + 1);
+      } else {
+        setTimeout(() => {
+          handleCloseSolver();
+        }, 1200);
+      }
+    } catch (err) {
+      console.error('Failed to submit solution:', err);
+      setFormError(err.message || 'Failed to submit answer. Please try again.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  // Action: Mark current question as Offline
-  const handleMarkAsOffline = () => {
-    if (!currentQuestion) return;
-    markDoubtAsOffline(currentQuestion.id, 'Marked for discussion in classroom session.');
-    showToast('Moved to Offline Mark Doubt section.');
-
-    setAnswerText('');
-    setAttachedFile(null);
-    setAttachedFilePreview(null);
+  // Action: Mark current question as Offline in database
+  const handleMarkAsOffline = async () => {
+    if (isSubmitting || !currentQuestion) return;
+    setIsSubmitting(true);
     setFormError('');
 
-    if (currentQuestionIndex < activeStudentQuestions.length - 1) {
-      setCurrentQuestionIndex((prev) => prev + 1);
-    } else {
-      setTimeout(() => {
-        handleCloseSolver();
-      }, 800);
+    try {
+      await apiRequest('/api/teacher/doubts/resolve', {
+        method: 'POST',
+        body: JSON.stringify({
+          doubt_id: currentQuestion.id,
+          status: 'OFFLINE_PENDING',
+          reply_text: 'Marked for discussion in classroom session.',
+        }),
+      });
+
+      showToast('Moved to Offline Mark Doubt section.');
+
+      setAnswerText('');
+      setAttachedFile(null);
+      setAttachedFilePreview(null);
+      setFormError('');
+
+      await fetchLiveDoubts();
+      window.dispatchEvent(new CustomEvent('digitute_doubts_updated'));
+
+      if (currentQuestionIndex < activeStudentQuestions.length - 1) {
+        setCurrentQuestionIndex((prev) => prev + 1);
+      } else {
+        setTimeout(() => {
+          handleCloseSolver();
+        }, 800);
+      }
+    } catch (err) {
+      console.error('Failed to mark offline:', err);
+      setFormError(err.message || 'Failed to mark doubt as offline.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   // Action: Offline modal submit
-  const handleConfirmOfflineModal = () => {
-    if (offlineModalDoubt) {
-      markDoubtAsOffline(offlineModalDoubt.id, offlineNoteInput || 'Marked for discussion in next lecture.');
-      showToast('Moved to Offline Mark Doubt section.');
-      setOfflineModalDoubt(null);
-      setOfflineNoteInput('');
+  const handleConfirmOfflineModal = async () => {
+    if (offlineModalDoubt && !isSubmitting) {
+      setIsSubmitting(true);
+      try {
+        await apiRequest('/api/teacher/doubts/resolve', {
+          method: 'POST',
+          body: JSON.stringify({
+            doubt_id: offlineModalDoubt.id,
+            status: 'OFFLINE_PENDING',
+            reply_text: offlineNoteInput || 'Marked for discussion in next lecture.',
+          }),
+        });
+        showToast('Moved to Offline Mark Doubt section.');
+        setOfflineModalDoubt(null);
+        setOfflineNoteInput('');
+        await fetchLiveDoubts();
+        window.dispatchEvent(new CustomEvent('digitute_doubts_updated'));
+      } catch (err) {
+        showToast(err.message || 'Failed to mark doubt as offline.');
+      } finally {
+        setIsSubmitting(false);
+      }
+    }
+  };
+
+  // Action: Mark offline doubt resolved in class
+  const handleResolveOfflineInClass = async (doubtId) => {
+    if (resolvingDoubtId || isSubmitting) return;
+    setResolvingDoubtId(doubtId);
+    try {
+      await apiRequest('/api/teacher/doubts/resolve', {
+        method: 'POST',
+        body: JSON.stringify({
+          doubt_id: doubtId,
+          status: 'RESOLVED',
+          reply_text: 'Resolved during offline classroom discussion.',
+        }),
+      });
+      showToast('✓ Marked as resolved in classroom!');
+      await fetchLiveDoubts();
+      window.dispatchEvent(new CustomEvent('digitute_doubts_updated'));
+    } catch (err) {
+      showToast(err.message || 'Failed to resolve doubt.');
+    } finally {
+      setResolvingDoubtId(null);
     }
   };
 
@@ -739,10 +971,10 @@ export default function DoubtCorner({ onBack, initialBatch = null, initialSubjec
 
                       <div
                         className="dc-att-clickable"
-                        onClick={() => setPreviewAttachment(currentQuestion.attachment)}
+                        onClick={() => handleOpenAttachment(currentQuestion.attachment)}
                         role="button"
                         tabIndex={0}
-                        title="Click to expand file preview"
+                        title="Click to open attachment in new tab"
                       >
                         {currentQuestion.attachment.type === 'image' && (
                           <div className="dc-att-thumb-wrap">
@@ -753,12 +985,11 @@ export default function DoubtCorner({ onBack, initialBatch = null, initialSubjec
                             />
                             <div className="dc-att-zoom-overlay">
                               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="2.4">
-                                <circle cx="11" cy="11" r="8" />
-                                <line x1="21" y1="21" x2="16.65" y2="16.65" />
-                                <line x1="11" y1="8" x2="11" y2="14" />
-                                <line x1="8" y1="11" x2="14" y2="11" />
+                                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                                <polyline points="15 3 21 3 21 9" />
+                                <line x1="10" y1="14" x2="21" y2="3" />
                               </svg>
-                              <span>Click to Expand</span>
+                              <span>Open in New Tab</span>
                             </div>
                           </div>
                         )}
@@ -766,7 +997,7 @@ export default function DoubtCorner({ onBack, initialBatch = null, initialSubjec
                         <div className="dc-att-info-box">
                           <span className="dc-att-name">{currentQuestion.attachment.name}</span>
                           <span className="dc-att-size">{currentQuestion.attachment.size}</span>
-                          <span className="dc-att-action-tag">Click to View</span>
+                          <span className="dc-att-action-tag">Open in New Tab ↗</span>
                         </div>
                       </div>
                     </div>
@@ -923,15 +1154,18 @@ export default function DoubtCorner({ onBack, initialBatch = null, initialSubjec
                       {d.attachment && (
                         <div
                           className="dc-offline-att-pill"
-                          onClick={() => setPreviewAttachment(d.attachment)}
+                          onClick={() => handleOpenAttachment(d.attachment)}
                           role="button"
                           tabIndex={0}
+                          title="Open student attachment in new tab"
                         >
                           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                            <polyline points="15 3 21 3 21 9" />
+                            <line x1="10" y1="14" x2="21" y2="3" />
                           </svg>
                           <span>{d.attachment.name}</span>
-                          <span className="dc-att-action-tag">View</span>
+                          <span className="dc-att-action-tag">Open in New Tab ↗</span>
                         </div>
                       )}
 
@@ -939,15 +1173,19 @@ export default function DoubtCorner({ onBack, initialBatch = null, initialSubjec
                         <button
                           type="button"
                           className="dc-resolve-offline-btn"
-                          onClick={() => {
-                            resolveOfflineDoubt(d.id, 'Resolved in classroom lecture.');
-                            showToast('Marked as resolved in classroom!');
-                          }}
+                          disabled={resolvingDoubtId === d.id}
+                          onClick={() => handleResolveOfflineInClass(d.id)}
                         >
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                            <polyline points="20 6 9 17 4 12" />
-                          </svg>
-                          <span>Mark Resolved in Class</span>
+                          {resolvingDoubtId === d.id ? (
+                            <span>Resolving...</span>
+                          ) : (
+                            <>
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                <polyline points="20 6 9 17 4 12" />
+                              </svg>
+                              <span>Mark Resolved in Class</span>
+                            </>
+                          )}
                         </button>
                       </div>
                     </article>
@@ -1003,15 +1241,18 @@ export default function DoubtCorner({ onBack, initialBatch = null, initialSubjec
                       {d.attachment && (
                         <div
                           className="dc-solved-att-pill"
-                          onClick={() => setPreviewAttachment(d.attachment)}
+                          onClick={() => handleOpenAttachment(d.attachment)}
                           role="button"
                           tabIndex={0}
+                          title="Open student attachment in new tab"
                         >
                           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                            <polyline points="15 3 21 3 21 9" />
+                            <line x1="10" y1="14" x2="21" y2="3" />
                           </svg>
                           <span>Student Doc: {d.attachment.name}</span>
-                          <span className="dc-att-action-tag">View</span>
+                          <span className="dc-att-action-tag">Open ↗</span>
                         </div>
                       )}
 
@@ -1025,16 +1266,18 @@ export default function DoubtCorner({ onBack, initialBatch = null, initialSubjec
                       {d.teacherAttachment && (
                         <div
                           className="dc-solved-att-pill teacher"
-                          onClick={() => setPreviewAttachment(d.teacherAttachment)}
+                          onClick={() => handleOpenAttachment(d.teacherAttachment)}
                           role="button"
                           tabIndex={0}
+                          title="Open teacher solution in new tab"
                         >
                           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth="2">
-                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                            <polyline points="14 2 14 8 20 8"/>
+                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                            <polyline points="15 3 21 3 21 9" />
+                            <line x1="10" y1="14" x2="21" y2="3" />
                           </svg>
                           <span>Teacher File: {d.teacherAttachment.name}</span>
-                          <span className="dc-att-action-tag">View</span>
+                          <span className="dc-att-action-tag">Open ↗</span>
                         </div>
                       )}
                     </article>
@@ -1046,52 +1289,7 @@ export default function DoubtCorner({ onBack, initialBatch = null, initialSubjec
         </main>
       )}
 
-      {/* --- ATTACHMENT PREVIEW MODAL --- */}
-      {previewAttachment && (
-        <div className="dc-modal-overlay" onClick={() => setPreviewAttachment(null)}>
-          <div className="dc-modal-card" onClick={(e) => e.stopPropagation()}>
-            <div className="dc-modal-header">
-              <div className="dc-modal-file-title">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
-                </svg>
-                <span>{previewAttachment.name} ({previewAttachment.size})</span>
-              </div>
-              <button
-                type="button"
-                className="dc-modal-close-btn"
-                onClick={() => setPreviewAttachment(null)}
-                aria-label="Close Preview"
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                  <line x1="18" y1="6" x2="6" y2="18"/>
-                  <line x1="6" y1="6" x2="18" y2="18"/>
-                </svg>
-              </button>
-            </div>
-            <div className="dc-modal-body">
-              {previewAttachment.url && (previewAttachment.type === 'image' || previewAttachment.isImg) ? (
-                <img
-                  src={previewAttachment.url}
-                  alt={previewAttachment.name}
-                  className="dc-modal-full-img"
-                />
-              ) : (
-                <div className="dc-modal-doc-placeholder">
-                  <div className="dc-doc-icon-box">
-                    <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#475569" strokeWidth="2">
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                      <polyline points="14 2 14 8 20 8"/>
-                    </svg>
-                  </div>
-                  <h4>{previewAttachment.name}</h4>
-                  <p>Document preview loaded. Ready for faculty review.</p>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+
 
 
     </div>

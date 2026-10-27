@@ -274,9 +274,10 @@ class DoubtCreate(BaseModel):
 
 class DoubtResolve(BaseModel):
     doubt_id: str
-    resolved_by: str
-    reply_text: str
+    resolved_by: Optional[str] = None
+    reply_text: Optional[str] = None
     reply_file_url: Optional[str] = None
+    status: Optional[str] = "RESOLVED"
 
 class ExamCreate(BaseModel):
     batch_id: str

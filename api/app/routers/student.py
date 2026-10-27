@@ -586,20 +586,42 @@ def ask_doubt(doubt: DoubtCreate, current_user: dict = Depends(get_current_user)
         batch_id = doubt.batch_id or current_user.get("batch_id")
 
         if not batch_id:
-            user_res = supabase.table("users").select("batch_id").eq("id", student_id).execute()
-            if user_res.data and user_res.data[0].get("batch_id"):
-                batch_id = user_res.data[0].get("batch_id")
+            u_res = supabase.table("users").select("batch_id").eq("id", student_id).execute()
+            if u_res.data and u_res.data[0].get("batch_id"):
+                batch_id = u_res.data[0].get("batch_id")
 
         if not batch_id:
             raise HTTPException(status_code=400, detail="Student is not assigned to any batch. Please contact the administrator.")
 
-        payload = doubt.model_dump()
-        payload["student_id"] = student_id
-        payload["batch_id"] = batch_id
-        payload["status"] = "OPEN"
+        if not doubt.question_title or not doubt.question_title.strip():
+            q_title = doubt.question_text.strip()[:60] if doubt.question_text else "Student Question"
+        else:
+            q_title = doubt.question_title.strip()
+
+        if not doubt.question_text or not doubt.question_text.strip():
+            raise HTTPException(status_code=400, detail="Please enter your question explanation.")
+
+        payload = {
+            "student_id": student_id,
+            "batch_id": batch_id,
+            "subject": doubt.subject.strip(),
+            "question_title": q_title,
+            "question_text": doubt.question_text.strip(),
+            "question_file_url": doubt.question_file_url,
+            "status": "OPEN"
+        }
 
         res = supabase.table("doubts").insert(payload).execute()
-        return res.data[0] if res.data else {}
+        new_doubt = res.data[0] if res.data else payload
+
+        if new_doubt.get("question_file_url"):
+            try:
+                signed = supabase.storage.from_("digitute").create_signed_url(new_doubt["question_file_url"], 86400 * 7)
+                new_doubt["question_file_signed_url"] = signed.get("signedURL") or signed.get("signedUrl")
+            except Exception:
+                new_doubt["question_file_signed_url"] = None
+
+        return new_doubt
     except HTTPException:
         raise
     except Exception as e:
@@ -612,7 +634,7 @@ def get_my_doubts(current_user: dict = Depends(get_current_user)):
         student_id = current_user.get("id")
 
         res = supabase.table("doubts").select(
-            "*, users!doubts_resolved_by_fkey(full_name)"
+            "*, resolved_by_user:users!doubts_resolved_by_fkey(full_name, email, avatar_url), batches(name)"
         ).eq("student_id", student_id).order("created_at", desc=True).execute()
 
         doubts = res.data or []
@@ -640,6 +662,67 @@ def get_my_doubts(current_user: dict = Depends(get_current_user)):
         return doubts
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/doubts/upload-attachment", summary="Upload Student Doubt Attachment")
+async def upload_student_doubt_attachment(
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user)
+):
+    try:
+        supabase = get_supabase_client()
+        student_id = current_user.get("id")
+
+        original_filename = file.filename or "doubt_file"
+        clean_filename = os.path.basename(original_filename)
+        ext = os.path.splitext(clean_filename)[1].lower()
+
+        allowed_exts = {
+            ".pdf": "application/pdf",
+            ".doc": "application/msword",
+            ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            ".png": "image/png",
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".webp": "image/webp",
+        }
+
+        if ext not in allowed_exts:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported file extension '{ext}'. Allowed: PNG, JPG, JPEG, WEBP, PDF, DOC, DOCX"
+            )
+
+        contents = await file.read()
+        if not contents or len(contents) == 0:
+            raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+
+        if len(contents) > 15 * 1024 * 1024:
+            raise HTTPException(status_code=413, detail="File size exceeds 15 MiB limit.")
+
+        safe_name = re.sub(r'[^a-zA-Z0-9_.-]', '_', clean_filename)
+        object_name = f"{uuid.uuid4().hex[:12]}_{safe_name}"
+        storage_path = f"doubts/student/{student_id}/{object_name}"
+
+        content_type = file.content_type or allowed_exts.get(ext, "application/octet-stream")
+
+        supabase.storage.from_("digitute").upload(
+            path=storage_path,
+            file=contents,
+            file_options={"content-type": content_type, "upsert": "true"}
+        )
+
+        signed = supabase.storage.from_("digitute").create_signed_url(storage_path, 3600)
+        signed_url = signed.get("signedURL") or signed.get("signedUrl")
+
+        return {
+            "file_url": storage_path,
+            "signed_url": signed_url,
+            "filename": clean_filename
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Attachment upload failed: {str(e)}")
 
 # ==============================================================================
 # 11. EXAM RESULTS & LEADERBOARD (Table 11 in schema.sql)
