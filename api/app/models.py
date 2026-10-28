@@ -202,6 +202,36 @@ class InvoiceResponse(BaseModel):
     amount_paid: float
     status: Literal["PENDING", "PAID", "CANCELLED"]
 
+# Razorpay Online Payment Models
+class CreateRazorpayOrderRequest(BaseModel):
+    invoice_id: str = Field(..., description="Target invoice UUID to pay")
+
+class CreateRazorpayOrderResponse(BaseModel):
+    order_id: str
+    amount: int  # in paise
+    amount_in_rupees: float
+    currency: str = "INR"
+    key_id: str
+    invoice_id: str
+    invoice_number: str
+    student_name: str
+    student_email: Optional[str] = None
+    student_phone: Optional[str] = None
+
+class VerifyPaymentRequest(BaseModel):
+    invoice_id: str = Field(..., description="Target invoice UUID")
+    razorpay_order_id: str = Field(..., description="Razorpay order ID")
+    razorpay_payment_id: str = Field(..., description="Razorpay payment ID from gateway")
+    razorpay_signature: str = Field(..., description="Cryptographic signature from gateway")
+
+class VerifyPaymentResponse(BaseModel):
+    success: bool
+    status: str
+    message: str
+    invoice_id: str
+    payment_id: Optional[str] = None
+    amount_paid: float
+
 # ==============================================================================
 # 7. STUDY MATERIALS, DPPS, DOUBTS & EXAMS
 # ==============================================================================

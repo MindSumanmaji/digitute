@@ -11,7 +11,6 @@ import DoubtCornerTab from './components/Student/DoubtCornerTab';
 import AnnouncementsTab from './components/Student/AnnouncementsTab';
 import ProfileTab from './components/Student/ProfileTab';
 import StudentProfilePage from './components/Student/StudentProfilePage';
-import PaymentModal from './components/Student/PaymentModal';
 import { apiRequest } from './api';
 
 export default function StudentPanel({ onBackToLanding }) {
@@ -63,6 +62,7 @@ export default function StudentPanel({ onBackToLanding }) {
   // Modals state
   const [payModalOpen, setPayModalOpen] = useState(false);
   const [paymentDone, setPaymentDone] = useState(false);
+  const [activePaymentInvoice, setActivePaymentInvoice] = useState(null);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   // Helper to show temporary toasts
@@ -71,10 +71,11 @@ export default function StudentPanel({ onBackToLanding }) {
     setTimeout(() => setToastMessage(null), 3200);
   };
 
-  const handlePaymentSuccess = () => {
-    setPaymentDone(true);
+  const handlePaymentSuccess = (res) => {
+    setPaymentDone(prev => !prev);
     setPayModalOpen(false);
-    showToast('Payment of ₹600 received successfully! Receipt generated.');
+    const amt = res?.amount_paid ? `₹${Number(res.amount_paid).toLocaleString('en-IN')}` : 'fee';
+    showToast(`Payment of ${amt} received successfully via Razorpay! Receipt generated.`);
   };
 
   const studentProfileData = currentUser ? {
@@ -162,11 +163,7 @@ export default function StudentPanel({ onBackToLanding }) {
           )}
 
           {activeTab === 'fees' && (
-            <FeesTab
-              paymentDone={paymentDone}
-              setPayModalOpen={setPayModalOpen}
-              showToast={showToast}
-            />
+            <FeesTab showToast={showToast} />
           )}
 
           {activeTab === 'doubts' && (
@@ -192,12 +189,7 @@ export default function StudentPanel({ onBackToLanding }) {
         </main>
       </div>
 
-      {/* MODAL: Fee Payment Gateway */}
-      <PaymentModal
-        isOpen={payModalOpen}
-        onClose={() => setPayModalOpen(false)}
-        onSuccess={handlePaymentSuccess}
-      />
+
     </div>
   );
 }

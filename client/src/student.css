@@ -7803,6 +7803,162 @@ select:focus {
   color: #1d4ed8;
 }
 
+/* Due Invoices Responsive Styles */
+.sp-due-invoice-item {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 18px 24px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  transition: all 0.2s ease;
+}
+
+.sp-due-invoice-details {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sp-due-invoice-tags {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 2px;
+}
+
+.sp-due-invoice-action {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.sp-due-amount-box {
+  text-align: right;
+}
+
+.sp-due-amount-box .sp-amount-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  display: block;
+}
+
+.sp-due-amount-box .sp-amount-value {
+  font-size: 24px;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.1;
+}
+
+.sp-due-pay-btn {
+  padding: 11px 24px;
+  font-size: 14px;
+  font-weight: 700;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: linear-gradient(135deg, #0d9488 0%, #0f766e 100%);
+  color: #ffffff;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(13, 148, 136, 0.25);
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.sp-due-pay-btn:hover {
+  background: linear-gradient(135deg, #0f766e 0%, #115e59 100%);
+  box-shadow: 0 4px 12px rgba(13, 148, 136, 0.35);
+}
+
+.sp-due-pay-btn:disabled {
+  opacity: 0.88;
+  cursor: wait;
+  pointer-events: none;
+}
+
+.sp-loading-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 4px;
+}
+
+.sp-loading-dots span {
+  width: 4px;
+  height: 4px;
+  background-color: currentColor;
+  border-radius: 50%;
+  display: inline-block;
+  animation: spDotBounce 1.2s infinite ease-in-out both;
+}
+
+.sp-loading-dots span:nth-child(1) {
+  animation-delay: -0.32s;
+}
+
+.sp-loading-dots span:nth-child(2) {
+  animation-delay: -0.16s;
+}
+
+@keyframes spDotBounce {
+  0%, 80%, 100% {
+    transform: scale(0.6);
+    opacity: 0.35;
+  }
+  40% {
+    transform: scale(1.15);
+    opacity: 1;
+  }
+}
+
+@media (max-width: 640px) {
+  .sp-due-invoice-item {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 16px !important;
+    gap: 14px;
+  }
+  .sp-due-invoice-action {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding-top: 14px;
+    border-top: 1px dashed #e2e8f0;
+    width: 100%;
+  }
+  .sp-due-amount-box {
+    text-align: left;
+  }
+  .sp-due-amount-box .sp-amount-value {
+    font-size: 22px;
+  }
+  .sp-due-pay-btn {
+    padding: 10px 22px;
+    font-size: 14px;
+  }
+  .sp-payment-history-card {
+    padding: 16px !important;
+  }
+  .sp-fees-table th, 
+  .sp-fees-table td {
+    padding: 10px 12px;
+    font-size: 12px;
+  }
+}
+
+
+
 /* Fee Details (Current Batch) Card */
 .sp-fee-details-card {
   padding: 24px 26px;

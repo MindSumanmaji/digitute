@@ -195,7 +195,7 @@ export default function Sidebar({
                       if (setMobileSidebarOpen) setMobileSidebarOpen(false);
                     }}
                   >
-                    <span className="sp-sub-icon">📊</span>
+                    
                     <span>Test & Performance</span>
                   </button>
                   <button
@@ -207,7 +207,7 @@ export default function Sidebar({
                       if (setMobileSidebarOpen) setMobileSidebarOpen(false);
                     }}
                   >
-                    <span className="sp-sub-icon">🏆</span>
+                    
                     <span>Result</span>
                   </button>
                 </div>

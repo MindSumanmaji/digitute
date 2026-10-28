@@ -1,174 +1,340 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { apiRequest } from '../../api';
 
-export default function FeesTab({ paymentDone, setPayModalOpen, showToast }) {
-  const [feeYearFilter, setFeeYearFilter] = useState('2026');
-  const [feeMonthFilter, setFeeMonthFilter] = useState('All Months');
-  const [currentBatchDropdown, setCurrentBatchDropdown] = useState(false);
-  const [selectedFeeBatch, setSelectedFeeBatch] = useState('Class XII - Science (2026)');
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'
+];
+
+function getMonthName(m) {
+  if (!m) return '';
+  const num = parseInt(m, 10);
+  if (!isNaN(num) && num >= 1 && num <= 12) {
+    return MONTH_NAMES[num - 1];
+  }
+  return String(m);
+}
+
+function getPaymentDescription(p) {
+  const inv = p.invoices;
+  if (!inv) return 'Tuition Fees';
+  if (inv.invoice_type === 'ONE_TIME') return 'One-Time Course Fees';
+  const month = getMonthName(inv.billing_month);
+  const year = inv.billing_year || (p.paid_at ? new Date(p.paid_at).getFullYear() : '');
+  if (month && year) {
+    return `${month} ${year} Tuition Fees`;
+  } else if (month) {
+    return `${month} Tuition Fees`;
+  }
+  return 'Tuition Fees';
+}
+
+
+// Helper to dynamically load official Razorpay standard checkout script
+const loadRazorpayScript = () => {
+  return new Promise((resolve) => {
+    if (window.Razorpay) {
+      resolve(true);
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.async = true;
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
+};
+
+export default function FeesTab({
+  showToast = () => {}
+}) {
+
+  const [invoices, setInvoices] = useState([]);
+  const [payments, setPayments] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [payingInvoiceId, setPayingInvoiceId] = useState(null);
+
+  // Fetch student invoices & payment receipts
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [invData, pmtData] = await Promise.all([
+        apiRequest('/api/student/my-invoices').catch(() => ({ invoices: [], total_outstanding: 0 })),
+        apiRequest('/api/student/my-payments').catch(() => [])
+      ]);
+
+      setInvoices(invData?.invoices || []);
+      setPayments(Array.isArray(pmtData) ? pmtData : []);
+    } catch (err) {
+      console.error('FeesTab fetch error:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  // Outstanding due invoices
+  const pendingInvoices = invoices.filter(inv => inv.status === 'PENDING');
+
+  // Filter payment history
+  const filteredPayments = payments.filter((p) => p.status === 'SUCCESS');
+
+  // Direct Razorpay Standard Checkout Handler (No dummy intermediate modal!)
+  const handlePayDirectly = async (inv) => {
+    if (!inv?.id) {
+      showToast('No pending invoice found.');
+      return;
+    }
+
+    setPayingInvoiceId(inv.id);
+
+    try {
+      // 1. Ensure Razorpay Checkout script is loaded
+      const isLoaded = await loadRazorpayScript();
+      if (!isLoaded) {
+        showToast('Unable to load Razorpay SDK. Please check your internet connection.');
+        setPayingInvoiceId(null);
+        return;
+      }
+
+      // 2. Call server-side create-order endpoint
+      const orderData = await apiRequest('/api/student/payments/create-order', {
+        method: 'POST',
+        body: JSON.stringify({ invoice_id: inv.id })
+      });
+
+      if (!orderData || !orderData.order_id) {
+        throw new Error('Failed to create Razorpay payment order from server.');
+      }
+
+      // Clean contact phone
+      const rawPhone = (orderData.student_phone || '').replace(/\D/g, '');
+      const validPhone = rawPhone.length >= 10 ? rawPhone.slice(-10) : undefined;
+
+      // 3. Open Official Razorpay Standard Checkout UI
+      const options = {
+        key: orderData.key_id,
+        amount: orderData.amount,
+        currency: orderData.currency || 'INR',
+        name: 'DigiTute Institute',
+        description: `Tuition Fee · Invoice #${orderData.invoice_number}`,
+        order_id: orderData.order_id,
+        prefill: {
+          name: orderData.student_name || undefined,
+          email: orderData.student_email || undefined,
+          contact: validPhone
+        },
+        theme: {
+          color: '#0d9488' // DigiTute brand teal
+        },
+        handler: async function (response) {
+          try {
+            
+            const verifyRes = await apiRequest('/api/student/payments/verify', {
+              method: 'POST',
+              body: JSON.stringify({
+                invoice_id: orderData.invoice_id,
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature
+              })
+            });
+            setPayingInvoiceId(null);
+            fetchData();
+          } catch (vErr) {
+            setPayingInvoiceId(null);
+            showToast(vErr.message || 'Payment signature verification failed.');
+          }
+        },
+        modal: {
+          ondismiss: function () {
+            setPayingInvoiceId(null);
+          }
+        }
+      };
+
+      const rzpInstance = new window.Razorpay(options);
+      rzpInstance.on('payment.failed', function (resp) {
+        setPayingInvoiceId(null);
+        showToast(`Payment Cancelled or Failed: ${resp.error?.description || 'Transaction failed'}`);
+      });
+      rzpInstance.open();
+      setPayingInvoiceId(null);
+    } catch (err) {
+      console.error('Razorpay Launch Error:', err);
+      showToast(err.message || 'Could not initiate Razorpay checkout.');
+      setPayingInvoiceId(null);
+    }
+  };
+
+  const handleDownloadReceipt = (pmt) => {
+    const invNo = pmt.invoices?.invoice_number || 'INV-2026';
+    const dateStr = pmt.paid_at
+      ? new Date(pmt.paid_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+      : 'Online Verified';
+    const amt = Number(pmt.amount || 0).toLocaleString('en-IN');
+    const rzpId = pmt.razorpay_payment_id || 'Verified Online';
+
+    const printWin = window.open('', '_blank', 'width=650,height=750');
+    if (printWin) {
+      printWin.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Fee Receipt - ${invNo}</title>
+          <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 36px; color: #1e293b; margin: 0; }
+            .header { border-bottom: 2px solid #0d9488; padding-bottom: 16px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: flex-end; }
+            .title { font-size: 24px; font-weight: 800; color: #0d9488; margin: 0; }
+            .badge { background: #dcfce7; color: #15803d; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; }
+            .row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #f1f5f9; font-size: 14px; }
+            .total { font-size: 18px; font-weight: 800; color: #0f172a; border-top: 2px solid #e2e8f0; margin-top: 16px; padding-top: 12px; }
+            .footer { margin-top: 40px; text-align: center; font-size: 12px; color: #94a3b8; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div>
+              <h1 class="title">DigiTute Institute</h1>
+              <p style="margin:4px 0 0;font-size:13px;color:#64748b;">Official Tuition Fee Payment Receipt</p>
+            </div>
+            <span class="badge">✓ PAID & VERIFIED</span>
+          </div>
+          <div class="row"><span>Invoice Number:</span><strong>${invNo}</strong></div>
+          <div class="row"><span>Transaction Date:</span><strong>${dateStr}</strong></div>
+          <div class="row"><span>Payment Mode:</span><strong>Razorpay (Online)</strong></div>
+          <div class="row"><span>Razorpay Payment ID:</span><strong style="font-family:monospace;">${rzpId}</strong></div>
+          <div class="row total"><span>Total Amount Paid:</span><span style="color:#0d9488;">₹${amt}</span></div>
+          <div class="footer">
+            <p>This is a computer-generated official receipt issued by DigiTute Education Platform.</p>
+          </div>
+          <script>
+            window.onload = function() { window.print(); }
+          </script>
+        </body>
+        </html>
+      `);
+      printWin.document.close();
+    }
+  };
 
   return (
     <div className="sp-view-container sp-fees-view">
       {/* Header Row */}
-      <div className="sp-fees-header-row">
-        <div>
-          <h1 className="sp-page-title">Fees & Payments</h1>
-          <p className="sp-page-subtitle">Track your payments, check due amount and download receipts.</p>
-        </div>
+      <div className="sp-fees-header-row" style={{ marginBottom: 20 }}>
       </div>
 
-      {/* Top 2 Hero Cards Grid */}
-      <div className="sp-fees-hero-grid">
-        {/* Left: Due Amount Card */}
-        <div className="sp-due-amount-card">
-          <div className="sp-due-left-info">
-            <span className="sp-due-tag">DUE AMOUNT</span>
-            <h2 className="sp-due-amount-val">{paymentDone ? '₹0' : '₹600'}</h2>
-            <span className="sp-due-for-text">{paymentDone ? 'Dues cleared for September 2026' : 'for September 2026'}</span>
-            
-            <div className="sp-due-status-row">
-              {!paymentDone ? (
-                <span className="sp-badge-pending-pill">
-                  <span className="sp-badge-excl-circle">!</span>
-                  Payment Pending
-                </span>
-              ) : (
-                <span className="sp-badge-paid-pill">
-                  ✓ No Dues Pending
-                </span>
-              )}
-            </div>
-
-            <span className="sp-due-last-payment">
-              {paymentDone ? 'Last payment: Today' : 'Last payment: 8 Aug 2026'}
-            </span>
+      {/* SECTION: Outstanding Due Invoices (Only shown when there are pending dues) */}
+      {pendingInvoices.length > 0 && (
+        <div style={{ marginBottom: 28 }}>
+          <div style={{ marginBottom: 12 }}>
+            <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: 'var(--text, #0f172a)' }}>
+              Due Fee Invoices ({pendingInvoices.length})
+            </h3>
           </div>
 
-          {/* Red Calendar Circle Icon on top right */}
-          <div className="sp-due-icon-circle">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <rect width="18" height="18" x="3" y="4" rx="2" ry="2" />
-              <line x1="16" x2="16" y1="2" y2="6" />
-              <line x1="8" x2="8" y1="2" y2="6" />
-              <line x1="3" x2="21" y1="10" y2="10" />
-            </svg>
-          </div>
-        </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {pendingInvoices.map((inv) => {
+              const netDue = Math.max(0, (inv.payable_amount || 0) - (inv.amount_paid || 0));
+              const isOneTime = inv.invoice_type === 'ONE_TIME';
+              const billingDesc = isOneTime
+                ? 'One-Time Admission / Course Fee'
+                : inv.billing_month
+                ? `${getMonthName(inv.billing_month)} ${inv.billing_year || ''} Tuition Fee`
+                : 'Monthly Tuition Fee';
 
-        {/* Right: Make a Payment Card */}
-        <div className="sp-card sp-make-payment-card">
-          <div className="sp-make-pay-top">
-            <h3 className="sp-make-pay-title">Make a Payment</h3>
-            <p className="sp-make-pay-sub">Pay your tuition fee securely online.</p>
+              const isThisPaying = payingInvoiceId === inv.id;
 
-            <button 
-              className="sp-pay-now-btn"
-              disabled={paymentDone}
-              onClick={() => {
-                if (!paymentDone) setPayModalOpen(true);
-              }}
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                <rect width="20" height="14" x="2" y="5" rx="2" />
-                <line x1="2" x2="22" y1="10" y2="10" />
-              </svg>
-              <span>{paymentDone ? 'All Fees Paid ✓' : 'Pay Now →'}</span>
-            </button>
-          </div>
+              return (
+                <div key={inv.id} className="sp-due-invoice-item">
+                  {/* Left Column: Details */}
+                  <div className="sp-due-invoice-details">
+                    <div className="sp-due-invoice-tags">
+                      <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 13.5, color: '#0f766e' }}>
+                        {inv.invoice_number}
+                      </span>
 
-          {/* Secure powered by strip */}
-          <div className="sp-payment-trust-strip">
-            <div className="sp-trust-badge-left">
-              <div className="sp-shield-icon">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-                  <polyline points="9 12 11 14 15 10" />
-                </svg>
-              </div>
-              <div>
-                <strong className="sp-trust-title">Secure payments powered by Razorpay</strong>
-                <span className="sp-trust-sub">UPI, NetBanking, Cards & more</span>
-              </div>
-            </div>
+                      <span
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 600,
+                          padding: '2px 8px',
+                          borderRadius: 10,
+                          background: isOneTime ? '#f0fdf4' : '#f1f5f9',
+                          color: isOneTime ? '#15803d' : '#475569'
+                        }}
+                      >
+                        {isOneTime ? 'One-Time' : 'Monthly'}
+                      </span>
+                    </div>
 
-            <div className="sp-payment-brands">
-              <span className="sp-brand-chip brand-gpay" title="Google Pay / UPI">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                  <path d="M12 2L4 6v6c0 5.5 3.8 10.7 8 12 4.2-1.3 8-6.5 8-12V6l-8-4z" fill="#4285F4" opacity="0.15"/>
-                  <path d="M7 12l3 3 7-7" stroke="#34A853" strokeWidth="2.5" strokeLinecap="round"/>
-                </svg>
-              </span>
-              <span className="sp-brand-chip brand-phonepe" title="PhonePe">
-                <span style={{ color: '#6739b7', fontWeight: 800, fontSize: '13px' }}>पे</span>
-              </span>
-              <span className="sp-brand-chip brand-paytm" title="Paytm">
-                <span style={{ color: '#00baf2', fontWeight: 800, fontSize: '10px', letterSpacing: '-0.5px' }}>paytm</span>
-              </span>
-              <span className="sp-brand-chip brand-card" title="Credit / Debit Card">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0284c7" strokeWidth="2">
-                  <rect width="20" height="14" x="2" y="5" rx="2" />
-                  <line x1="2" x2="22" y1="10" y2="10" />
-                </svg>
-              </span>
-            </div>
+                    <h4 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: 'var(--text, #0f172a)' }}>
+                      {billingDesc}
+                    </h4>
+                  </div>
+
+                  {/* Right Column: Amount & Direct Razorpay Button */}
+                  <div className="sp-due-invoice-action">
+                    <div className="sp-due-amount-box">
+                      <span className="sp-amount-label">
+                        Net Payable
+                      </span>
+                      <div className="sp-amount-value">
+                        ₹{Number(netDue).toLocaleString('en-IN')}
+                      </div>
+                    </div>
+
+                    <button
+                      className="sp-due-pay-btn"
+                      disabled={isThisPaying}
+                      onClick={() => handlePayDirectly(inv)}
+                    >
+                      {isThisPaying ? (
+                        <span style={{ display: 'inline-flex', alignItems: 'center' }}>
+                          Initiating
+                          <span className="sp-loading-dots">
+                            <span></span>
+                            <span></span>
+                            <span></span>
+                          </span>
+                        </span>
+                      ) : (
+                        <>
+                          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                            <rect width="20" height="14" x="2" y="5" rx="2" />
+                            <line x1="2" x2="22" y1="10" y2="10" />
+                          </svg>
+                          <span>Pay</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
-      </div>
+      )}
 
-      {/* Payment History & Receipts (Full Width) */}
+      {/* SECTION: Payment History & Receipts (Full Width) */}
       <div className="sp-card sp-payment-history-card">
         <div className="sp-history-head-row">
           <div>
             <h3 className="sp-history-title">Payment History & Receipts</h3>
-            <p className="sp-history-sub">View all your past payments and download receipts.</p>
-          </div>
-
-          {/* Year & Month Filters */}
-          <div className="sp-history-filters-group">
-            {/* Year Filter */}
-            <div className="sp-filter-select-wrap">
-              <span className="sp-filter-label">Year:</span>
-              <select 
-                className="sp-history-select" 
-                value={feeYearFilter} 
-                onChange={(e) => setFeeYearFilter(e.target.value)}
-              >
-                <option value="2026">2026</option>
-                <option value="2025">2025</option>
-                <option value="All Years">All Years</option>
-              </select>
-            </div>
-
-            {/* Month Filter */}
-            <div className="sp-filter-select-wrap">
-              <span className="sp-filter-label">Month:</span>
-              <select 
-                className="sp-history-select" 
-                value={feeMonthFilter} 
-                onChange={(e) => setFeeMonthFilter(e.target.value)}
-              >
-                <option value="All Months">All Months</option>
-                <option value="January">January</option>
-                <option value="February">February</option>
-                <option value="March">March</option>
-                <option value="April">April</option>
-                <option value="May">May</option>
-                <option value="June">June</option>
-                <option value="July">July</option>
-                <option value="August">August</option>
-                <option value="September">September</option>
-                <option value="October">October</option>
-                <option value="November">November</option>
-                <option value="December">December</option>
-              </select>
-            </div>
           </div>
         </div>
+
 
         <div className="sp-table-scroll-wrap">
           <table className="sp-fees-table">
             <thead>
               <tr>
                 <th>Date</th>
+                <th>Invoice No</th>
                 <th>Description</th>
                 <th>Amount</th>
                 <th>Status</th>
@@ -176,60 +342,62 @@ export default function FeesTab({ paymentDone, setPayModalOpen, showToast }) {
               </tr>
             </thead>
             <tbody>
-              {(() => {
-                const allTransactions = [
-                  ...(paymentDone ? [{ date: 'Today', month: 'September', year: '2026', desc: 'Tuition Fee - September 2026', sub: selectedFeeBatch, amt: '₹600', isNew: true }] : []),
-                  { date: '08 Aug 2026', month: 'August', year: '2026', desc: 'Tuition Fee - August 2026', sub: selectedFeeBatch, amt: '₹600' },
-                  { date: '08 Jul 2026', month: 'July', year: '2026', desc: 'Tuition Fee - July 2026', sub: selectedFeeBatch, amt: '₹600' },
-                  { date: '08 Jun 2026', month: 'June', year: '2026', desc: 'Tuition Fee - June 2026', sub: selectedFeeBatch, amt: '₹600' },
-                  { date: '08 May 2026', month: 'May', year: '2026', desc: 'Tuition Fee - May 2026', sub: selectedFeeBatch, amt: '₹600' },
-                  { date: '08 Apr 2026', month: 'April', year: '2026', desc: 'Tuition Fee - April 2026', sub: selectedFeeBatch, amt: '₹600' },
-                  { date: '10 Dec 2025', month: 'December', year: '2025', desc: 'Tuition Fee - December 2025', sub: 'Class XI - Science', amt: '₹600' },
-                  { date: '10 Nov 2025', month: 'November', year: '2025', desc: 'Tuition Fee - November 2025', sub: 'Class XI - Science', amt: '₹600' },
-                ];
+              {loading ? (
+                <tr>
+                  <td colSpan="6" style={{ textAlign: 'center', padding: '36px', color: '#64748b' }}>
+                    Loading your fee ledger...
+                  </td>
+                </tr>
+              ) : filteredPayments.length === 0 ? (
+                <tr>
+                  <td colSpan="6" style={{ textAlign: 'center', padding: '36px', color: '#64748b' }}>
+                    No payment receipts found.
+                  </td>
+                </tr>
+              ) : (
+                filteredPayments.map((p, idx) => {
+                  const dateStr = p.paid_at
+                    ? new Date(p.paid_at).toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' })
+                    : 'Online Verified';
+                  const invNo = p.invoices?.invoice_number || p.invoice_number || '—';
+                  const rzpId = p.razorpay_payment_id ? ` · ${p.razorpay_payment_id}` : '';
 
-                const filtered = allTransactions.filter((item) => {
-                  const matchYear = feeYearFilter === 'All Years' || item.year === feeYearFilter;
-                  const matchMonth = feeMonthFilter === 'All Months' || item.month === feeMonthFilter;
-                  return matchYear && matchMonth;
-                });
-
-                if (filtered.length === 0) {
                   return (
-                    <tr>
-                      <td colSpan="5" style={{ textAlign: 'center', padding: '36px', color: '#64748b' }}>
-                        No payment receipts found for {feeMonthFilter !== 'All Months' ? feeMonthFilter : ''} {feeYearFilter !== 'All Years' ? feeYearFilter : ''}.
+                    <tr key={p.id || idx}>
+                      <td className="sp-date-cell">{dateStr}</td>
+                      <td>
+                        <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '13px', color: '#0f766e' }}>
+                          {invNo}
+                        </span>
+                      </td>
+                      <td>
+                        <strong className="sp-desc-main" style={{ color: 'var(--text, #0f172a)', fontSize: '13.5px' }}>
+                          {getPaymentDescription(p)}
+                        </strong>
+                      </td>
+                      <td className="sp-amt-cell">₹{Number(p.amount).toLocaleString('en-IN')}</td>
+                      <td>
+                        <span style={{ color: '#059669', fontWeight: 700, fontSize: '13px' }}>
+                          {p.status || 'SUCCESS'}
+                        </span>
+                      </td>
+                      <td>
+                        <button
+                          className="sp-receipt-download-btn"
+                          onClick={() => handleDownloadReceipt(p)}
+                          title="Print or Download Official Receipt"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                            <polyline points="14 2 14 8 20 8" />
+                          </svg>
+                          <span>Download</span>
+                        </button>
                       </td>
                     </tr>
                   );
-                }
-
-                return filtered.map((item, idx) => (
-                  <tr key={idx} className={item.isNew ? 'sp-row-highlight' : ''}>
-                    <td className="sp-date-cell">{item.date}</td>
-                    <td>
-                      <strong className="sp-desc-main">{item.desc}</strong>
-                      <span className="sp-desc-sub">{item.sub}</span>
-                    </td>
-                    <td className="sp-amt-cell">{item.amt}</td>
-                    <td>
-                      <span className="sp-paid-tag">PAID</span>
-                    </td>
-                    <td>
-                      <button 
-                        className="sp-receipt-download-btn"
-                        onClick={() => showToast(`Receipt for ${item.desc} downloaded`)}
-                      >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                          <polyline points="14 2 14 8 20 8" />
-                        </svg>
-                        <span>Download</span>
-                      </button>
-                    </td>
-                  </tr>
-                ));
-              })()}
+                })
+              )}
             </tbody>
           </table>
         </div>

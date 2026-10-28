@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends
-from app.db import get_supabase_client
+from app.db import get_supabase_client, safe_execute
 from app.core.dependencies import require_roles
 from app.models import (
     BatchCreate,
@@ -543,7 +543,7 @@ def generate_month_sessions(req: GenerateMonthSessionsRequest):
         r_query = supabase.table("class_routines").select("*").eq("is_active", True)
         if req.batch_id and req.batch_id != "ALL":
             r_query = r_query.eq("batch_id", req.batch_id)
-        routines = r_query.execute().data or []
+        routines = safe_execute(r_query).data or []
         
         if not routines:
             return {"message": "No active weekly routines found to generate sessions from.", "generated_count": 0, "sessions": []}
@@ -1591,7 +1591,7 @@ def list_invoices(
         if status and status.upper() != "ALL":
             query = query.eq("status", status.upper())
 
-        res = query.execute()
+        res = safe_execute(query)
         raw_invoices = res.data or []
 
         enriched = []
