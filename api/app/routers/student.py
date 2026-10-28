@@ -382,11 +382,14 @@ def get_dashboard_summary(current_user: dict = Depends(get_current_user)):
         inv_res = supabase.table("invoices").select("payable_amount, amount_paid").eq("student_id", student_id).eq("status", "PENDING").execute()
         total_due = sum(max(0.0, float(i.get("payable_amount", 0)) - float(i.get("amount_paid", 0))) for i in (inv_res.data or []))
 
-        # 4. Upcoming tests
+        # 4. Upcoming tests (Must NOT be completed or cancelled, and results must NOT be published)
         upcoming_tests_count = 0
         if batch_id:
-            e_res = supabase.table("exams").select("id").eq("batch_id", batch_id).gte("exam_date", today_str).execute()
-            upcoming_tests_count = len(e_res.data or [])
+            e_res = supabase.table("exams").select("id, status, results_published").eq("batch_id", batch_id).gte("exam_date", today_str).execute()
+            upcoming_tests_count = sum(
+                1 for ex in (e_res.data or [])
+                if str(ex.get("status", "")).lower() not in ["completed", "cancelled"] and not bool(ex.get("results_published"))
+            )
 
         return {
             "attendance_percentage": percent,
@@ -894,3 +897,538 @@ async def upload_student_doubt_attachment(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Attachment upload failed: {str(e)}")
+
+
+# ==============================================================================
+# 11. EXAMS & PERFORMANCE (Table 11 in schema.sql)
+# ==============================================================================
+@router.get("/my-exams", summary="Get Scheduled Upcoming Tests and Evaluated Performance for My Batch")
+def get_my_exams(current_user: dict = Depends(get_current_user)):
+    try:
+        supabase = get_supabase_client()
+        student_id = current_user.get("id")
+        batch_id = current_user.get("batch_id")
+
+        if not batch_id:
+            u_res = supabase.table("users").select("batch_id").eq("id", student_id).execute()
+            if u_res.data and u_res.data[0].get("batch_id"):
+                batch_id = u_res.data[0].get("batch_id")
+
+        if not batch_id:
+            return {
+                "upcoming_tests": [],
+                "evaluated_tests": [],
+                "performance_by_subject": {},
+                "latest_evaluated_test": None
+            }
+
+        # 1. Fetch batch details for batch name
+        b_res = supabase.table("batches").select("name").eq("id", batch_id).execute()
+        batch_name = b_res.data[0].get("name") if b_res.data else "My Batch"
+
+        # 2. Fetch all published exams for this batch
+        exams_res = supabase.table("exams").select(
+            "id, batch_id, created_by, subject, title, syllabus, exam_date, start_time, end_time, "
+            "duration_minutes, total_marks, passing_marks, status, is_published, results_published, "
+            "results_published_at, results, created_at, users!exams_created_by_fkey(full_name)"
+        ).eq("batch_id", batch_id).order("exam_date", desc=True).execute()
+
+        all_exams = exams_res.data or []
+
+        upcoming_tests = []
+        evaluated_tests = []
+
+        subject_colors = {
+            "physics": "#10b981",
+            "chemistry": "#9333ea",
+            "mathematics": "#2563eb",
+            "math": "#2563eb",
+            "maths": "#2563eb",
+            "biology": "#ea580c"
+        }
+
+        subject_records = {
+            "All Subjects": []
+        }
+
+        today_date = date.today()
+
+        for ex in all_exams:
+            exam_id = ex.get("id")
+            subject = ex.get("subject") or "General"
+            title = ex.get("title") or "Center Exam"
+            syllabus = ex.get("syllabus") or ""
+            exam_date_str = str(ex.get("exam_date")) if ex.get("exam_date") else ""
+            total_marks = float(ex.get("total_marks") or 100)
+            passing_marks = float(ex.get("passing_marks") or 40)
+            status_val = (ex.get("status") or "scheduled").lower()
+            is_pub = bool(ex.get("is_published"))
+            results_pub = bool(ex.get("results_published"))
+            results_list = ex.get("results") or []
+            faculty_name = ex.get("users", {}).get("full_name") if isinstance(ex.get("users"), dict) else "Faculty"
+
+            parsed_date = None
+            formatted_date = exam_date_str
+            day_str = "—"
+            month_str = "—"
+            short_date = exam_date_str
+            try:
+                if exam_date_str:
+                    parsed_date = datetime.strptime(exam_date_str, "%Y-%m-%d").date()
+                    formatted_date = parsed_date.strftime("%d %b %Y")
+                    day_str = parsed_date.strftime("%d")
+                    month_str = parsed_date.strftime("%b")
+                    short_date = parsed_date.strftime("%d %b")
+            except Exception:
+                pass
+
+            dur_mins = ex.get("duration_minutes")
+            if dur_mins:
+                dur_str = f"{dur_mins // 60}h {dur_mins % 60}m" if dur_mins >= 60 else f"{dur_mins} mins"
+            else:
+                dur_str = "2 Hours"
+
+            # Check if this is an upcoming test:
+            # 1. Must be published (is_pub == True)
+            # 2. Status MUST NOT be 'completed' or 'cancelled'
+            # 3. Results MUST NOT be published yet (results_pub == False)
+            # 4. Status is explicitly 'scheduled' or date is in the future/today
+            is_upcoming = (
+                is_pub and
+                (not results_pub) and
+                (status_val not in ["completed", "cancelled"]) and
+                (status_val == "scheduled" or (parsed_date and parsed_date >= today_date))
+            )
+
+            if is_upcoming:
+                upcoming_tests.append({
+                    "id": exam_id,
+                    "title": title,
+                    "subject": subject,
+                    "testName": title,
+                    "batch": batch_name,
+                    "date": formatted_date,
+                    "day": day_str,
+                    "month": month_str,
+                    "rawDate": exam_date_str,
+                    "startTime": ex.get("start_time"),
+                    "endTime": ex.get("end_time"),
+                    "duration": dur_str,
+                    "totalMarks": total_marks,
+                    "passingMarks": passing_marks,
+                    "syllabus": syllabus,
+                    "faculty": faculty_name,
+                    "status": status_val
+                })
+
+            # Check if this exam is evaluated & published (results_pub is True or status is 'completed' with results)
+            if (results_pub or status_val == "completed") and results_list:
+                # Rank calculation: sort all evaluated students by marks_obtained descending
+                valid_scores = [r for r in results_list if isinstance(r, dict) and r.get("marks_obtained") is not None]
+                valid_scores.sort(key=lambda x: float(x.get("marks_obtained", 0)), reverse=True)
+
+                total_evaluated = len(valid_scores)
+                student_rank = None
+                student_obtained = None
+
+                for rank_idx, record in enumerate(valid_scores, start=1):
+                    if str(record.get("student_id")) == str(student_id):
+                        student_rank = rank_idx
+                        student_obtained = float(record.get("marks_obtained"))
+                        break
+
+                if student_obtained is not None:
+                    pct = round((student_obtained / total_marks * 100), 1) if total_marks > 0 else 0.0
+
+                    if pct >= 90:
+                        grade = "A+"
+                        grade_class = "sp-grade-green"
+                    elif pct >= 80:
+                        grade = "A"
+                        grade_class = "sp-grade-green"
+                    elif pct >= 70:
+                        grade = "B+"
+                        grade_class = "sp-grade-blue"
+                    elif pct >= 60:
+                        grade = "B"
+                        grade_class = "sp-grade-blue"
+                    elif pct >= 50:
+                        grade = "C"
+                        grade_class = "sp-grade-amber"
+                    elif pct >= 40:
+                        grade = "D"
+                        grade_class = "sp-grade-amber"
+                    else:
+                        grade = "F"
+                        grade_class = "sp-grade-red"
+
+                    rank_str = f"{student_rank}th of {total_evaluated}" if total_evaluated > 0 else "—"
+                    if student_rank == 1:
+                        rank_str = f"1st of {total_evaluated}"
+                    elif student_rank == 2:
+                        rank_str = f"2nd of {total_evaluated}"
+                    elif student_rank == 3:
+                        rank_str = f"3rd of {total_evaluated}"
+
+                    eval_record = {
+                        "id": exam_id,
+                        "date": formatted_date,
+                        "shortDate": short_date,
+                        "rawDate": exam_date_str,
+                        "name": title,
+                        "subject": subject,
+                        "total": total_marks,
+                        "obtained": student_obtained,
+                        "percentage": f"{pct}%",
+                        "score": pct,
+                        "grade": grade,
+                        "gradeClass": grade_class,
+                        "rank": rank_str,
+                        "rawRank": student_rank,
+                        "totalStudents": total_evaluated,
+                        "syllabus": syllabus,
+                        "faculty": faculty_name
+                    }
+                    evaluated_tests.append(eval_record)
+
+                    subj_key = subject.strip()
+                    if subj_key not in subject_records:
+                        subject_records[subj_key] = []
+
+                    chart_point = {
+                        "id": exam_id,
+                        "testName": title,
+                        "date": short_date,
+                        "rawDate": exam_date_str,
+                        "score": pct,
+                        "marks": f"{student_obtained}/{total_marks}",
+                        "subject": subject,
+                        "rank": rank_str,
+                        "remark": f"Scored {student_obtained}/{total_marks} ({grade}) in {subject}"
+                    }
+                    subject_records["All Subjects"].append(chart_point)
+                    subject_records[subj_key].append(chart_point)
+
+        # Sort upcoming tests chronologically ascending
+        upcoming_tests.sort(key=lambda x: x.get("rawDate") or "9999-99-99")
+
+        # Sort evaluated tests chronologically descending
+        evaluated_tests.sort(key=lambda x: x.get("rawDate") or "", reverse=True)
+
+        # Sort progression trend points chronologically ascending
+        for k in subject_records:
+            subject_records[k].sort(key=lambda x: x.get("rawDate") or "")
+
+        progression_data = {}
+        standard_subjects = ["All Subjects", "Physics", "Chemistry", "Mathematics", "Biology"]
+
+        for k in subject_records.keys():
+            if k not in standard_subjects:
+                standard_subjects.append(k)
+
+        for subj in standard_subjects:
+            points = subject_records.get(subj) or []
+            scores = [p["score"] for p in points]
+            avg_score = round(sum(scores) / len(scores), 1) if scores else 0.0
+
+            if avg_score >= 90:
+                subj_grade = "Grade A+"
+            elif avg_score >= 80:
+                subj_grade = "Grade A"
+            elif avg_score >= 70:
+                subj_grade = "Grade B+"
+            elif avg_score >= 60:
+                subj_grade = "Grade B"
+            elif avg_score >= 40:
+                subj_grade = "Grade C"
+            elif avg_score > 0:
+                subj_grade = "Grade D"
+            else:
+                subj_grade = "—"
+
+            if len(scores) >= 2:
+                growth_diff = round(scores[-1] - scores[0], 1)
+                if growth_diff > 0:
+                    growth_text = f"+{growth_diff}% Overall Growth"
+                elif growth_diff < 0:
+                    growth_text = f"{growth_diff}% Trend"
+                else:
+                    growth_text = "Consistent Performance"
+            elif len(scores) == 1:
+                growth_text = "Initial Baseline Recorded"
+            else:
+                growth_text = "No records yet"
+
+            color = subject_colors.get(subj.lower(), "#2563eb")
+
+            progression_data[subj] = {
+                "subject": subj,
+                "color": color,
+                "avgScore": f"{avg_score}%" if scores else "0%",
+                "grade": subj_grade,
+                "growth": growth_text,
+                "tests": points
+            }
+
+        return {
+            "upcoming_tests": upcoming_tests,
+            "evaluated_tests": evaluated_tests,
+            "performance_by_subject": progression_data,
+            "latest_evaluated_test": evaluated_tests[0] if evaluated_tests else None
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/exams/{exam_id}/merit-list", summary="Get Full Batch Merit List and Toppers for an Exam")
+def get_exam_merit_list(exam_id: str, current_user: dict = Depends(get_current_user)):
+    try:
+        supabase = get_supabase_client()
+        student_id = current_user.get("id")
+        user_batch_id = current_user.get("batch_id")
+
+        ex_res = supabase.table("exams").select(
+            "*, batches(name), users!exams_created_by_fkey(full_name)"
+        ).eq("id", exam_id).execute()
+
+        if not ex_res.data:
+            raise HTTPException(status_code=404, detail="Exam not found")
+
+        exam = ex_res.data[0]
+        status_val = (exam.get("status") or "").lower()
+        if not exam.get("results_published") and status_val != "completed":
+            raise HTTPException(status_code=403, detail="Results and merit list have not been published for this exam yet")
+
+        if user_batch_id and str(exam.get("batch_id")) != str(user_batch_id):
+            raise HTTPException(status_code=403, detail="Not authorized to view other batch's exam merit list")
+
+        results_list = exam.get("results") or []
+        total_marks = float(exam.get("total_marks") or 100)
+
+        # Extract student IDs to fetch user profiles (name, avatar_url, email)
+        student_ids = [r.get("student_id") for r in results_list if isinstance(r, dict) and r.get("student_id")]
+        user_map = {}
+        if student_ids:
+            u_res = supabase.table("users").select("id, full_name, email, avatar_url, phone").in_("id", student_ids).execute()
+            for u in (u_res.data or []):
+                user_map[str(u.get("id"))] = u
+
+        # Separate evaluated and absent
+        evaluated = []
+        for r in results_list:
+            if not isinstance(r, dict):
+                continue
+            s_id = str(r.get("student_id"))
+            marks_raw = r.get("marks_obtained")
+            if marks_raw is not None:
+                marks = float(marks_raw)
+                pct = round((marks / total_marks * 100), 1) if total_marks > 0 else 0.0
+                u_info = user_map.get(s_id, {})
+                full_name = u_info.get("full_name") or "Student"
+                is_me = (s_id == str(student_id))
+
+                evaluated.append({
+                    "student_id": s_id,
+                    "name": f"{full_name} (You)" if is_me else full_name,
+                    "rawName": full_name,
+                    "score": marks,
+                    "total": total_marks,
+                    "pct": f"{pct}%",
+                    "percentageNum": pct,
+                    "photo": u_info.get("avatar_url"),
+                    "email": u_info.get("email"),
+                    "phone": u_info.get("phone"),
+                    "isMe": is_me,
+                    "initial": full_name[0].upper() if full_name else "S"
+                })
+
+        # Sort strictly descending by score
+        evaluated.sort(key=lambda x: x["score"], reverse=True)
+
+        # Assign ranks & standings
+        palette = [
+            {"bg": "#eff6ff", "color": "#2563eb"},
+            {"bg": "#ecfdf5", "color": "#059669"},
+            {"bg": "#fce7f3", "color": "#db2777"},
+            {"bg": "#fef3c7", "color": "#d97706"},
+            {"bg": "#f3e8ff", "color": "#9333ea"},
+            {"bg": "#e0f2fe", "color": "#0284c7"},
+        ]
+
+        merit_list = []
+        for idx, st in enumerate(evaluated, start=1):
+            color_item = palette[(idx - 1) % len(palette)]
+            standing = "Consistent Performer"
+            if idx == 1:
+                standing = "1st Position - Batch Topper"
+            elif idx == 2:
+                standing = "2nd Position - Runner Up"
+            elif idx == 3:
+                standing = "3rd Position - Podium"
+            elif idx <= 5:
+                standing = "TOP 5 Elite"
+            elif idx <= 10:
+                standing = "Top 10"
+
+            merit_list.append({
+                **st,
+                "rank": idx,
+                "badge": str(idx),
+                "standing": standing,
+                "bg": color_item["bg"],
+                "color": color_item["color"],
+                "roll": f"B-{str(st['student_id'])[:4].upper()}"
+            })
+
+        return {
+            "exam_id": exam_id,
+            "title": exam.get("title"),
+            "subject": exam.get("subject"),
+            "exam_date": str(exam.get("exam_date")),
+            "total_marks": total_marks,
+            "batch_name": exam.get("batches", {}).get("name") if isinstance(exam.get("batches"), dict) else "Batch",
+            "total_students": len(merit_list),
+            "merit_list": merit_list
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/peers/{peer_id}/academic-card", summary="Get Live Database Academic Card Metrics for a Peer Student")
+def get_peer_academic_card(peer_id: str, current_user: dict = Depends(get_current_user)):
+    try:
+        supabase = get_supabase_client()
+        user_batch_id = current_user.get("batch_id")
+
+        # 1. Fetch user profile
+        u_res = supabase.table("users").select("id, full_name, email, phone, avatar_url, batch_id, batches(id, name)").eq("id", peer_id).execute()
+        if not u_res.data:
+            raise HTTPException(status_code=404, detail="Student not found")
+
+        peer = u_res.data[0]
+        peer_batch_id = peer.get("batch_id")
+        batch_obj = peer.get("batches") or {}
+        batch_name = batch_obj.get("name") if isinstance(batch_obj, dict) else "Enrolled Batch"
+
+        # 2. Fetch real attendance for this student
+        att_res = supabase.table("attendance").select("status").eq("student_id", peer_id).execute()
+        att_records = att_res.data or []
+        total_classes = len(att_records)
+        present_classes = sum(1 for r in att_records if r.get("status") == "PRESENT")
+        attendance_pct = round((present_classes / total_classes * 100), 1) if total_classes > 0 else 0.0
+
+        # 3. Fetch all completed/published exams for this batch
+        all_exams = []
+        if peer_batch_id:
+            e_res = supabase.table("exams").select("id, title, subject, total_marks, results, results_published, status").eq("batch_id", peer_batch_id).execute()
+            all_exams = e_res.data or []
+
+        # 4. Calculate tests taken, marks, subject-wise percentage and best score
+        evaluated_exams = [
+            e for e in all_exams 
+            if (bool(e.get("results_published")) or (e.get("status") or "").lower() == "completed") and e.get("results")
+        ]
+
+        subject_scores = {}
+        total_tests_taken = 0
+        all_percentages = []
+        best_score_val = 0
+        best_score_total = 100
+        best_score_test_name = "Exam"
+
+        subject_icons = {
+            "physics": "⚛️",
+            "chemistry": "🧪",
+            "mathematics": "📐",
+            "math": "📐",
+            "maths": "📐",
+            "biology": "🧬"
+        }
+        subject_colors = {
+            "physics": {"color": "#3b82f6", "bg": "#eff6ff"},
+            "chemistry": {"color": "#10b981", "bg": "#ecfdf5"},
+            "mathematics": {"color": "#8b5cf6", "bg": "#f5f3ff"},
+            "math": {"color": "#8b5cf6", "bg": "#f5f3ff"},
+            "maths": {"color": "#8b5cf6", "bg": "#f5f3ff"},
+            "biology": {"color": "#ea580c", "bg": "#fff7ed"}
+        }
+
+        for ex in evaluated_exams:
+            subj = ex.get("subject") or "General"
+            t_marks = float(ex.get("total_marks") or 100)
+            res_list = ex.get("results") or []
+
+            for r in res_list:
+                if isinstance(r, dict) and str(r.get("student_id")) == str(peer_id) and r.get("marks_obtained") is not None:
+                    marks = float(r.get("marks_obtained"))
+                    pct = round((marks / t_marks * 100), 1) if t_marks > 0 else 0.0
+                    total_tests_taken += 1
+                    all_percentages.append(pct)
+
+                    if pct >= best_score_val:
+                        best_score_val = pct
+                        best_score_total = int(t_marks)
+                        best_score_test_name = ex.get("title") or "Exam"
+
+                    if subj not in subject_scores:
+                        subject_scores[subj] = []
+                    subject_scores[subj].append(pct)
+                    break
+
+        avg_score_pct = round(sum(all_percentages) / len(all_percentages), 1) if all_percentages else 0.0
+
+        # Build real subject performance metrics
+        subjects_payload = []
+        for s_name, pcts in subject_scores.items():
+            s_avg = round(sum(pcts) / len(pcts)) if pcts else 0
+            cfg_color = subject_colors.get(s_name.lower(), {"color": "#2563eb", "bg": "#eff6ff"})
+            subjects_payload.append({
+                "id": f"sub_{s_name.lower()}",
+                "name": s_name,
+                "pct": s_avg,
+                "color": cfg_color["color"],
+                "bg": cfg_color["bg"],
+                "icon": subject_icons.get(s_name.lower(), "📄")
+            })
+
+        # Overall average entry
+        if all_percentages:
+            subjects_payload.append({
+                "id": "sub_overall",
+                "name": "Overall",
+                "pct": int(avg_score_pct),
+                "color": "#f43f5e",
+                "bg": "#fff1f2",
+                "icon": "⭐"
+            })
+
+        clean_name = peer.get("full_name") or "Student"
+
+        return {
+            "id": peer_id,
+            "name": clean_name,
+            "handle": "@" + clean_name.lower().replace(" ", ""),
+            "roll": f"B-{peer_id[:4].upper()}",
+            "photo": peer.get("avatar_url"),
+            "email": peer.get("email"),
+            "phone": peer.get("phone"),
+            "batch": batch_name,
+            "className": "Class XII",
+            "stream": "Science",
+            "session": "2026 - 2027",
+            "attendancePct": attendance_pct,
+            "attendanceDetail": f"{present_classes} / {total_classes} classes",
+            "avgScorePct": avg_score_pct,
+            "avgScoreDetail": f"Across {total_tests_taken} test{'s' if total_tests_taken != 1 else ''}" if total_tests_taken > 0 else "No evaluated tests",
+            "testsTaken": total_tests_taken,
+            "totalTests": len(all_exams),
+            "bestScore": f"{round(best_score_val * best_score_total / 100)}/{best_score_total}" if total_tests_taken > 0 else "—",
+            "bestScoreTest": best_score_test_name if total_tests_taken > 0 else "—",
+            "subjects": subjects_payload
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

@@ -1,26 +1,58 @@
-import React, { useState } from 'react';
-import { toppersData } from './TestsTab';
+import React, { useState, useEffect } from 'react';
 import StudentProfileCardModal from './StudentProfileCardModal';
+import { apiRequest } from '../../api';
 
 export default function MeritListPage({ test, onBack, showToast }) {
   const [activeTab, setActiveTab] = useState('list'); // 'list' | 'scorecard'
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStudentForCard, setSelectedStudentForCard] = useState(null);
 
+  // Live state from backend
+  const [meritData, setMeritData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  // Fetch live merit list from backend using exam ID
+  useEffect(() => {
+    if (!test?.id) {
+      setLoading(false);
+      return;
+    }
+
+    let isMounted = true;
+    setLoading(true);
+
+    apiRequest(`/api/student/exams/${test.id}/merit-list`)
+      .then((data) => {
+        if (isMounted && data) {
+          setMeritData(data);
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to fetch exam merit list:', err);
+      })
+      .finally(() => {
+        if (isMounted) setLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [test?.id]);
+
   if (!test) return null;
 
-  const key = `${test.name} - ${test.subject}`;
-  const rawList = toppersData[key] || toppersData['Unit Test 1 - Physics'] || [];
+  const rawList = meritData?.merit_list || [];
   
   // Strictly sort by marks obtained in descending order
   const fullMeritList = [...rawList].sort((a, b) => b.score - a.score);
 
   // Filter list by search query (name or roll)
   const filteredList = fullMeritList.filter(st => 
-    st.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    st.roll.toLowerCase().includes(searchQuery.toLowerCase())
+    (st.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (st.roll || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const top1 = fullMeritList.find(x => x.rank === 1) || fullMeritList[0];
   const top2 = fullMeritList.find(x => x.rank === 2) || fullMeritList[1];
   const top3 = fullMeritList.find(x => x.rank === 3) || fullMeritList[2];
 
@@ -29,24 +61,18 @@ export default function MeritListPage({ test, onBack, showToast }) {
     const cleanName = (st.name || '').replace(' (You)', '');
     setSelectedStudentForCard({
       ...st,
+      student_id: st.student_id || st.id,
       name: cleanName,
       handle: '@' + cleanName.toLowerCase().replace(/[^a-z0-9]/g, ''),
-      roll: st.roll,
+      roll: st.roll || '—',
       photo: st.photo || (st.isMe ? '/student-avatar.jpg' : null),
       badge: st.rank === 1 ? 'Gold' : st.rank <= 3 ? 'Silver' : 'Bronze',
       rank: `#${st.rank} of ${fullMeritList.length}`,
       rankSub: 'Rank (Batch)',
-      rankTrend: st.rank === 1 ? 'Batch Topper' : st.rank <= 3 ? 'Top 3 Podium' : 'Consistent',
-      attendancePct: 88 + (st.rank % 7),
-      avgScorePct: st.pct ? parseInt(st.pct) : 80,
-      className: 'Class XII',
-      stream: 'Science',
-      batch: 'Batch A (Offline)',
-      session: '2026 (July - Dec)',
+      rankTrend: st.standing || (st.rank === 1 ? 'Batch Topper' : st.rank <= 3 ? 'Top 3 Podium' : 'Consistent'),
+      batch: meritData?.batch_name || 'Enrolled Batch',
+      session: '2026 - 2027',
       quote: st.rank === 1 ? '"Excellence is not an act, but a habit."' : '"Consistent study today, bigger opportunities tomorrow."',
-      testsTaken: 12,
-      totalTests: 20,
-      bestScore: `${st.score}/${st.total}`,
       bestScoreTest: test.name
     });
   };
@@ -57,6 +83,7 @@ export default function MeritListPage({ test, onBack, showToast }) {
       <div className="sp-merit-page-header">
         <div className="sp-merit-header-left">
           <button 
+            type="button"
             className="sp-analysis-back-btn sp-merit-back-btn" 
             onClick={onBack}
             title="Return to Test Results"
@@ -71,15 +98,16 @@ export default function MeritListPage({ test, onBack, showToast }) {
             🏆 {test.name} - Batch Merit List
           </h1>
           <p className="sp-page-subtitle sp-merit-subtitle">
-            {test.subject} · Conducted on {test.date} · Total Marks: {test.total} · Batch: Class XII - Science
+            {test.subject} · Conducted on {test.date} · Total Marks: {test.total} · Batch: {meritData?.batch_name || 'My Batch'}
           </p>
         </div>
 
         {/* Action Buttons */}
         <div className="sp-merit-actions-wrap">
           <button 
+            type="button"
             className="sp-btn-secondary sp-merit-download-btn"
-            onClick={() => showToast('Official merit list PDF generated & downloaded successfully!')}
+            onClick={() => showToast && showToast('Official merit list PDF generated & downloaded successfully!')}
           >
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
@@ -94,6 +122,7 @@ export default function MeritListPage({ test, onBack, showToast }) {
       {/* 2. Sub-Tabs Bar: Merit List vs My Scorecard */}
       <div className="sp-modal-tabs-row sp-merit-tabs-row">
         <button 
+          type="button"
           className={`sp-modal-tab-btn ${activeTab === 'list' ? 'active' : ''}`}
           onClick={() => setActiveTab('list')}
         >
@@ -101,6 +130,7 @@ export default function MeritListPage({ test, onBack, showToast }) {
           <span className="sp-tab-label-mobile">🏆 Merit List ({fullMeritList.length})</span>
         </button>
         <button 
+          type="button"
           className={`sp-modal-tab-btn ${activeTab === 'scorecard' ? 'active' : ''}`}
           onClick={() => setActiveTab('scorecard')}
         >
@@ -112,272 +142,286 @@ export default function MeritListPage({ test, onBack, showToast }) {
       {/* 3. TAB 1: COMPLETE MERIT LIST */}
       {activeTab === 'list' && (
         <div className="sp-merit-page-content">
-          {/* Top 3 Podium Showcase */}
-          <div className="sp-modal-podium-mini sp-merit-podium">
-            {top2 && (
-              <div 
-                className="sp-mp-col r2"
-                onClick={() => handleOpenStudentProfile(top2)}
-                style={{ cursor: 'pointer' }}
-                title={`View ${top2.name}'s Profile`}
-              >
-                <div className="sp-mp-avatar-wrap">
-                  {top2.photo ? (
-                    <img src={top2.photo} alt={top2.name} className="sp-mp-avatar-img" />
-                  ) : (
-                    <div className="sp-mp-fallback-avatar" style={{ background: top2.bg, color: top2.color }}>
-                      {top2.initial || top2.name.charAt(0)}
-                    </div>
-                  )}
-                  <div className="sp-mp-badge" style={{ background: '#64748b' }}>2</div>
-                </div>
-                <strong className="sp-mp-name">{top2.name}</strong>
-                <span className="sp-mp-score">{top2.score}/{top2.total} ({top2.pct})</span>
-                <span className="sp-mp-roll-sub">Roll: {top2.roll}</span>
-                <button
-                  type="button"
-                  className="sp-podium-view-profile-btn"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleOpenStudentProfile(top2);
-                  }}
-                  title={`View ${top2.name}'s Profile`}
-                >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                    <circle cx="12" cy="7" r="4" />
-                  </svg>
-                  <span>View Profile</span>
-                </button>
-              </div>
-            )}
-
-            {top1 && (
-              <div 
-                className="sp-mp-col r1"
-                onClick={() => handleOpenStudentProfile(top1)}
-                style={{ cursor: 'pointer' }}
-                title={`View ${top1.name}'s Profile`}
-              >
-                <div className="sp-mp-avatar-wrap r1-wrap">
-                  <div className="sp-mp-crown">⭐ 1st Position</div>
-                  {top1.photo ? (
-                    <img src={top1.photo} alt={top1.name} className="sp-mp-avatar-img r1-img" />
-                  ) : (
-                    <div className="sp-mp-fallback-avatar r1-img" style={{ background: top1.bg || '#2563eb', color: '#ffffff' }}>
-                      {top1.initial || top1.name.charAt(0)}
-                    </div>
-                  )}
-                  <div className="sp-mp-badge r1-badge" style={{ background: '#7c3aed' }}>1</div>
-                </div>
-                <strong className="sp-mp-name r1-name">{top1.name}</strong>
-                <span className="sp-mp-score r1-score">{top1.score}/{top1.total} ({top1.pct})</span>
-                <span className="sp-mp-roll-sub sp-mp-topper-text">Batch Topper · {top1.roll}</span>
-                <button
-                  type="button"
-                  className="sp-podium-view-profile-btn"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleOpenStudentProfile(top1);
-                  }}
-                  title={`View ${top1.name}'s Profile`}
-                >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                    <circle cx="12" cy="7" r="4" />
-                  </svg>
-                  <span>View Profile</span>
-                </button>
-              </div>
-            )}
-
-            {top3 && (
-              <div 
-                className="sp-mp-col r3"
-                onClick={() => handleOpenStudentProfile(top3)}
-                style={{ cursor: 'pointer' }}
-                title={`View ${top3.name}'s Profile`}
-              >
-                <div className="sp-mp-avatar-wrap">
-                  {top3.photo ? (
-                    <img src={top3.photo} alt={top3.name} className="sp-mp-avatar-img" />
-                  ) : (
-                    <div className="sp-mp-fallback-avatar" style={{ background: top3.bg, color: top3.color }}>
-                      {top3.initial || top3.name.charAt(0)}
-                    </div>
-                  )}
-                  <div className="sp-mp-badge" style={{ background: '#fb7185' }}>3</div>
-                </div>
-                <strong className="sp-mp-name">{top3.name}</strong>
-                <span className="sp-mp-score">{top3.score}/{top3.total} ({top3.pct})</span>
-                <span className="sp-mp-roll-sub">Roll: {top3.roll}</span>
-                <button
-                  type="button"
-                  className="sp-podium-view-profile-btn"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleOpenStudentProfile(top3);
-                  }}
-                  title={`View ${top3.name}'s Profile`}
-                >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                    <circle cx="12" cy="7" r="4" />
-                  </svg>
-                  <span>View Profile</span>
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* User's Own Standing Summary Bar */}
-          <div className="sp-merit-user-summary-bar">
-            <div className="sp-mus-item">
-              <span className="sp-mus-label">Your Batch Rank</span>
-              <strong className="sp-mus-val" style={{ color: '#0f172a' }}>#{test.rank}</strong>
+          {loading ? (
+            <div style={{ padding: '60px 16px', textAlign: 'center', color: '#64748b' }}>
+              <div className="sp-spinner" style={{ margin: '0 auto 12px' }}></div>
+              <p style={{ fontSize: '14px', margin: 0 }}>Loading batch merit list & rank standings...</p>
             </div>
-            <div className="sp-mus-item">
-              <span className="sp-mus-label">Marks Obtained</span>
-              <strong className="sp-mus-val" style={{ color: '#2563eb' }}>{test.obtained} / {test.total}</strong>
-            </div>
-            <div className="sp-mus-item">
-              <span className="sp-mus-label">Percentage</span>
-              <strong className="sp-mus-val" style={{ color: '#16a34a' }}>{test.percentage}</strong>
-            </div>
-            <div className="sp-mus-item">
-              <span className="sp-mus-label">Grade Awarded</span>
-              <span className={`sp-grade-badge ${test.gradeClass}`}>{test.grade}</span>
-            </div>
-          </div>
-
-          {/* Full Merit List Table Card */}
-          <div className="sp-card sp-merit-table-card">
-            {/* Table Top Controls */}
-            <div className="sp-merit-controls-row">
-              <div className="sp-merit-title-group">
-                <h3 className="sp-merit-table-heading">
-                  All Students Position & Marks
-                </h3>
-                <p className="sp-merit-table-sub">
-                  Showing {filteredList.length} of {fullMeritList.length} students ranked in this test.
-                </p>
-              </div>
-
-              {/* Search Box */}
-              <div className="sp-merit-search-wrap">
-                <input 
-                  type="text"
-                  placeholder="Search student or roll ID..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="sp-merit-search-input"
-                />
-                <svg 
-                  className="sp-merit-search-icon"
-                  width="15" 
-                  height="15" 
-                  viewBox="0 0 24 24" 
-                  fill="none" 
-                  stroke="#94a3b8" 
-                  strokeWidth="2.2" 
-                >
-                  <circle cx="11" cy="11" r="8"/>
-                  <line x1="21" y1="21" x2="16.65" y2="16.65"/>
-                </svg>
-              </div>
-            </div>
-
-            {/* Swipe Table Horizontally Hint */}
-            <div className="sp-merit-swipe-hint">
-              <span>👉 Swipe table horizontally to view full marks & standings</span>
-            </div>
-
-            {/* Table */}
-            <div className="sp-table-scroll-wrap sp-merit-table-scroll">
-              <table className="sp-merit-table">
-                <thead>
-                  <tr>
-                    <th style={{ width: '90px' }}>Position</th>
-                    <th>Student Name</th>
-                    <th>Roll ID</th>
-                    <th>Marks Obtained</th>
-                    <th>Percentage</th>
-                    <th>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredList.map((st, idx) => (
-                    <tr 
-                      key={idx} 
-                      className={`sp-merit-row ${st.isMe ? 'sp-merit-row-me' : ''}`}
+          ) : (
+            <>
+              {/* Top 3 Podium Showcase */}
+              {(top1 || top2 || top3) && (
+                <div className="sp-modal-podium-mini sp-merit-podium">
+                  {/* Rank 2 */}
+                  {top2 && (
+                    <div 
+                      className="sp-mp-col r2"
+                      onClick={() => handleOpenStudentProfile(top2)}
+                      style={{ cursor: 'pointer' }}
+                      title={`View ${top2.name}'s Profile`}
                     >
-                      <td>
-                        <div className={`sp-position-pill rank-${st.rank}`}>
-                          {st.rank === 1 ? '🥇 1st' : st.rank === 2 ? '🥈 2nd' : st.rank === 3 ? '🥉 3rd' : `#${st.rank}`}
-                        </div>
-                      </td>
-                      <td>
-                        <div className="sp-merit-student-cell">
-                          {st.photo ? (
-                            <img 
-                              src={st.photo} 
-                              alt={st.name} 
-                              className="sp-merit-avatar-img" 
-                              onError={(e) => { 
-                                e.target.style.display = 'none'; 
-                                if (e.target.nextSibling) e.target.nextSibling.style.display = 'grid'; 
-                              }} 
-                            />
-                          ) : null}
-                          <div 
-                            className="sp-merit-fallback-avatar" 
-                            style={{ display: st.photo ? 'none' : 'grid', background: st.bg, color: st.color }}
-                          >
-                            {st.initial || st.name.charAt(0)}
+                      <div className="sp-mp-avatar-wrap">
+                        {top2.photo ? (
+                          <img src={top2.photo} alt={top2.name} className="sp-mp-avatar-img" />
+                        ) : (
+                          <div className="sp-mp-fallback-avatar" style={{ background: top2.bg, color: top2.color }}>
+                            {top2.initial || top2.name.charAt(0)}
                           </div>
-                          <div>
-                            <strong className="sp-merit-student-name">{st.name}</strong>
-                            {st.isMe && (
-                              <span className="sp-badge-you" style={{ marginLeft: '6px' }}>You</span>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="sp-merit-roll">{st.roll}</td>
-                      <td>
-                        <strong className="sp-merit-score-val">{st.score}</strong>
-                        <span className="sp-merit-score-tot"> / {st.total}</span>
-                      </td>
-                      <td>
-                        <strong className="sp-merit-pct-val">{st.pct}</strong>
-                      </td>
-                      <td>
-                        <button 
-                          type="button"
-                          className="sp-merit-view-profile-btn"
-                          onClick={() => handleOpenStudentProfile(st)}
-                          title={`View ${st.name}'s Profile`}
-                        >
-                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                            <circle cx="12" cy="7" r="4" />
-                          </svg>
-                          <span>View Profile</span>
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                  {filteredList.length === 0 && (
-                    <tr>
-                      <td colSpan="6" style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
-                        No students match the search criteria.
-                      </td>
-                    </tr>
+                        )}
+                        <div className="sp-mp-badge" style={{ background: '#64748b' }}>2</div>
+                      </div>
+                      <strong className="sp-mp-name">{top2.name}</strong>
+                      <span className="sp-mp-score">{top2.score}/{top2.total} ({top2.pct})</span>
+                      <span className="sp-mp-roll-sub">Roll: {top2.roll}</span>
+                      <button
+                        type="button"
+                        className="sp-podium-view-profile-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenStudentProfile(top2);
+                        }}
+                        title={`View ${top2.name}'s Profile`}
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                          <circle cx="12" cy="7" r="4" />
+                        </svg>
+                        <span>View Profile</span>
+                      </button>
+                    </div>
                   )}
-                </tbody>
-              </table>
-            </div>
-          </div>
+
+                  {/* Rank 1 */}
+                  {top1 && (
+                    <div 
+                      className="sp-mp-col r1"
+                      onClick={() => handleOpenStudentProfile(top1)}
+                      style={{ cursor: 'pointer' }}
+                      title={`View ${top1.name}'s Profile`}
+                    >
+                      <div className="sp-mp-avatar-wrap r1-wrap">
+                        <div className="sp-mp-crown">⭐ 1st Position</div>
+                        {top1.photo ? (
+                          <img src={top1.photo} alt={top1.name} className="sp-mp-avatar-img r1-img" />
+                        ) : (
+                          <div className="sp-mp-fallback-avatar r1-img" style={{ background: top1.bg || '#2563eb', color: '#ffffff' }}>
+                            {top1.initial || top1.name.charAt(0)}
+                          </div>
+                        )}
+                        <div className="sp-mp-badge r1-badge" style={{ background: '#7c3aed' }}>1</div>
+                      </div>
+                      <strong className="sp-mp-name r1-name">{top1.name}</strong>
+                      <span className="sp-mp-score r1-score">{top1.score}/{top1.total} ({top1.pct})</span>
+                      <span className="sp-mp-roll-sub sp-mp-topper-text">Batch Topper · {top1.roll}</span>
+                      <button
+                        type="button"
+                        className="sp-podium-view-profile-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenStudentProfile(top1);
+                        }}
+                        title={`View ${top1.name}'s Profile`}
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                          <circle cx="12" cy="7" r="4" />
+                        </svg>
+                        <span>View Profile</span>
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Rank 3 */}
+                  {top3 && (
+                    <div 
+                      className="sp-mp-col r3"
+                      onClick={() => handleOpenStudentProfile(top3)}
+                      style={{ cursor: 'pointer' }}
+                      title={`View ${top3.name}'s Profile`}
+                    >
+                      <div className="sp-mp-avatar-wrap">
+                        {top3.photo ? (
+                          <img src={top3.photo} alt={top3.name} className="sp-mp-avatar-img" />
+                        ) : (
+                          <div className="sp-mp-fallback-avatar" style={{ background: top3.bg, color: top3.color }}>
+                            {top3.initial || top3.name.charAt(0)}
+                          </div>
+                        )}
+                        <div className="sp-mp-badge" style={{ background: '#fb7185' }}>3</div>
+                      </div>
+                      <strong className="sp-mp-name">{top3.name}</strong>
+                      <span className="sp-mp-score">{top3.score}/{top3.total} ({top3.pct})</span>
+                      <span className="sp-mp-roll-sub">Roll: {top3.roll}</span>
+                      <button
+                        type="button"
+                        className="sp-podium-view-profile-btn"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenStudentProfile(top3);
+                        }}
+                        title={`View ${top3.name}'s Profile`}
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                          <circle cx="12" cy="7" r="4" />
+                        </svg>
+                        <span>View Profile</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* User's Own Standing Summary Bar */}
+              <div className="sp-merit-user-summary-bar">
+                <div className="sp-mus-item">
+                  <span className="sp-mus-label">Your Batch Rank</span>
+                  <strong className="sp-mus-val" style={{ color: '#0f172a' }}>{test.rank || '—'}</strong>
+                </div>
+                <div className="sp-mus-item">
+                  <span className="sp-mus-label">Marks Obtained</span>
+                  <strong className="sp-mus-val" style={{ color: '#2563eb' }}>{test.obtained} / {test.total}</strong>
+                </div>
+                <div className="sp-mus-item">
+                  <span className="sp-mus-label">Percentage</span>
+                  <strong className="sp-mus-val" style={{ color: '#16a34a' }}>{test.percentage}</strong>
+                </div>
+                <div className="sp-mus-item">
+                  <span className="sp-mus-label">Grade Awarded</span>
+                  <span className={`sp-grade-badge ${test.gradeClass || 'sp-grade-blue'}`}>{test.grade}</span>
+                </div>
+              </div>
+
+              {/* Full Merit List Table Card */}
+              <div className="sp-card sp-merit-table-card">
+                {/* Table Top Controls */}
+                <div className="sp-merit-controls-row">
+                  <div className="sp-merit-title-group">
+                    <h3 className="sp-merit-table-heading">
+                      All Students Position & Marks
+                    </h3>
+                    <p className="sp-merit-table-sub">
+                      Showing {filteredList.length} of {fullMeritList.length} students ranked in this test.
+                    </p>
+                  </div>
+
+                  {/* Search Box */}
+                  <div className="sp-merit-search-wrap">
+                    <input 
+                      type="text"
+                      placeholder="Search student or roll ID..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="sp-merit-search-input"
+                    />
+                    <svg 
+                      className="sp-merit-search-icon"
+                      width="15" 
+                      height="15" 
+                      viewBox="0 0 24 24" 
+                      fill="none" 
+                      stroke="#94a3b8" 
+                      strokeWidth="2.2" 
+                    >
+                      <circle cx="11" cy="11" r="8"/>
+                      <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                    </svg>
+                  </div>
+                </div>
+
+                {/* Swipe Table Horizontally Hint */}
+                <div className="sp-merit-swipe-hint">
+                  <span>👉 Swipe table horizontally to view full marks & standings</span>
+                </div>
+
+                {/* Table */}
+                <div className="sp-table-scroll-wrap sp-merit-table-scroll">
+                  <table className="sp-merit-table">
+                    <thead>
+                      <tr>
+                        <th style={{ width: '90px' }}>Position</th>
+                        <th>Student Name</th>
+                        <th>Roll ID</th>
+                        <th>Marks Obtained</th>
+                        <th>Percentage</th>
+                        <th>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredList.map((st, idx) => (
+                        <tr 
+                          key={st.student_id || idx} 
+                          className={`sp-merit-row ${st.isMe ? 'sp-merit-row-me' : ''}`}
+                        >
+                          <td>
+                            <div className={`sp-position-pill rank-${st.rank}`}>
+                              {st.rank === 1 ? '🥇 1st' : st.rank === 2 ? '🥈 2nd' : st.rank === 3 ? '🥉 3rd' : `#${st.rank}`}
+                            </div>
+                          </td>
+                          <td>
+                            <div className="sp-merit-student-cell">
+                              {st.photo ? (
+                                <img 
+                                  src={st.photo} 
+                                  alt={st.name} 
+                                  className="sp-merit-avatar-img" 
+                                  onError={(e) => { 
+                                    e.target.style.display = 'none'; 
+                                    if (e.target.nextSibling) e.target.nextSibling.style.display = 'grid'; 
+                                  }} 
+                                />
+                              ) : null}
+                              <div 
+                                className="sp-merit-fallback-avatar" 
+                                style={{ display: st.photo ? 'none' : 'grid', background: st.bg, color: st.color }}
+                              >
+                                {st.initial || st.name.charAt(0)}
+                              </div>
+                              <div>
+                                <strong className="sp-merit-student-name">{st.name}</strong>
+                                {st.isMe && (
+                                  <span className="sp-badge-you" style={{ marginLeft: '6px' }}>You</span>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="sp-merit-roll">{st.roll}</td>
+                          <td>
+                            <strong className="sp-merit-score-val">{st.score}</strong>
+                            <span className="sp-merit-score-tot"> / {st.total}</span>
+                          </td>
+                          <td>
+                            <strong className="sp-merit-pct-val">{st.pct}</strong>
+                          </td>
+                          <td>
+                            <button 
+                              type="button"
+                              className="sp-merit-view-profile-btn"
+                              onClick={() => handleOpenStudentProfile(st)}
+                              title={`View ${st.name}'s Profile`}
+                            >
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                                <circle cx="12" cy="7" r="4" />
+                              </svg>
+                              <span>View Profile</span>
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                      {filteredList.length === 0 && (
+                        <tr>
+                          <td colSpan="6" style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
+                            No students match the search criteria.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -409,16 +453,16 @@ export default function MeritListPage({ test, onBack, showToast }) {
 
           <div className="sp-score-extra">
             <p className="sp-score-extra-line">
-              <strong>Batch Position:</strong> #{test.rank}
+              <strong>Batch Position:</strong> {test.rank || '—'}
             </p>
             <p className="sp-score-extra-line">
-              <strong>Questions Breakdown:</strong> {test.correct} Correct, {test.incorrect} Incorrect
+              <strong>Syllabus Tested:</strong> {test.syllabus || 'Curriculum Syllabus Topics'}
             </p>
             
             <div className="sp-teacher-feedback-box">
               <strong className="sp-tfb-title">Faculty Remarks & Guidance:</strong>
               <p className="sp-tfb-desc">
-                {test.remarks}
+                {test.remarks || `Evaluated by ${test.faculty || 'Faculty'}. Good conceptual understanding and test performance.`}
               </p>
             </div>
           </div>
