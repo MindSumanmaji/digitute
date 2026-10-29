@@ -384,6 +384,8 @@ def get_dashboard_summary(current_user: dict = Depends(get_current_user)):
 
         # 4. Upcoming tests (Must NOT be completed or cancelled, and results must NOT be published)
         upcoming_tests_count = 0
+        avg_score_pct = 0.0
+        tests_taken_count = 0
         if batch_id:
             e_res = supabase.table("exams").select("id, status, results_published").eq("batch_id", batch_id).gte("exam_date", today_str).execute()
             upcoming_tests_count = sum(
@@ -391,13 +393,41 @@ def get_dashboard_summary(current_user: dict = Depends(get_current_user)):
                 if str(ex.get("status", "")).lower() not in ["completed", "cancelled"] and not bool(ex.get("results_published"))
             )
 
+            # 5. Live Average Score calculated from published/completed exams for this student
+            score_res = supabase.table("exams").select(
+                "total_marks, results, results_published, status"
+            ).eq("batch_id", batch_id).execute()
+            all_exams = score_res.data or []
+            evaluated_exams = [
+                e for e in all_exams
+                if (bool(e.get("results_published")) or (e.get("status") or "").lower() == "completed") and e.get("results")
+            ]
+            all_percentages = []
+            for ex in evaluated_exams:
+                t_marks = float(ex.get("total_marks") or 100)
+                res_list = ex.get("results") or []
+                for r in res_list:
+                    if isinstance(r, dict) and str(r.get("student_id")) == str(student_id) and r.get("marks_obtained") is not None:
+                        try:
+                            marks = float(r.get("marks_obtained"))
+                            pct = round((marks / t_marks * 100), 1) if t_marks > 0 else 0.0
+                            all_percentages.append(pct)
+                        except (ValueError, TypeError):
+                            pass
+                        break
+            if all_percentages:
+                avg_score_pct = round(sum(all_percentages) / len(all_percentages), 1)
+                tests_taken_count = len(all_percentages)
+
         return {
             "attendance_percentage": percent,
             "total_classes": total_classes,
             "present_classes": present_classes,
             "today_sessions": today_sessions,
             "total_due": total_due,
-            "upcoming_tests_count": upcoming_tests_count
+            "upcoming_tests_count": upcoming_tests_count,
+            "avg_score_percentage": avg_score_pct,
+            "tests_taken_count": tests_taken_count
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -1258,17 +1288,19 @@ def get_exam_merit_list(exam_id: str, current_user: dict = Depends(get_current_u
         merit_list = []
         for idx, st in enumerate(evaluated, start=1):
             color_item = palette[(idx - 1) % len(palette)]
-            standing = "Consistent Performer"
+            standing = ""
             if idx == 1:
-                standing = "1st Position - Batch Topper"
+                standing = "Batch Topper"
             elif idx == 2:
-                standing = "2nd Position - Runner Up"
+                standing = "Runner Up"
             elif idx == 3:
-                standing = "3rd Position - Podium"
+                standing = "Podium"
             elif idx <= 5:
                 standing = "TOP 5 Elite"
             elif idx <= 10:
                 standing = "Top 10"
+            else:
+                standing = ""
 
             merit_list.append({
                 **st,
@@ -1379,6 +1411,41 @@ def get_peer_academic_card(peer_id: str, current_user: dict = Depends(get_curren
 
         avg_score_pct = round(sum(all_percentages) / len(all_percentages), 1) if all_percentages else 0.0
 
+        # Calculate overall batch rank based on latest evaluated exam results
+        student_rank_num = None
+        batch_total_students = 0
+        student_standing = ""
+
+        for ex in reversed(evaluated_exams):
+            res_list = ex.get("results") or []
+            if res_list:
+                sorted_results = sorted(
+                    [r for r in res_list if isinstance(r, dict) and r.get("marks_obtained") is not None],
+                    key=lambda r: float(r.get("marks_obtained", 0)),
+                    reverse=True
+                )
+                batch_total_students = len(sorted_results)
+                for idx, r in enumerate(sorted_results, 1):
+                    if str(r.get("student_id")) == str(peer_id):
+                        student_rank_num = idx
+                        if idx == 1:
+                            student_standing = "Batch Topper"
+                        elif idx == 2:
+                            student_standing = "Runner Up"
+                        elif idx == 3:
+                            student_standing = "Podium"
+                        elif idx <= 5:
+                            student_standing = "TOP 5 Elite"
+                        elif idx <= 10:
+                            student_standing = "Top 10"
+                        break
+                if student_rank_num is not None:
+                    break
+
+        if batch_total_students == 0 and peer_batch_id:
+            batch_users = supabase.table("users").select("id", count="exact").eq("batch_id", peer_batch_id).eq("role", "STUDENT").execute()
+            batch_total_students = batch_users.count or len(batch_users.data or []) or 20
+
         # Build real subject performance metrics
         subjects_payload = []
         for s_name, pcts in subject_scores.items():
@@ -1393,16 +1460,20 @@ def get_peer_academic_card(peer_id: str, current_user: dict = Depends(get_curren
                 "icon": subject_icons.get(s_name.lower(), "📄")
             })
 
-        # Overall average entry
-        if all_percentages:
-            subjects_payload.append({
-                "id": "sub_overall",
-                "name": "Overall",
-                "pct": int(avg_score_pct),
-                "color": "#f43f5e",
-                "bg": "#fff1f2",
-                "icon": "⭐"
-            })
+        # Add core batch subjects if not tested yet so profile card displays clean subject analysis
+        standard_core_subjects = ["Physics", "Chemistry", "Mathematics"]
+        existing_subjs = {s["name"].lower() for s in subjects_payload}
+        for std_s in standard_core_subjects:
+            if std_s.lower() not in existing_subjs:
+                cfg_color = subject_colors.get(std_s.lower(), {"color": "#2563eb", "bg": "#eff6ff"})
+                subjects_payload.append({
+                    "id": f"sub_{std_s.lower()}",
+                    "name": std_s,
+                    "pct": 0,
+                    "color": cfg_color["color"],
+                    "bg": cfg_color["bg"],
+                    "icon": subject_icons.get(std_s.lower(), "📄")
+                })
 
         clean_name = peer.get("full_name") or "Student"
 
@@ -1426,7 +1497,263 @@ def get_peer_academic_card(peer_id: str, current_user: dict = Depends(get_curren
             "totalTests": len(all_exams),
             "bestScore": f"{round(best_score_val * best_score_total / 100)}/{best_score_total}" if total_tests_taken > 0 else "—",
             "bestScoreTest": best_score_test_name if total_tests_taken > 0 else "—",
+            "rank": f"#{student_rank_num} / {batch_total_students}" if student_rank_num else "—",
+            "rankNum": student_rank_num,
+            "batchTotal": batch_total_students,
+            "standing": student_standing,
+            "rankTrend": student_standing or "Active Student",
+            "badge": "Gold" if student_rank_num == 1 else "Silver" if (student_rank_num and student_rank_num <= 3) else "Bronze",
             "subjects": subjects_payload
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/academic-card", summary="Get Live Database Academic Card Metrics for Current Student")
+def get_current_user_academic_card(current_user: dict = Depends(get_current_user)):
+    return get_peer_academic_card(current_user["id"], current_user)
+
+
+# ==============================================================================
+# 18. STUDENT PROFILE AVATAR MANAGEMENT (Upload & Remove)
+# ==============================================================================
+@router.post("/avatar", summary="Upload & Update Student Profile Avatar")
+async def upload_student_avatar(
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user)
+):
+    try:
+        supabase = get_supabase_client()
+        student_id = current_user.get("id")
+
+        ALLOWED_TYPES = {"image/jpeg", "image/jpg", "image/png", "image/webp"}
+        if file.content_type and file.content_type.lower() not in ALLOWED_TYPES:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Only JPG, JPEG, PNG, or WebP images are allowed."
+            )
+
+        contents = await file.read()
+        if not contents or len(contents) == 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Uploaded image is empty."
+            )
+
+        # No file size limit - image is compressed client-side before upload
+
+        storage_path = f"avatars/{student_id}/avatar.webp"
+        content_type = file.content_type or "image/webp"
+
+        # Upload with upsert to digitute bucket under avatars folder
+        supabase.storage.from_("digitute").upload(
+            path=storage_path,
+            file=contents,
+            file_options={"content-type": content_type, "upsert": "true"}
+        )
+
+        # Generate long-lived signed URL (1 year validity) for secure, seamless display
+        signed_res = supabase.storage.from_("digitute").create_signed_url(storage_path, 86400 * 365)
+        avatar_url = signed_res.get("signedURL") or signed_res.get("signedUrl")
+
+        if not avatar_url:
+            raise HTTPException(status_code=500, detail="Failed to generate secure URL for avatar.")
+
+        # Update users table
+        db_res = supabase.table("users").update({
+            "avatar_url": avatar_url
+        }).eq("id", student_id).execute()
+
+        if not db_res.data:
+            # Rollback storage on failure
+            try:
+                supabase.storage.from_("digitute").remove([storage_path])
+            except Exception:
+                pass
+            raise HTTPException(status_code=500, detail="Failed to update student profile record.")
+
+        return {
+            "success": True,
+            "avatar_url": avatar_url,
+            "storage_path": storage_path,
+            "message": "Profile picture updated successfully!"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/avatar", summary="Remove Student Profile Avatar")
+def remove_student_avatar(current_user: dict = Depends(get_current_user)):
+    try:
+        supabase = get_supabase_client()
+        student_id = current_user.get("id")
+        storage_path = f"avatars/{student_id}/avatar.webp"
+
+        # 1. Remove from digitute storage bucket
+        try:
+            supabase.storage.from_("digitute").remove([storage_path])
+        except Exception:
+            pass
+
+        # 2. Update users table avatar_url to null
+        db_res = supabase.table("users").update({
+            "avatar_url": None
+        }).eq("id", student_id).execute()
+
+        return {
+            "success": True,
+            "avatar_url": None,
+            "message": "Profile picture removed successfully!"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.put("/email", summary="Update Student Email Address")
+def update_student_email(
+    payload: dict,
+    current_user: dict = Depends(get_current_user)
+):
+    try:
+        supabase = get_supabase_client()
+        student_id = current_user.get("id")
+
+        new_email = (payload.get("email") or "").strip().lower()
+
+        if not new_email:
+            raise HTTPException(status_code=400, detail="New email is required.")
+
+        email_regex = r"^[^@s]+@[^@s]+.[^@s]+$"
+        if not re.match(email_regex, new_email):
+            raise HTTPException(status_code=400, detail="Invalid email format. Please provide a valid address.")
+
+        current_email = (current_user.get("email") or "").strip().lower()
+        if new_email == current_email:
+            raise HTTPException(status_code=400, detail="New email is identical to your current email.")
+
+        # Check if email is already taken by another user
+        dup_check = supabase.table("users").select("id").ilike("email", new_email).neq("id", student_id).execute()
+        if dup_check.data and len(dup_check.data) > 0:
+            raise HTTPException(status_code=409, detail="This email address is already in use by another account.")
+
+        # Update in database
+        db_res = supabase.table("users").update({
+            "email": new_email
+        }).eq("id", student_id).execute()
+
+        if not db_res.data:
+            raise HTTPException(status_code=500, detail="Failed to update email in database.")
+
+        return {
+            "success": True,
+            "email": new_email,
+            "message": "Email address updated successfully!"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.put("/phone", summary="Update Student Mobile / Phone Number")
+def update_student_phone(
+    payload: dict,
+    current_user: dict = Depends(get_current_user)
+):
+    try:
+        supabase = get_supabase_client()
+        student_id = current_user.get("id")
+
+        new_phone = (payload.get("phone") or "").strip()
+
+        if not new_phone:
+            raise HTTPException(status_code=400, detail="Mobile number is required.")
+
+        # Clean digits
+        digits = re.sub(r"[^0-9]", "", new_phone)
+        if len(digits) < 10:
+            raise HTTPException(status_code=400, detail="Please enter a valid 10-digit mobile number.")
+
+        current_phone = (current_user.get("phone") or "").strip()
+        current_digits = re.sub(r"[^0-9]", "", current_phone)
+        if digits == current_digits:
+            raise HTTPException(status_code=400, detail="New mobile number is identical to your current number.")
+
+        # Format cleanly if standard 10 digits
+        formatted_phone = f"+91 {digits[-10:]}" if len(digits) == 10 else new_phone
+
+        # Update in database users table
+        db_res = supabase.table("users").update({
+            "phone": formatted_phone
+        }).eq("id", student_id).execute()
+
+        if not db_res.data:
+            raise HTTPException(status_code=500, detail="Failed to update mobile number in database.")
+
+        return {
+            "success": True,
+            "phone": formatted_phone,
+            "message": "Mobile number updated successfully!"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.put("/password", summary="Update Student Account Password")
+def update_student_password(
+    payload: dict,
+    current_user: dict = Depends(get_current_user)
+):
+    try:
+        supabase = get_supabase_client()
+        student_id = current_user.get("id")
+
+        new_password = (payload.get("new_password") or "").strip()
+        confirm_password = (payload.get("confirm_password") or "").strip()
+
+        if not new_password:
+            raise HTTPException(status_code=400, detail="New password is required.")
+
+        if len(new_password) < 6:
+            raise HTTPException(status_code=400, detail="Password must be at least 6 characters long.")
+
+        if not confirm_password:
+            raise HTTPException(status_code=400, detail="Please confirm your new password.")
+
+        if new_password != confirm_password:
+            raise HTTPException(status_code=400, detail="Passwords do not match. Please re-enter carefully.")
+
+        # 1. Update password in Supabase Auth via admin client
+        try:
+            supabase.auth.admin.update_user_by_id(
+                student_id,
+                {"password": new_password}
+            )
+        except Exception as auth_err:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to update login password: {str(auth_err)}"
+            )
+
+        # 2. Update password_hash in users table if needed
+        try:
+            pwd_hash = hashlib.sha256(new_password.encode("utf-8")).hexdigest()
+            supabase.table("users").update({
+                "password_hash": pwd_hash,
+                "updated_at": "now()"
+            }).eq("id", student_id).execute()
+        except Exception:
+            pass
+
+        return {
+            "success": True,
+            "message": "Password updated successfully! Use your new password on next login."
         }
     except HTTPException:
         raise

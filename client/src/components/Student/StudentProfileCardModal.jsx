@@ -4,13 +4,23 @@ import { apiRequest } from '../../api';
 export default function StudentProfileCardModal({ isOpen, onClose, studentData, showToast }) {
   if (!isOpen) return null;
 
+  const loggedInUser = (() => {
+    try {
+      const s = localStorage.getItem('digitute_user');
+      return s ? JSON.parse(s) : null;
+    } catch {
+      return null;
+    }
+  })();
+  const loggedInUserId = loggedInUser?.id;
+
   // Real backend metrics state
   const [liveData, setLiveData] = useState(null);
   const [loading, setLoading] = useState(false);
 
   // Fetch real database metrics for the specific student ID
   useEffect(() => {
-    const studentId = studentData?.student_id || studentData?.id;
+    const studentId = studentData?.student_id || studentData?.id || loggedInUserId;
     if (!studentId) return;
 
     let isMounted = true;
@@ -32,7 +42,7 @@ export default function StudentProfileCardModal({ isOpen, onClose, studentData, 
     return () => {
       isMounted = false;
     };
-  }, [studentData?.student_id, studentData?.id]);
+  }, [studentData?.student_id, studentData?.id, loggedInUserId]);
 
   const defaultStudent = {
     name: 'Student',
@@ -67,11 +77,55 @@ export default function StudentProfileCardModal({ isOpen, onClose, studentData, 
     ...defaultStudent,
     ...studentData,
     ...(liveData || {}),
-    subjects: (liveData?.subjects && liveData.subjects.length > 0) ? liveData.subjects : (studentData?.subjects || defaultStudent.subjects),
-    rank: studentData?.rank ? (String(studentData.rank).includes('/') ? studentData.rank : `${studentData.rank} / ${liveData?.batchTotal || studentData?.batchTotal || 48}`) : (liveData?.rank || '—'),
-    rankTrend: studentData?.standing || (liveData?.rankTrend || '↑ 2 positions'),
-    badge: studentData?.rank === 1 ? 'Gold' : (studentData?.rank && studentData.rank <= 3) ? 'Silver' : 'Bronze'
+    subjects: ((liveData?.subjects && liveData.subjects.length > 0) ? liveData.subjects : (studentData?.subjects || defaultStudent.subjects)).filter(s => s.name?.toLowerCase() !== 'overall' && s.id !== 'sub_overall'),
+    rank: studentData?.rank 
+      ? (String(studentData.rank).includes('/') ? studentData.rank : `${studentData.rank} / ${liveData?.batchTotal || studentData?.batchTotal || 20}`) 
+      : (liveData?.rank || '—'),
+    rankTrend: (() => {
+      const rawRank = studentData?.rank || liveData?.rank;
+      let rankNum = null;
+      if (typeof rawRank === 'number') {
+        rankNum = rawRank;
+      } else if (typeof rawRank === 'string') {
+        const match = rawRank.match(/\d+/);
+        if (match) rankNum = parseInt(match[0], 10);
+      }
+      if (rankNum === 1) return 'Batch Topper';
+      if (rankNum === 2) return 'Runner Up';
+      if (rankNum === 3) return 'Podium';
+      if (rankNum >= 4 && rankNum <= 5) return 'TOP 5 Elite';
+      if (rankNum >= 6 && rankNum <= 10) return 'Top 10';
+      if (rankNum > 10) return '';
+
+      const rawStanding = studentData?.standing || liveData?.rankTrend || '';
+      if (/1st/i.test(rawStanding) || /batch topper/i.test(rawStanding) || /topper/i.test(rawStanding)) return 'Batch Topper';
+      if (/2nd/i.test(rawStanding) || /runner/i.test(rawStanding)) return 'Runner Up';
+      if (/3rd/i.test(rawStanding) || /podium/i.test(rawStanding)) return 'Podium';
+      if (/top 5/i.test(rawStanding)) return 'TOP 5 Elite';
+      if (/top 10/i.test(rawStanding)) return 'Top 10';
+      return '';
+    })(),
+    badge: studentData?.rank === 1 ? 'Gold' : (studentData?.rank && studentData.rank <= 3) ? 'Silver' : 'Bronze',
+    rankNum: (() => {
+      const rawRank = studentData?.rank || liveData?.rank;
+      if (typeof rawRank === 'number') return rawRank;
+      if (typeof rawRank === 'string') {
+        const match = rawRank.match(/\d+/);
+        if (match) return parseInt(match[0], 10);
+      }
+      return null;
+    })()
   };
+
+  const targetStudentId = studentData?.student_id || studentData?.id || liveData?.id;
+
+  // Determine if this profile card belongs strictly to the currently logged in student
+  const isOwner = Boolean(
+    studentData?.isMe === true ||
+    studentData?.isMe === 'true' ||
+    (loggedInUserId && targetStudentId && String(loggedInUserId) === String(targetStudentId)) ||
+    (!targetStudentId && !studentData?.isPeer)
+  );
 
   const getInitials = (name) => {
     if (!name) return 'RD';
@@ -80,14 +134,15 @@ export default function StudentProfileCardModal({ isOpen, onClose, studentData, 
     return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
   };
 
-  // Persisted Quote / Motto
+  // Persisted Quote / Motto - only use personal stored quote if viewer is the owner
   const [quote, setQuote] = useState(() => {
-    try {
-      const saved = localStorage.getItem('digitute_student_quote');
-      return saved !== null ? saved : (student.quote || 'Consistent learner, focused on improving every day.');
-    } catch {
-      return student.quote || 'Consistent learner, focused on improving every day.';
+    if (isOwner) {
+      try {
+        const saved = localStorage.getItem('digitute_student_quote');
+        if (saved !== null) return saved;
+      } catch {}
     }
+    return student.quote || 'Consistent learner, focused on improving every day.';
   });
 
   // Edit Mode Toggle
@@ -95,17 +150,24 @@ export default function StudentProfileCardModal({ isOpen, onClose, studentData, 
   const [draftQuote, setDraftQuote] = useState(quote);
 
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem('digitute_student_quote');
-      const q = saved !== null ? saved : (student.quote || 'Consistent learner, focused on improving every day.');
-      setQuote(q);
-      setDraftQuote(q);
-    } catch {
+    if (isOwner) {
+      try {
+        const saved = localStorage.getItem('digitute_student_quote');
+        const q = saved !== null ? saved : (student.quote || 'Consistent learner, focused on improving every day.');
+        setQuote(q);
+        setDraftQuote(q);
+      } catch {
+        const q = student.quote || 'Consistent learner, focused on improving every day.';
+        setQuote(q);
+        setDraftQuote(q);
+      }
+    } else {
       const q = student.quote || 'Consistent learner, focused on improving every day.';
       setQuote(q);
       setDraftQuote(q);
+      setIsEditMode(false);
     }
-  }, [student.name, student.quote]);
+  }, [student.name, student.quote, isOwner]);
 
   // The 7 Customizable Widgets Visibility State
   const defaultVisibility = {
@@ -123,17 +185,32 @@ export default function StudentProfileCardModal({ isOpen, onClose, studentData, 
   };
 
   const [visibleItems, setVisibleItems] = useState(() => {
-    try {
-      const saved = localStorage.getItem('digitute_pcard_item_visibility');
-      if (saved) return { ...defaultVisibility, ...JSON.parse(saved) };
-    } catch {}
+    if (isOwner) {
+      try {
+        const saved = localStorage.getItem('digitute_pcard_item_visibility');
+        if (saved) return { ...defaultVisibility, ...JSON.parse(saved) };
+      } catch {}
+    }
     return defaultVisibility;
   });
+
+  useEffect(() => {
+    if (isOwner) {
+      try {
+        const saved = localStorage.getItem('digitute_pcard_item_visibility');
+        if (saved) setVisibleItems({ ...defaultVisibility, ...JSON.parse(saved) });
+      } catch {}
+    } else {
+      setVisibleItems(defaultVisibility);
+      setIsEditMode(false);
+    }
+  }, [isOwner, student.name]);
 
   const [editDraftVisibility, setEditDraftVisibility] = useState(visibleItems);
   const [isAddMenuOpen, setIsAddMenuOpen] = useState(false);
 
   const handleEnterEditMode = () => {
+    if (!isOwner) return;
     setDraftQuote(quote);
     setEditDraftVisibility({ ...visibleItems });
     setIsEditMode(true);
@@ -339,8 +416,8 @@ export default function StudentProfileCardModal({ isOpen, onClose, studentData, 
               <path d="M12 3L1 9l4 2.18v6L12 21l7-3.82v-6l2-1.09V17h2V9L12 3zm6.82 6L12 12.72 5.18 9 12 5.28 18.82 9zM17 15.99l-5 2.73-5-2.73v-3.72L12 15l5-2.73v3.72z"/>
             </svg>
 
-            {/* Edit pencil icon button */}
-            {!isEditMode && (
+            {/* Edit pencil icon button (only for card owner) */}
+            {!isEditMode && isOwner && (
               <div className="sp-pcard-hero-top">
                 <button 
                   type="button"
@@ -377,12 +454,17 @@ export default function StudentProfileCardModal({ isOpen, onClose, studentData, 
                 {getInitials(student.name)}
               </div>
               
-              {/* Crown badge */}
-              <div className="sp-pcard-crown-badge">
-                <svg viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5zm14 3c0 .55-.45 1-1 1H6c-.55 0-1-.45-1-1s.45-1 1-1h12c.55 0 1 .45 1 1z"/>
-                </svg>
-              </div>
+              {/* Crown badge (Shown only for Podium Ranks: 1, 2, 3) */}
+              {student.rankNum !== null && student.rankNum >= 1 && student.rankNum <= 3 && (
+                <div 
+                  className={`sp-pcard-crown-badge rank-${student.rankNum}`}
+                  title={student.rankNum === 1 ? 'Gold Crown - 1st Position' : student.rankNum === 2 ? 'Silver Crown - 2nd Position' : 'Bronze Crown - 3rd Position'}
+                >
+                  <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5zm14 3c0 .55-.45 1-1 1H6c-.55 0-1-.45-1-1s.45-1 1-1h12c.55 0 1 .45 1 1z"/>
+                  </svg>
+                </div>
+              )}
             </div>
 
             {/* Name, Batch with Graduation Cap Icon & Moto */}
@@ -396,12 +478,7 @@ export default function StudentProfileCardModal({ isOpen, onClose, studentData, 
                 )}
               </div>
               
-              <div className="sp-pcard-batch-row">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 3L1 9l11 6 9-4.91V17h2V9L12 3zM5 13.18v4L12 21l7-3.82v-4L12 17l-7-3.82z"/>
-                </svg>
-                <span className="sp-pcard-batch-sub">{student.batch || 'WBJEE 2027'}</span>
-              </div>
+
 
               {!isEditMode ? (
                 <p className="sp-pcard-quote">
@@ -657,20 +734,12 @@ export default function StudentProfileCardModal({ isOpen, onClose, studentData, 
               <div className="sp-pcard-section">
                 <div className="sp-pcard-section-header">
                   <h5 className="sp-pcard-section-title">Subjects Strength</h5>
-                  <button 
-                    type="button"
-                    className="sp-pcard-link-btn"
-                    onClick={() => showToast && showToast('Detailed subject breakdown available in Performance tab')}
-                  >
-                    <span>View Details</span>
-                    <span>→</span>
-                  </button>
                 </div>
 
                 <div className="sp-pcard-subjects-list">
                   {student.subjects.map((sub, idx) => {
                     const subKey = sub.id || sub.name.toLowerCase();
-                    if (!currentVisibility[subKey]) return null;
+                    if (currentVisibility[subKey] === false) return null;
 
                     const currentPct = subjectPcts[idx] !== undefined ? subjectPcts[idx] : sub.pct;
                     const barWidth = barsAnimated ? `${sub.pct}%` : '0%';
@@ -883,19 +952,21 @@ export default function StudentProfileCardModal({ isOpen, onClose, studentData, 
             </button>
           </div>
         ) : (
-          <div className="sp-card-modal-footer" style={{ padding: '12px 20px', borderTop: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <button 
-              type="button"
-              className="sp-pcard-customize-trigger-btn"
-              onClick={handleEnterEditMode}
-              title="Customize which widgets appear on this card"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 20h9"/>
-                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
-              </svg>
-              <span>Customize Widgets</span>
-            </button>
+          <div className="sp-card-modal-footer" style={{ padding: '12px 20px', borderTop: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: isOwner ? 'space-between' : 'flex-end' }}>
+            {isOwner && (
+              <button 
+                type="button"
+                className="sp-pcard-customize-trigger-btn"
+                onClick={handleEnterEditMode}
+                title="Customize which widgets appear on this card"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 20h9"/>
+                  <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+                </svg>
+                <span>Customize Widgets</span>
+              </button>
+            )}
             <button 
               type="button" 
               className="sp-btn-secondary" 

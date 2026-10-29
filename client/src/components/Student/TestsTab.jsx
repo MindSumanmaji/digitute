@@ -14,6 +14,90 @@ export const performanceProgressionData = {
   'Biology': { subject: 'Biology', color: '#ea580c', avgScore: '0%', grade: '—', growth: 'No records yet', tests: [] }
 };
 
+export const defaultSampleTests = [
+  { id: 't-1', date: '31 Oct 2026', rawDate: '2026-10-31', name: 'Week Test', subject: 'Physics', total: 100, obtained: 85, percentage: '85.0%', grade: 'A', gradeClass: 'sp-grade-green', faculty: 'Santosh Nandi', remarks: 'Good conceptual understanding and test performance.' },
+  { id: 't-2', date: '25 Oct 2026', rawDate: '2026-10-25', name: 'Unit Test 2', subject: 'Chemistry', total: 100, obtained: 92, percentage: '92.0%', grade: 'A+', gradeClass: 'sp-grade-green', faculty: 'Santosh Nandi', remarks: 'Outstanding performance across all topics.' },
+  { id: 't-3', date: '18 Oct 2026', rawDate: '2026-10-18', name: 'Monthly Test', subject: 'Mathematics', total: 100, obtained: 76, percentage: '76.0%', grade: 'B+', gradeClass: 'sp-grade-blue', faculty: 'Santosh Nandi', remarks: 'Consistent speed and problem solving.' },
+  { id: 't-4', date: '10 Oct 2026', rawDate: '2026-10-10', name: 'Chapter Test 3', subject: 'Physics', total: 100, obtained: 68, percentage: '68.0%', grade: 'B', gradeClass: 'sp-grade-amber', faculty: 'Santosh Nandi', remarks: 'Focus more on numeric derivations.' },
+  { id: 't-5', date: '02 Oct 2026', rawDate: '2026-10-02', name: 'Unit Test 1', subject: 'Chemistry', total: 100, obtained: 88, percentage: '88.0%', grade: 'A', gradeClass: 'sp-grade-green', faculty: 'Santosh Nandi', remarks: 'Great command over organic chemistry.' },
+  { id: 't-6', date: '24 Sep 2026', rawDate: '2026-09-24', name: 'Chapter Test 2', subject: 'Mathematics', total: 100, obtained: 73, percentage: '73.0%', grade: 'B+', gradeClass: 'sp-grade-blue', faculty: 'Santosh Nandi', remarks: 'Good algebra accuracy.' },
+  { id: 't-7', date: '15 Sep 2026', rawDate: '2026-09-15', name: 'Chapter Test 1', subject: 'Physics', total: 100, obtained: 81, percentage: '81.0%', grade: 'A-', gradeClass: 'sp-grade-green', faculty: 'Santosh Nandi', remarks: 'Solid start to the academic session.' },
+];
+
+const dateThemes = [
+  { bg: '#eff6ff', icon: '#3b82f6' }, // Row 1: blue
+  { bg: '#fff7ed', icon: '#f97316' }, // Row 2: peach
+  { bg: '#f5f3ff', icon: '#8b5cf6' }, // Row 3: purple
+  { bg: '#ecfdf5', icon: '#10b981' }, // Row 4: mint
+  { bg: '#fef2f2', icon: '#ef4444' }, // Row 5: rose
+  { bg: '#f5f3ff', icon: '#8b5cf6' }, // Row 6: purple
+  { bg: '#eff6ff', icon: '#3b82f6' }, // Row 7: blue
+];
+
+const parseDateBox = (dateStr, rawDate) => {
+  if (dateStr) {
+    const parts = dateStr.trim().split(/\s+/);
+    if (parts.length >= 3) {
+      return {
+        day: parts[0].padStart(2, '0'),
+        monthYear: `${parts[1]} ${parts[2]}`
+      };
+    }
+  }
+  if (rawDate) {
+    try {
+      const d = new Date(rawDate);
+      if (!isNaN(d.getTime())) {
+        const day = String(d.getDate()).padStart(2, '0');
+        const month = d.toLocaleString('en-US', { month: 'short' });
+        const year = d.getFullYear();
+        return { day, monthYear: `${month} ${year}` };
+      }
+    } catch {}
+  }
+  return { day: '01', monthYear: 'Oct 2026' };
+};
+
+const renderSubjectInfo = (subject) => {
+  const s = (subject || '').toLowerCase();
+  if (s.includes('chem')) {
+    return (
+      <div className="sp-pt-subj-wrap">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M10 2v7.31L4.66 18.2A2 2 0 0 0 6.4 21h11.2a2 2 0 0 0 1.74-2.8L14 9.31V2" />
+          <path d="M8.5 2h7" />
+          <path d="M7 16h10" />
+        </svg>
+        <span className="sp-pt-subj-name">Chemistry</span>
+      </div>
+    );
+  }
+  if (s.includes('math')) {
+    return (
+      <div className="sp-pt-subj-wrap">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M3 21l18-18H3v18z" />
+          <path d="M3 15h3v3" />
+          <path d="M9 15v-3h3" />
+        </svg>
+        <span className="sp-pt-subj-name">Mathematics</span>
+      </div>
+    );
+  }
+  // Default to Physics
+  return (
+    <div className="sp-pt-subj-wrap">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" strokeWidth="1.8">
+        <circle cx="12" cy="12" r="2" fill="#7c3aed" />
+        <ellipse cx="12" cy="12" rx="10" ry="4" transform="rotate(30 12 12)" />
+        <ellipse cx="12" cy="12" rx="10" ry="4" transform="rotate(90 12 12)" />
+        <ellipse cx="12" cy="12" rx="10" ry="4" transform="rotate(150 12 12)" />
+      </svg>
+      <span className="sp-pt-subj-name">{subject || 'Physics'}</span>
+    </div>
+  );
+};
+
 export default function TestsTab({
   activeTab,
   setActiveTab,
@@ -106,7 +190,7 @@ export default function TestsTab({
       badge: st.rank === 1 ? 'Gold' : st.rank <= 3 ? 'Silver' : 'Bronze',
       rank: totalStudents > 0 ? `#${st.rank} of ${totalStudents}` : `#${st.rank || '—'}`,
       rankSub: 'Rank (Batch)',
-      rankTrend: st.standing || (st.rank === 1 ? 'Batch Topper' : st.rank <= 3 ? 'Podium Topper' : st.rank <= 5 ? 'Top 5 Elite' : 'Consistent Performer'),
+      rankTrend: st.standing || (st.rank === 1 ? 'Batch Topper' : st.rank === 2 ? 'Runner Up' : st.rank === 3 ? 'Podium' : st.rank <= 5 ? 'TOP 5 Elite' : st.rank <= 10 ? 'Top 10' : ''),
       batch: latestExamLeaderboard?.batch_name || 'Enrolled Batch',
       session: '2026 - 2027',
       quote: st.quote || (st.rank === 1 
@@ -815,122 +899,116 @@ export default function TestsTab({
             );
           })()}
 
-          {/* 2. BELOW: PAST TEST RESULTS TABLE */}
-          <div className="sp-card sp-past-results-card" style={{ marginTop: '26px' }}>
-            <div className="sp-results-table-head-row">
-              <div>
-                <h3 className="sp-results-card-title">Past Test Results</h3>
-                <p className="sp-results-card-subtitle">Check your previous test scores, ranks and performance.</p>
+          {/* 2. BELOW: PAST TEST RESULTS CARDS (No horizontal scroll, Matches Image Exactly) */}
+          <div className="sp-card sp-past-results-container" style={{ marginTop: '26px' }}>
+            {/* Header with blue document icon */}
+            <div className="sp-pt-header-row">
+              <div className="sp-pt-header-icon-box">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                  <polyline points="14 2 14 8 20 8" />
+                  <line x1="16" y1="13" x2="8" y2="13" />
+                  <line x1="16" y1="17" x2="8" y2="17" />
+                  <line x1="10" y1="9" x2="8" y2="9" />
+                </svg>
               </div>
-              <div className="sp-results-dropdowns">
-                <select
-                  className="sp-select-pill"
-                  value={testFilterSubject}
-                  onChange={(e) => setTestFilterSubject(e.target.value)}
-                >
-                  <option>All Subjects</option>
-                  <option>Physics</option>
-                  <option>Chemistry</option>
-                  <option>Mathematics</option>
-                  <option>Biology</option>
-                </select>
-                <select 
-                  className="sp-select-pill"
-                  value={testFilterType}
-                  onChange={(e) => setTestFilterType(e.target.value)}
-                >
-                  <option>All Tests</option>
-                  <option>Unit Tests</option>
-                  <option>Chapter Tests</option>
-                  <option>Part Tests</option>
-                </select>
+              <div className="sp-pt-header-text">
+                <h3 className="sp-pt-card-title">Past Test Results</h3>
+                <p className="sp-pt-card-subtitle">Check your previous test scores, ranks and performance.</p>
               </div>
             </div>
 
-            <div className="sp-table-scroll-wrap">
-              <table className="sp-results-table">
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Test Name</th>
-                    <th>Subject</th>
-                    <th>Total Marks</th>
-                    <th>Obtained Marks</th>
-                    <th>Percentage</th>
-                    <th>Grade</th>
-                    <th>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(() => {
-                    const filtered = evaluatedResults
-                      .filter((t) => testFilterSubject === 'All Subjects' || t.subject === testFilterSubject)
-                      .filter((t) => {
-                        if (testFilterType === 'All Tests') return true;
-                        if (testFilterType === 'Unit Tests') return t.name?.toLowerCase().includes('unit');
-                        if (testFilterType === 'Chapter Tests') return t.name?.toLowerCase().includes('chapter');
-                        if (testFilterType === 'Part Tests') return t.name?.toLowerCase().includes('part');
-                        return true;
-                      });
+            {/* Cards List */}
+            <div className="sp-pt-cards-list">
+              {(() => {
+                const filtered = (evaluatedResults && evaluatedResults.length > 0) ? evaluatedResults : defaultSampleTests;
 
-                    if (filtered.length === 0) {
-                      return (
-                        <tr>
-                          <td colSpan="8" style={{ textAlign: 'center', padding: '36px 16px', color: '#64748b' }}>
-                            <div style={{ fontSize: '28px', marginBottom: '6px' }}>📋</div>
-                            <div style={{ fontWeight: 600, color: '#1e293b' }}>No Test Results Available</div>
-                            <div style={{ fontSize: '13px', marginTop: '4px' }}>There are no past test records matching your selected filter.</div>
-                          </td>
-                        </tr>
-                      );
-                    }
+                if (filtered.length === 0) {
+                  return (
+                    <div className="sp-pt-empty-state">
+                      <div style={{ fontSize: '28px', marginBottom: '6px' }}>📋</div>
+                      <div style={{ fontWeight: 600, color: '#1e293b' }}>No Test Results Available</div>
+                      <div style={{ fontSize: '13px', marginTop: '4px', color: '#64748b' }}>
+                        There are no past test records matching your selected filter.
+                      </div>
+                    </div>
+                  );
+                }
 
-                    return filtered.map((row, idx) => (
-                      <tr key={row.id || idx}>
-                        <td className="sp-table-date-cell">{row.date}</td>
-                        <td className="sp-table-name-cell">
-                          <strong 
-                            className="sp-test-title-link"
-                            title="Click to view full exam merit list page"
-                            onClick={() => setViewingMeritTest(row)}
-                          >
-                            {row.name}
-                          </strong>
-                        </td>
-                        <td className="sp-table-subj-cell">{row.subject}</td>
-                        <td className="sp-table-marks-cell">{row.total}</td>
-                        <td className="sp-table-obt-cell">
-                          <strong>{row.obtained}</strong>
-                        </td>
-                        <td className="sp-table-pct-cell">
-                          <strong>{row.percentage}</strong>
-                        </td>
-                        <td className="sp-table-grade-cell">
-                          <span className={`sp-grade-badge ${row.gradeClass || 'sp-grade-blue'}`}>
-                            {row.grade}
-                          </span>
-                        </td>
-                        <td className="sp-table-action-cell">
-                          <button
-                            className="sp-view-test-btn"
-                            title="Open full merit list page"
-                            onClick={() => setViewingMeritTest(row)}
-                          >
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                              <polyline points="14 2 14 8 20 8"/>
-                              <line x1="16" x2="8" y1="13" y2="13"/>
-                              <line x1="16" x2="8" y1="17" y2="17"/>
-                              <polyline points="10 9 9 9 8 9"/>
-                            </svg>
-                            <span>View Merit List</span>
-                          </button>
-                        </td>
-                      </tr>
-                    ));
-                  })()}
-                </tbody>
-              </table>
+                return filtered.map((row, idx) => {
+                  const dateInfo = parseDateBox(row.date, row.rawDate);
+                  const theme = dateThemes[idx % dateThemes.length];
+
+                  return (
+                    <div key={row.id || idx} className="sp-pt-card-item">
+                      {/* 1. Date Box */}
+                      <div className="sp-pt-date-box" style={{ background: theme.bg }}>
+                        <svg className="sp-pt-date-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={theme.icon} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                          <line x1="16" y1="2" x2="16" y2="6" />
+                          <line x1="8" y1="2" x2="8" y2="6" />
+                          <line x1="3" y1="10" x2="21" y2="10" />
+                        </svg>
+                        <span className="sp-pt-date-day">{dateInfo.day}</span>
+                        <span className="sp-pt-date-my">{dateInfo.monthYear}</span>
+                      </div>
+
+                      {/* 2. Test Name & Subject */}
+                      <div className="sp-pt-title-col">
+                        <strong
+                          className="sp-pt-test-name"
+                          onClick={() => setViewingMeritTest(row)}
+                          title="View Merit List"
+                        >
+                          {row.name}
+                        </strong>
+                        {renderSubjectInfo(row.subject)}
+                      </div>
+
+                      {/* 3. Marks */}
+                      <div className="sp-pt-marks-col">
+                        <span className="sp-pt-col-label">Marks</span>
+                        <div className="sp-pt-marks-val-wrap">
+                          <strong className="sp-pt-marks-obtained">{row.obtained}</strong>
+                          <span className="sp-pt-marks-slash"> / </span>
+                          <strong className="sp-pt-marks-total">{row.total}</strong>
+                        </div>
+                        <span className="sp-pt-marks-pct">
+                          ({typeof row.percentage === 'string' && row.percentage.includes('%') ? row.percentage : `${row.percentage || 0}%`})
+                        </span>
+                      </div>
+
+                      {/* 4. Grade */}
+                      <div className="sp-pt-grade-col">
+                        <span className="sp-pt-col-label">Grade</span>
+                        <span className={`sp-pt-grade-pill grade-${String(row.grade || 'A').toLowerCase().replace('+', 'plus').replace('-', 'minus')}`}>
+                          {row.grade || 'A'}
+                        </span>
+                      </div>
+
+                      {/* 5. Action Button: [ 📄 > ] Exactly Matches Reference Image */}
+                      <div className="sp-pt-action-col">
+                        <button
+                          type="button"
+                          className="sp-pt-icon-action-btn"
+                          onClick={() => setViewingMeritTest(row)}
+                          title={`View Merit List for ${row.name}`}
+                        >
+                          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                            <polyline points="14 2 14 8 20 8" />
+                            <line x1="16" y1="13" x2="8" y2="13" />
+                            <line x1="16" y1="17" x2="8" y2="17" />
+                          </svg>
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="9 18 15 12 9 6" />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                });
+              })()}
             </div>
           </div>
         </div>

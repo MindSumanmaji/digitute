@@ -1,23 +1,30 @@
+import { apiRequest } from '../../api';
 import React, { useState, useEffect } from 'react';
 import StudentProfileCardModal from './StudentProfileCardModal';
+import ChangeProfilePictureModal from './ChangeProfilePictureModal';
+import ProfileAvatar from './ProfileAvatar';
 
-export default function ProfileTab({ showToast, onBack, user }) {
+export default function ProfileTab({ showToast, onBack, user, onUpdateUser }) {
   // Modal state for Profile Card
   const [profileCardOpen, setProfileCardOpen] = useState(false);
+  const [changePhotoModalOpen, setChangePhotoModalOpen] = useState(false);
 
   // Profile data
   const [studentProfile, setStudentProfile] = useState(() => ({
-    name: user?.full_name || 'Suman Maji',
-    handle: user?.full_name ? `@${user.full_name.toLowerCase().replace(/\s+/g, '')}` : '@sumanmaji',
-    batch: (Array.isArray(user?.batches) ? user.batches[0]?.name : user?.batches?.name) || user?.batch || 'Class XII - Science (Batch A)',
+    id: user?.id,
+    student_id: user?.id,
+    isMe: true,
+    name: user?.full_name || 'Ram Dey',
+    handle: user?.full_name ? `@${user.full_name.toLowerCase().replace(/\s+/g, '')}` : '@ramdey',
+    batch: (Array.isArray(user?.batches) ? user.batches[0]?.name : user?.batches?.name) || user?.batch || 'WBJEE 2027',
     institute: 'DigiTute Institute',
-    session: '2026 (July - Dec)',
-    photo: '/student-avatar.jpg',
-    email: user?.email || 'suman.maji@digitute.app',
-    phone: user?.phone || '+91 98301 11222',
-    roll: '12-SCI-042',
-    guardian: 'Alok Maji (+91 98301 99887)',
-    campus: 'DigiTute Shyambazar Campus',
+    session: '2026 - 2027',
+    photo: user?.avatar_url || user?.photo || null,
+    email: user?.email || '',
+    phone: user?.phone || '',
+    roll: 'B-1779',
+    guardian: 'Parent / Guardian',
+    campus: 'DigiTute Main Campus',
     pushEnabled: true,
     attendanceAlerts: true,
     testAlerts: true
@@ -27,11 +34,15 @@ export default function ProfileTab({ showToast, onBack, user }) {
     if (user) {
       setStudentProfile(prev => ({
         ...prev,
+        id: user.id || prev.id,
+        student_id: user.id || prev.student_id,
+        isMe: true,
         name: user.full_name || prev.name,
         handle: user.full_name ? `@${user.full_name.toLowerCase().replace(/\s+/g, '')}` : prev.handle,
         batch: (Array.isArray(user?.batches) ? user.batches[0]?.name : user?.batches?.name) || user?.batch || prev.batch,
         email: user.email || prev.email,
         phone: user.phone || prev.phone,
+        photo: user.avatar_url || user.photo || prev.photo,
       }));
     }
   }, [user]);
@@ -39,6 +50,16 @@ export default function ProfileTab({ showToast, onBack, user }) {
   // Modal sub-dialogs for actions
   const [activeModal, setActiveModal] = useState(null); // 'picture' | 'email' | 'password' | 'about' | 'privacy' | 'terms' | 'support'
   const [tempInput, setTempInput] = useState('');
+  const [newEmailInput, setNewEmailInput] = useState('');
+  const [isUpdatingEmail, setIsUpdatingEmail] = useState(false);
+  const [emailError, setEmailError] = useState('');
+  const [newMobileInput, setNewMobileInput] = useState('');
+  const [isUpdatingMobile, setIsUpdatingMobile] = useState(false);
+  const [mobileError, setMobileError] = useState('');
+  const [newPasswordInput, setNewPasswordInput] = useState('');
+  const [confirmPasswordInput, setConfirmPasswordInput] = useState('');
+  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
+  const [passwordError, setPasswordError] = useState('');
 
   const handleTogglePush = () => {
     const updated = !studentProfile.pushEnabled;
@@ -50,15 +71,19 @@ export default function ProfileTab({ showToast, onBack, user }) {
 
   const handleActionClick = (actionName) => {
     if (actionName === 'picture') {
-      setActiveModal('picture');
+      setChangePhotoModalOpen(true);
     } else if (actionName === 'email') {
-      setTempInput(studentProfile.email);
+      setNewEmailInput('');
+      setEmailError('');
       setActiveModal('email');
     } else if (actionName === 'mobile') {
-      setTempInput(studentProfile.phone);
+      setNewMobileInput('');
+      setMobileError('');
       setActiveModal('mobile');
     } else if (actionName === 'password') {
-      setTempInput('');
+      setNewPasswordInput('');
+      setConfirmPasswordInput('');
+      setPasswordError('');
       setActiveModal('password');
     } else if (actionName === 'support') {
       setActiveModal('support');
@@ -71,31 +96,158 @@ export default function ProfileTab({ showToast, onBack, user }) {
     }
   };
 
+  const handleUpdateEmail = async () => {
+    setEmailError('');
+    const emailRegex = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+
+    const cleanNew = newEmailInput.trim().toLowerCase();
+
+    if (!cleanNew) {
+      setEmailError('Please enter your new email address.');
+      return;
+    }
+
+    if (!emailRegex.test(cleanNew)) {
+      setEmailError('Please enter a valid email format (e.g. name@example.com).');
+      return;
+    }
+
+    if (cleanNew === (studentProfile.email || '').trim().toLowerCase()) {
+      setEmailError('New email is identical to your current email address.');
+      return;
+    }
+
+    try {
+      setIsUpdatingEmail(true);
+      const res = await apiRequest('/api/student/email', {
+        method: 'PUT',
+        body: JSON.stringify({
+          email: cleanNew
+        })
+      });
+
+      if (res?.success) {
+        setStudentProfile(prev => ({ ...prev, email: res.email }));
+        if (onUpdateUser) {
+          onUpdateUser({ email: res.email });
+        }
+        if (showToast) {
+          showToast('Email address updated successfully in database!');
+        }
+        setActiveModal(null);
+      }
+    } catch (err) {
+      console.error('Update email failed:', err);
+      setEmailError(err.message || 'Failed to update email. Please try again.');
+    } finally {
+      setIsUpdatingEmail(false);
+    }
+  };
+
+  const handleUpdateMobile = async () => {
+    setMobileError('');
+    const cleanPhone = newMobileInput.trim();
+    const digits = cleanPhone.replace(/\D/g, '');
+
+    if (!cleanPhone) {
+      setMobileError('Please enter your new mobile number.');
+      return;
+    }
+
+    if (digits.length < 10) {
+      setMobileError('Please enter a valid 10-digit mobile number.');
+      return;
+    }
+
+    const currentDigits = (studentProfile.phone || '').replace(/\D/g, '');
+    if (digits === currentDigits) {
+      setMobileError('New mobile number is identical to your current number.');
+      return;
+    }
+
+    try {
+      setIsUpdatingMobile(true);
+      const res = await apiRequest('/api/student/phone', {
+        method: 'PUT',
+        body: JSON.stringify({
+          phone: cleanPhone
+        })
+      });
+
+      if (res?.success) {
+        setStudentProfile(prev => ({ ...prev, phone: res.phone }));
+        if (onUpdateUser) {
+          onUpdateUser({ phone: res.phone });
+        }
+        if (showToast) {
+          showToast('Mobile number updated successfully in database!');
+        }
+        setActiveModal(null);
+      }
+    } catch (err) {
+      console.error('Update mobile failed:', err);
+      setMobileError(err.message || 'Failed to update mobile number. Please try again.');
+    } finally {
+      setIsUpdatingMobile(false);
+    }
+  };
+
+  const handleUpdatePassword = async () => {
+    setPasswordError('');
+    const cleanNew = newPasswordInput.trim();
+    const cleanConfirm = confirmPasswordInput.trim();
+
+    if (!cleanNew) {
+      setPasswordError('Please enter a new password.');
+      return;
+    }
+
+    if (cleanNew.length < 6) {
+      setPasswordError('Password must be at least 6 characters long.');
+      return;
+    }
+
+    if (!cleanConfirm) {
+      setPasswordError('Please confirm your new password.');
+      return;
+    }
+
+    if (cleanNew !== cleanConfirm) {
+      setPasswordError('Passwords do not match. Please ensure both fields are identical.');
+      return;
+    }
+
+    try {
+      setIsUpdatingPassword(true);
+      const res = await apiRequest('/api/student/password', {
+        method: 'PUT',
+        body: JSON.stringify({
+          new_password: cleanNew,
+          confirm_password: cleanConfirm
+        })
+      });
+
+      if (res?.success) {
+        if (showToast) {
+          showToast('Password updated successfully in database! Use it for your next login.');
+        }
+        setActiveModal(null);
+      }
+    } catch (err) {
+      console.error('Update password failed:', err);
+      setPasswordError(err.message || 'Failed to update password. Please try again.');
+    } finally {
+      setIsUpdatingPassword(false);
+    }
+  };
+
   const handleSaveModal = (type) => {
     if (type === 'email') {
-      if (!tempInput || !tempInput.includes('@')) {
-        if (showToast) showToast('Please enter a valid email address');
-        return;
-      }
-      setStudentProfile(prev => ({ ...prev, email: tempInput }));
-      if (showToast) showToast('Email updated successfully!');
-      setActiveModal(null);
+      handleUpdateEmail();
     } else if (type === 'mobile') {
-      const cleanPhone = tempInput.trim();
-      if (!cleanPhone || cleanPhone.length < 10) {
-        if (showToast) showToast('Please enter a valid 10-digit mobile number');
-        return;
-      }
-      setStudentProfile(prev => ({ ...prev, phone: cleanPhone }));
-      if (showToast) showToast('Mobile number updated successfully!');
-      setActiveModal(null);
+      handleUpdateMobile();
     } else if (type === 'password') {
-      if (!tempInput || tempInput.length < 6) {
-        if (showToast) showToast('Password must be at least 6 characters');
-        return;
-      }
-      if (showToast) showToast('Password changed securely!');
-      setActiveModal(null);
+      handleUpdatePassword();
     } else if (type === 'picture') {
       if (showToast) showToast('Profile picture updated successfully!');
       setActiveModal(null);
@@ -132,7 +284,7 @@ export default function ProfileTab({ showToast, onBack, user }) {
             {/* Change Profile Picture */}
             <div 
               className="sp-setting-row"
-              onClick={() => handleActionClick('picture')}
+              onClick={() => setChangePhotoModalOpen(true)}
               role="button"
               tabIndex={0}
             >
@@ -143,9 +295,17 @@ export default function ProfileTab({ showToast, onBack, user }) {
                     <circle cx="12" cy="13" r="4"/>
                   </svg>
                 </div>
-                <span className="sp-sr-label">Change Profile Picture</span>
+                <span className="sp-sr-label">Change Profile Photo</span>
               </div>
-              <span className="sp-sr-chevron">›</span>
+              <div className="sp-setting-photo-pill">
+                <ProfileAvatar
+                  src={studentProfile.photo}
+                  name={studentProfile.name}
+                  size={32}
+                  className="sp-setting-photo-thumb"
+                />
+                <span className="sp-sr-chevron">›</span>
+              </div>
             </div>
 
             {/* Change Email */}
@@ -288,19 +448,52 @@ export default function ProfileTab({ showToast, onBack, user }) {
           <div className="sp-dialog-box" onClick={(e) => e.stopPropagation()}>
             {activeModal === 'email' && (
               <>
-                <h4 className="sp-dialog-title">Update Email Address</h4>
-                <p className="sp-dialog-desc">Enter your primary contact email address for official reports & notifications.</p>
-                <input 
-                  type="email"
-                  className="sp-dialog-input"
-                  value={tempInput}
-                  onChange={(e) => setTempInput(e.target.value)}
-                  placeholder="name@example.com"
-                  autoFocus
-                />
+                <h4 className="sp-dialog-title">Change Email Address</h4>
+                <p className="sp-dialog-desc">
+                  Current Email: <strong>{studentProfile.email}</strong><br/>
+                  Enter your new email address below.
+                </p>
+
+                {emailError && (
+                  <div className="sp-avatar-modal-error-banner" style={{ margin: '0 0 14px 0', fontSize: '0.82rem' }}>
+                    <span>⚠️</span> {emailError}
+                  </div>
+                )}
+
+                <div style={{ marginBottom: '20px' }}>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>
+                    New Email Address
+                  </label>
+                  <input 
+                    type="email"
+                    className="sp-dialog-input"
+                    style={{ marginBottom: '0' }}
+                    value={newEmailInput}
+                    onChange={(e) => {
+                      setNewEmailInput(e.target.value);
+                      setEmailError('');
+                    }}
+                    placeholder="new.email@example.com"
+                    autoFocus
+                    disabled={isUpdatingEmail}
+                  />
+                </div>
+
                 <div className="sp-dialog-actions">
-                  <button className="sp-dialog-cancel-btn" onClick={() => setActiveModal(null)}>Cancel</button>
-                  <button className="sp-dialog-confirm-btn" onClick={() => handleSaveModal('email')}>Save Email</button>
+                  <button 
+                    className="sp-dialog-cancel-btn" 
+                    onClick={() => setActiveModal(null)}
+                    disabled={isUpdatingEmail}
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    className="sp-dialog-confirm-btn" 
+                    onClick={handleUpdateEmail}
+                    disabled={isUpdatingEmail}
+                  >
+                    {isUpdatingEmail ? 'Updating DB...' : 'Update Email'}
+                  </button>
                 </div>
               </>
             )}
@@ -308,18 +501,51 @@ export default function ProfileTab({ showToast, onBack, user }) {
             {activeModal === 'mobile' && (
               <>
                 <h4 className="sp-dialog-title">Change Mobile Number</h4>
-                <p className="sp-dialog-desc">Enter your active 10-digit mobile number for class SMS alerts & WhatsApp notices.</p>
-                <input 
-                  type="tel"
-                  className="sp-dialog-input"
-                  value={tempInput}
-                  onChange={(e) => setTempInput(e.target.value)}
-                  placeholder="+91 98301 11222"
-                  autoFocus
-                />
+                <p className="sp-dialog-desc">
+                  Current Number: <strong>{studentProfile.phone}</strong><br/>
+                  Enter your new 10-digit mobile number below.
+                </p>
+
+                {mobileError && (
+                  <div className="sp-avatar-modal-error-banner" style={{ margin: '0 0 14px 0', fontSize: '0.82rem' }}>
+                    <span>⚠️</span> {mobileError}
+                  </div>
+                )}
+
+                <div style={{ marginBottom: '20px' }}>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>
+                    New Mobile Number
+                  </label>
+                  <input 
+                    type="tel"
+                    className="sp-dialog-input"
+                    style={{ marginBottom: '0' }}
+                    value={newMobileInput}
+                    onChange={(e) => {
+                      setNewMobileInput(e.target.value);
+                      setMobileError('');
+                    }}
+                    placeholder="e.g. 9830111222"
+                    autoFocus
+                    disabled={isUpdatingMobile}
+                  />
+                </div>
+
                 <div className="sp-dialog-actions">
-                  <button className="sp-dialog-cancel-btn" onClick={() => setActiveModal(null)}>Cancel</button>
-                  <button className="sp-dialog-confirm-btn" onClick={() => handleSaveModal('mobile')}>Save Number</button>
+                  <button 
+                    className="sp-dialog-cancel-btn" 
+                    onClick={() => setActiveModal(null)}
+                    disabled={isUpdatingMobile}
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    className="sp-dialog-confirm-btn" 
+                    onClick={handleUpdateMobile}
+                    disabled={isUpdatingMobile}
+                  >
+                    {isUpdatingMobile ? 'Updating DB...' : 'Update Number'}
+                  </button>
                 </div>
               </>
             )}
@@ -327,52 +553,74 @@ export default function ProfileTab({ showToast, onBack, user }) {
             {activeModal === 'password' && (
               <>
                 <h4 className="sp-dialog-title">Change Password</h4>
-                <p className="sp-dialog-desc">Enter a new secure password (minimum 6 characters).</p>
-                <input 
-                  type="password"
-                  className="sp-dialog-input"
-                  value={tempInput}
-                  onChange={(e) => setTempInput(e.target.value)}
-                  placeholder="Enter new password"
-                  autoFocus
-                />
+                <p className="sp-dialog-desc">
+                  Create a secure new password (minimum 6 characters).<br/>
+                  Enter and confirm your new password below.
+                </p>
+
+                {passwordError && (
+                  <div className="sp-avatar-modal-error-banner" style={{ margin: '0 0 14px 0', fontSize: '0.82rem' }}>
+                    <span>⚠️</span> {passwordError}
+                  </div>
+                )}
+
+                <div style={{ marginBottom: '14px' }}>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>
+                    1. Enter New Password
+                  </label>
+                  <input 
+                    type="password"
+                    className="sp-dialog-input"
+                    style={{ marginBottom: '0' }}
+                    value={newPasswordInput}
+                    onChange={(e) => {
+                      setNewPasswordInput(e.target.value);
+                      setPasswordError('');
+                    }}
+                    placeholder="Enter at least 6 characters"
+                    autoFocus
+                    disabled={isUpdatingPassword}
+                  />
+                </div>
+
+                <div style={{ marginBottom: '20px' }}>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#475569', marginBottom: '6px' }}>
+                    2. Confirm New Password
+                  </label>
+                  <input 
+                    type="password"
+                    className="sp-dialog-input"
+                    style={{ marginBottom: '0' }}
+                    value={confirmPasswordInput}
+                    onChange={(e) => {
+                      setConfirmPasswordInput(e.target.value);
+                      setPasswordError('');
+                    }}
+                    placeholder="Re-enter new password"
+                    disabled={isUpdatingPassword}
+                  />
+                </div>
+
                 <div className="sp-dialog-actions">
-                  <button className="sp-dialog-cancel-btn" onClick={() => setActiveModal(null)}>Cancel</button>
-                  <button className="sp-dialog-confirm-btn" onClick={() => handleSaveModal('password')}>Update Password</button>
+                  <button 
+                    className="sp-dialog-cancel-btn" 
+                    onClick={() => setActiveModal(null)}
+                    disabled={isUpdatingPassword}
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    className="sp-dialog-confirm-btn" 
+                    onClick={handleUpdatePassword}
+                    disabled={isUpdatingPassword}
+                  >
+                    {isUpdatingPassword ? 'Updating DB...' : 'Confirm & Update Password'}
+                  </button>
                 </div>
               </>
             )}
 
-            {activeModal === 'picture' && (
-              <>
-                <h4 className="sp-dialog-title">Change Profile Picture</h4>
-                <p className="sp-dialog-desc">Upload a new photo from your device or choose an avatar.</p>
-                <div className="sp-dialog-photo-picker">
-                  <img src={studentProfile.photo} alt="Current" className="sp-dpp-current" />
-                  <label className="sp-dpp-upload-btn">
-                    <span>📁 Choose File</span>
-                    <input 
-                      type="file" 
-                      accept="image/*"
-                      style={{ display: 'none' }}
-                      onChange={(e) => {
-                        if (e.target.files && e.target.files[0]) {
-                          const reader = new FileReader();
-                          reader.onload = (uploadEvent) => {
-                            setStudentProfile(prev => ({ ...prev, photo: uploadEvent.target.result }));
-                            handleSaveModal('picture');
-                          };
-                          reader.readAsDataURL(e.target.files[0]);
-                        }
-                      }}
-                    />
-                  </label>
-                </div>
-                <div className="sp-dialog-actions">
-                  <button className="sp-dialog-cancel-btn" onClick={() => setActiveModal(null)}>Close</button>
-                </div>
-              </>
-            )}
+
 
             {activeModal === 'support' && (
               <>
@@ -438,6 +686,23 @@ export default function ProfileTab({ showToast, onBack, user }) {
         onClose={() => setProfileCardOpen(false)}
         studentData={studentProfile}
         showToast={showToast}
+      />
+
+      {/* Change Profile Photo Modal */}
+      <ChangeProfilePictureModal
+        isOpen={changePhotoModalOpen}
+        onClose={() => setChangePhotoModalOpen(false)}
+        currentPhoto={studentProfile.photo}
+        userName={studentProfile.name}
+        showToast={showToast}
+        onUploadSuccess={(newAvatarUrl) => {
+          setStudentProfile(prev => ({ ...prev, photo: newAvatarUrl }));
+          if (onUpdateUser) onUpdateUser({ avatar_url: newAvatarUrl });
+        }}
+        onRemoveSuccess={() => {
+          setStudentProfile(prev => ({ ...prev, photo: null }));
+          if (onUpdateUser) onUpdateUser({ avatar_url: null });
+        }}
       />
     </div>
   );

@@ -1,5 +1,6 @@
 import React, { useRef, useEffect } from 'react';
 import NotificationPanel from './NotificationPanel';
+import ProfileAvatar from './ProfileAvatar';
 
 export default function TopHeader({
   notificationOpen,
@@ -102,17 +103,12 @@ export default function TopHeader({
             role="button"
             tabIndex={0}
           >
-            {avatarUrl ? (
-              <img 
-                src={avatarUrl} 
-                alt={displayName} 
-                className="sp-avatar-img"
-              />
-            ) : (
-              <div className="sp-avatar-initials-badge">
-                {initials}
-              </div>
-            )}
+            <ProfileAvatar
+              src={avatarUrl}
+              name={displayName}
+              size={38}
+              className="sp-avatar-img"
+            />
           </div>
 
           {profileDropdownOpen && (

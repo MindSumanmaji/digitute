@@ -1,22 +1,31 @@
 import React, { useState } from 'react';
 import StudentProfileCardModal from './StudentProfileCardModal';
+import ChangeProfilePictureModal from './ChangeProfilePictureModal';
+import ProfileAvatar from './ProfileAvatar';
 
 export default function StudentProfilePage({
   studentProfile,
   onBack,
   onOpenSettings,
-  onLogout
+  onLogout,
+  onUpdateUser,
+  showToast
 }) {
   const [activeModal, setActiveModal] = useState(null); // 'support' | 'about'
   const [profileCardOpen, setProfileCardOpen] = useState(false);
+  const [changePhotoModalOpen, setChangePhotoModalOpen] = useState(false);
 
-  const student = studentProfile || {
-    name: 'Suman Maji',
-    batch: 'Class XII - Science (Batch A)',
-    session: '2026 (July - Dec)',
-    phone: '+91 98301 11222',
-    email: 'suman.maji@digitute.app',
-    photo: null
+  const student = {
+    ...(studentProfile || {}),
+    id: studentProfile?.id || studentProfile?.student_id,
+    student_id: studentProfile?.student_id || studentProfile?.id,
+    isMe: true,
+    name: studentProfile?.name || 'Ram Dey',
+    batch: studentProfile?.batch || 'WBJEE 2027',
+    session: studentProfile?.session || '2026 - 2027',
+    phone: studentProfile?.phone || '',
+    email: studentProfile?.email || '',
+    photo: studentProfile?.photo || null
   };
 
   const getInitials = (name) => {
@@ -49,19 +58,29 @@ export default function StudentProfilePage({
 
       <div className="sp-sfp-body-container">
         {/* Centered Avatar with refined border and glow */}
-        <div className="sp-sfp-avatar-wrap">
+        <div className="sp-sfp-avatar-wrap" style={{ cursor: 'pointer' }} onClick={() => setChangePhotoModalOpen(true)} title="Change Profile Photo">
           <div className="sp-sfp-avatar-bg-glow" />
-          {student.photo ? (
-            <img
-              src={student.photo}
-              alt={student.name}
-              className="sp-sfp-avatar-img"
-            />
-          ) : (
-            <div className="sp-sfp-avatar-initials-badge">
-              {getInitials(student.name)}
-            </div>
-          )}
+          <ProfileAvatar
+            src={student.photo}
+            name={student.name}
+            size={114}
+            className="sp-sfp-avatar-img"
+          />
+          <button
+            type="button"
+            className="sp-sfp-avatar-edit-badge"
+            onClick={(e) => {
+              e.stopPropagation();
+              setChangePhotoModalOpen(true);
+            }}
+            title="Change Profile Photo"
+            aria-label="Change Profile Photo"
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+              <circle cx="12" cy="13" r="4"/>
+            </svg>
+          </button>
         </div>
 
         {/* Student Name */}
@@ -232,6 +251,21 @@ export default function StudentProfilePage({
         isOpen={profileCardOpen}
         onClose={() => setProfileCardOpen(false)}
         studentData={student}
+      />
+
+      {/* Change Profile Photo Modal */}
+      <ChangeProfilePictureModal
+        isOpen={changePhotoModalOpen}
+        onClose={() => setChangePhotoModalOpen(false)}
+        currentPhoto={student.photo}
+        userName={student.name}
+        showToast={showToast}
+        onUploadSuccess={(newAvatarUrl) => {
+          if (onUpdateUser) onUpdateUser({ avatar_url: newAvatarUrl });
+        }}
+        onRemoveSuccess={() => {
+          if (onUpdateUser) onUpdateUser({ avatar_url: null });
+        }}
       />
     </div>
   );

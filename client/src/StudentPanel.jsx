@@ -78,12 +78,25 @@ export default function StudentPanel({ onBackToLanding }) {
     showToast(`Payment of ${amt} received successfully via Razorpay! Receipt generated.`);
   };
 
+  const handleUpdateUser = (fields) => {
+    setCurrentUser((prev) => {
+      const updated = { ...prev, ...fields };
+      try {
+        localStorage.setItem('digitute_user', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+  };
+
   const studentProfileData = currentUser ? {
-    name: currentUser.full_name || 'Suman Maji',
-    batch: (Array.isArray(currentUser.batches) ? currentUser.batches[0]?.name : currentUser.batches?.name) || currentUser.batch || 'Class XII - Science (Batch A)',
-    session: '2026 (July - Dec)',
-    phone: currentUser.phone || '+91 98301 11222',
-    email: currentUser.email || 'suman.maji@digitute.app',
+    id: currentUser.id,
+    student_id: currentUser.id,
+    isMe: true,
+    name: currentUser.full_name || 'Ram Dey',
+    batch: (Array.isArray(currentUser.batches) ? currentUser.batches[0]?.name : currentUser.batches?.name) || currentUser.batch || 'WBJEE 2027',
+    session: '2026 - 2027',
+    phone: currentUser.phone || '',
+    email: currentUser.email || '',
     photo: currentUser.avatar_url || currentUser.photo || null
   } : undefined;
 
@@ -180,11 +193,13 @@ export default function StudentPanel({ onBackToLanding }) {
               onBack={() => setActiveTab('dashboard')}
               onOpenSettings={() => setActiveTab('settings')}
               onLogout={onBackToLanding}
+              onUpdateUser={handleUpdateUser}
+              showToast={showToast}
             />
           )}
 
           {activeTab === 'settings' && (
-            <ProfileTab showToast={showToast} onBack={() => setActiveTab('dashboard')} user={currentUser} />
+            <ProfileTab showToast={showToast} onBack={() => setActiveTab('dashboard')} user={currentUser} onUpdateUser={handleUpdateUser} />
           )}
         </main>
       </div>

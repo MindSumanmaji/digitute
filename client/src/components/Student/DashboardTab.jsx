@@ -118,9 +118,15 @@ export default function DashboardTab({ setActiveTab, user }) {
   }, [dashboardSummary, routinesList]);
 
   // Attendance metrics
-  const attendanceRate = dashboardSummary?.attendance_percentage ?? attendanceData?.attendance_percentage ?? 100;
   const totalClasses = dashboardSummary?.total_classes ?? attendanceData?.total_classes ?? 0;
   const presentClasses = dashboardSummary?.present_classes ?? attendanceData?.present_classes ?? 0;
+  const attendanceRate = totalClasses > 0
+    ? (dashboardSummary?.attendance_percentage ?? attendanceData?.attendance_percentage ?? 0)
+    : 100;
+
+  // Average Score metrics from live DB
+  const avgScoreRate = dashboardSummary?.avg_score_percentage != null ? dashboardSummary.avg_score_percentage : 0;
+  const testsTakenCount = dashboardSummary?.tests_taken_count ?? 0;
 
   // Fee due
   const totalDue = dashboardSummary?.total_due != null ? dashboardSummary.total_due : 0;
@@ -388,17 +394,23 @@ export default function DashboardTab({ setActiveTab, user }) {
           </div>
           <div className="sp-dash-stat-body">
             <span className="sp-dash-stat-label">Avg. Score</span>
-            <div className="sp-dash-stat-val">78%</div>
-            <span className="sp-dash-stat-sub">Across academic tests</span>
+            <div className="sp-dash-stat-val">
+              {testsTakenCount > 0 ? `${avgScoreRate}%` : '—'}
+            </div>
+            <span className="sp-dash-stat-sub">
+              {testsTakenCount > 0 ? `Across ${testsTakenCount} test${testsTakenCount > 1 ? 's' : ''}` : 'No evaluated tests'}
+            </span>
           </div>
           <div className="sp-dash-stat-footer">
-            <span className="sp-dash-stat-trend trend-green">↑ Growth Track</span>
+            <span className={`sp-dash-stat-trend ${avgScoreRate >= 75 ? 'trend-green' : avgScoreRate >= 50 ? 'trend-blue' : 'trend-amber'}`}>
+              {testsTakenCount === 0 ? 'No tests taken' : avgScoreRate >= 75 ? '↑ High Performer' : avgScoreRate >= 50 ? '↑ Consistent' : 'Needs Practice'}
+            </span>
             <div className="sp-dash-mini-bars bars-blue">
-              <span style={{ height: '40%' }} />
-              <span style={{ height: '55%' }} />
-              <span style={{ height: '70%' }} />
-              <span style={{ height: '75%' }} />
-              <span style={{ height: '95%' }} />
+              <span style={{ height: `${Math.min(100, Math.max(15, avgScoreRate * 0.4))}%` }} />
+              <span style={{ height: `${Math.min(100, Math.max(25, avgScoreRate * 0.6))}%` }} />
+              <span style={{ height: `${Math.min(100, Math.max(35, avgScoreRate * 0.8))}%` }} />
+              <span style={{ height: `${Math.min(100, Math.max(45, avgScoreRate * 0.9))}%` }} />
+              <span style={{ height: `${Math.min(100, Math.max(20, avgScoreRate))}%` }} />
             </div>
           </div>
         </div>
@@ -468,29 +480,6 @@ export default function DashboardTab({ setActiveTab, user }) {
 
       {/* 3. MAIN VERTICAL STACK */}
       <div className="sp-dash-exact-vertical-stack">
-        {/* Quick Access */}
-        <div className="sp-dash-exact-card sp-dash-exact-qa-card">
-          <div className="sp-dash-qa-title-row">
-            <span className="sp-dash-qa-bolt">⚡</span>
-            <h3 className="sp-dash-qa-title">Quick Access</h3>
-          </div>
-
-          <div className="sp-dash-exact-qa-grid">
-            {quickActions.map((qa) => (
-              <button
-                key={qa.id}
-                className="sp-dash-exact-qa-tile"
-                onClick={() => setActiveTab(qa.id)}
-              >
-                <div className="sp-dash-exact-qa-icon" style={{ background: qa.bg, color: qa.color }}>
-                  {qa.icon}
-                </div>
-                <span className="sp-dash-exact-qa-label">{qa.label}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-
         {/* 3. Today's Timetable */}
         <div className="sp-dash-exact-card sp-dash-timetable-card">
           <div className="sp-dash-exact-card-header">
@@ -569,131 +558,29 @@ export default function DashboardTab({ setActiveTab, user }) {
           </div>
         </div>
 
-        {/* 4. Monthly Attendance Calendar */}
-        <div className="sp-dash-exact-card sp-dash-exact-calendar-card">
-          <div className="sp-dash-exact-cal-header">
-            <div className="sp-dash-card-title-group">
-              <div className="sp-dash-icon-circle-blue">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2.2">
-                  <rect width="18" height="18" x="3" y="4" rx="2"/>
-                  <line x1="16" x2="16" y1="2" y2="6"/>
-                  <line x1="8" x2="8" y1="2" y2="6"/>
-                  <line x1="3" x2="21" y1="10" y2="10"/>
-                </svg>
-              </div>
-              <div>
-                <h3 className="sp-dash-exact-cal-title">{currentMonthName}</h3>
-                <p className="sp-dash-exact-card-subtitle">Monthly Attendance Calendar</p>
-              </div>
-            </div>
-
-            <div className="sp-dash-exact-cal-actions">
-              <button
-                className="sp-dash-cal-view-full-btn"
-                onClick={() => setActiveTab('classes')}
-                title="Open Full Attendance Calendar"
-              >
-                View Full →
-              </button>
-              <div className="sp-dash-exact-cal-arrows">
-                <button
-                  className="sp-dash-cal-btn"
-                  onClick={() => setMonthOffset((prev) => Math.max(-2, prev - 1))}
-                  aria-label="Previous Month"
-                  title="Previous Month"
-                >
-                  ‹
-                </button>
-                <button
-                  className="sp-dash-cal-btn"
-                  onClick={() => setMonthOffset((prev) => Math.min(2, prev + 1))}
-                  aria-label="Next Month"
-                  title="Next Month"
-                >
-                  ›
-                </button>
-              </div>
-            </div>
+        {/* Quick Access */}
+        <div className="sp-dash-exact-card sp-dash-exact-qa-card">
+          <div className="sp-dash-qa-title-row">
+            <span className="sp-dash-qa-bolt">⚡</span>
+            <h3 className="sp-dash-qa-title">Quick Access</h3>
           </div>
 
-          <div className="sp-dash-cal-inner-box">
-            <div className="sp-dash-exact-cal-weekdays">
-              {daysOfWeek.map((day) => (
-                <span key={day}>{day}</span>
-              ))}
-            </div>
-
-            <div className="sp-dash-exact-cal-grid">
-              {prevDays.map((d) => (
-                <div key={`p-${d}`} className="sp-dash-cal-num-cell muted-prev">
-                  <span>{d}</span>
+          <div className="sp-dash-exact-qa-grid">
+            {quickActions.map((qa) => (
+              <button
+                key={qa.id}
+                className="sp-dash-exact-qa-tile"
+                onClick={() => setActiveTab(qa.id)}
+              >
+                <div className="sp-dash-exact-qa-icon" style={{ background: qa.bg, color: qa.color }}>
+                  {qa.icon}
                 </div>
-              ))}
-              {currentDays.map((d) => {
-                const isPresent = presentDays.includes(d);
-                const isAbsent = absentDays.includes(d);
-                const isToday = d === todayDateNum && monthOffset === 0;
-                const isSelected = selectedDate === d;
-
-                return (
-                  <div
-                    key={`c-${d}`}
-                    className={`sp-dash-cal-num-cell ${isToday ? 'is-today-active' : ''} ${isSelected && !isToday ? 'is-selected-day' : ''}`}
-                    onClick={() => setSelectedDate(d)}
-                    title={`Day ${d} ${currentMonthName} - Click to inspect`}
-                  >
-                    <span className="sp-dash-day-number">{d}</span>
-                    {!isToday && isPresent && <span className="sp-dash-cal-dot dot-present" />}
-                    {!isToday && isAbsent && <span className="sp-dash-cal-dot dot-absent" />}
-                  </div>
-                );
-              })}
-            </div>
-
-            {selectedDate && (
-              <div
-                className="sp-dash-cal-selected-strip"
-                onClick={() => setActiveTab('classes')}
-                title="Click to view timetable for this day in Classes & Attendance"
-              >
-                <div className="sp-dash-cal-selected-info">
-                  <span className="sp-dash-cal-selected-pill">
-                    {selectedDate} {currentMonthName.split(' ')[0]}
-                  </span>
-                  <span className="sp-dash-cal-selected-text">
-                    {presentDays.includes(selectedDate)
-                      ? '✓ Attended Classes'
-                      : absentDays.includes(selectedDate)
-                      ? '✗ Absent'
-                      : selectedDate >= todayDateNum && monthOffset === 0
-                      ? '⏰ Scheduled Classes'
-                      : 'No class record'}
-                  </span>
-                </div>
-                <span className="sp-dash-cal-selected-arrow">Open Timetable →</span>
-              </div>
-            )}
-
-            <div className="sp-dash-exact-cal-footer">
-              <div
-                className="sp-dash-legend-badge clickable-legend"
-                onClick={() => setActiveTab('classes')}
-                title="View present classes in Attendance page"
-              >
-                <span className="sp-dash-cal-dot dot-present" />
-                <span>Present ({presentCount})</span>
-              </div>
-              <div
-                className="sp-dash-legend-badge clickable-legend"
-                onClick={() => setActiveTab('classes')}
-                title="View absent records in Attendance page"
-              >
-                <span className="sp-dash-cal-dot dot-absent" />
-                <span>Absent ({absentCount})</span>
-              </div>
-            </div>
+                <span className="sp-dash-exact-qa-label">{qa.label}</span>
+              </button>
+            ))}
           </div>
         </div>
+
       </div>
     </div>
   );
