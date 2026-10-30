@@ -137,11 +137,22 @@ export default function MeritListPage({ test, onBack, showToast }) {
   const examDate = test.date || '31 Oct 2026';
   const examName = test.name || 'Batch Merit Assessment';
   const subjectName = test.subject || 'All Subjects';
-  const marksObtained = test.obtained !== undefined ? test.obtained : (myStudentRow?.score ?? 89);
-  const marksTotal = test.total !== undefined ? test.total : (myStudentRow?.total ?? 100);
-  const percentage = test.percentage || (myStudentRow?.pct ?? `${Math.round((marksObtained / marksTotal) * 100)}%`);
-  const gradeAwarded = test.grade || 'A';
-  const rankText = test.rank || (myStudentRow ? `#${myStudentRow.rank} of ${fullMeritList.length}` : '3rd of 20');
+
+  const marksObtained = myStudentRow?.score !== undefined 
+    ? myStudentRow.score 
+    : (test.obtained !== undefined ? test.obtained : 0);
+
+  const marksTotal = myStudentRow?.total !== undefined 
+    ? myStudentRow.total 
+    : (test.total !== undefined ? test.total : 100);
+
+  const percentage = myStudentRow?.pct || test.percentage || (marksTotal > 0 ? `${Math.round((marksObtained / marksTotal) * 100)}%` : '0%');
+  const pctNum = parseFloat(percentage) || (marksTotal > 0 ? Math.round((marksObtained / marksTotal) * 100) : 0);
+
+  const gradeAwarded = test.grade || (pctNum >= 90 ? 'A+' : pctNum >= 80 ? 'A' : pctNum >= 70 ? 'B+' : pctNum >= 60 ? 'B' : pctNum >= 50 ? 'C' : pctNum >= 40 ? 'D' : 'F');
+  const gradeClassAwarded = test.gradeClass || (pctNum >= 80 ? 'sp-grade-green' : pctNum >= 60 ? 'sp-grade-blue' : pctNum >= 40 ? 'sp-grade-amber' : 'sp-grade-red');
+
+  const rankText = test.rank || (myStudentRow ? `${myStudentRow.rank}${myStudentRow.rank === 1 ? 'st' : myStudentRow.rank === 2 ? 'nd' : myStudentRow.rank === 3 ? 'rd' : 'th'} of ${fullMeritList.length}` : '—');
 
   const handleDownloadRankCardPdf = async () => {
     if (isDownloadingPdf) return;
@@ -426,19 +437,19 @@ export default function MeritListPage({ test, onBack, showToast }) {
               <div className="sp-merit-user-summary-bar">
                 <div className="sp-mus-item">
                   <span className="sp-mus-label">Your Batch Rank</span>
-                  <strong className="sp-mus-val" style={{ color: '#0f172a' }}>{test.rank || '—'}</strong>
+                  <strong className="sp-mus-val" style={{ color: '#0f172a' }}>{rankText}</strong>
                 </div>
                 <div className="sp-mus-item">
                   <span className="sp-mus-label">Marks Obtained</span>
-                  <strong className="sp-mus-val" style={{ color: '#2563eb' }}>{test.obtained} / {test.total}</strong>
+                  <strong className="sp-mus-val" style={{ color: '#2563eb' }}>{marksObtained} / {marksTotal}</strong>
                 </div>
                 <div className="sp-mus-item">
                   <span className="sp-mus-label">Percentage</span>
-                  <strong className="sp-mus-val" style={{ color: '#16a34a' }}>{test.percentage}</strong>
+                  <strong className="sp-mus-val" style={{ color: '#16a34a' }}>{percentage}</strong>
                 </div>
                 <div className="sp-mus-item">
                   <span className="sp-mus-label">Grade Awarded</span>
-                  <span className={`sp-grade-badge ${test.gradeClass || 'sp-grade-blue'}`}>{test.grade}</span>
+                  <span className={`sp-grade-badge ${gradeClassAwarded}`}>{gradeAwarded}</span>
                 </div>
               </div>
 

@@ -633,8 +633,31 @@ export default function TestsTab({
             const rank1 = meritList.find(x => x.rank === 1);
             const rank2 = meritList.find(x => x.rank === 2);
             const rank3 = meritList.find(x => x.rank === 3);
-            const subsequentRanks = meritList.filter(x => x.rank >= 4);
-            const displayedRanks = showAllRecentRanks ? subsequentRanks : subsequentRanks.slice(0, 3);
+
+            // Ranks #4 and #5 to show below top 3 podium
+            const rank4 = meritList.find(x => x.rank === 4);
+            const rank5 = meritList.find(x => x.rank === 5);
+            const top4And5 = [rank4, rank5].filter(Boolean);
+
+            // Check if current user is in top 5
+            const currentUserInTop5 = [rank1, rank2, rank3, rank4, rank5].some(r => r && r.isMe);
+
+            // If user is not in top 5, find user's rank row in merit list to display directly below #4 & #5
+            const myRankItem = !currentUserInTop5 ? meritList.find(x => x.isMe) : null;
+
+            const displayedRanks = myRankItem ? [...top4And5, myRankItem] : top4And5;
+
+            // Target test object to pass to MeritListPage
+            const targetExamForMerit = latestExamLeaderboard ? {
+              id: latestExamLeaderboard.id || (evaluatedResults && evaluatedResults[0]?.id) || '1da84db8-eb03-47ab-9e25-a6bc72270fdb',
+              name: latestExamLeaderboard.title || 'week test',
+              title: latestExamLeaderboard.title || 'week test',
+              subject: latestExamLeaderboard.subject || 'Physics',
+              total: latestExamLeaderboard.total_marks || 100,
+              total_marks: latestExamLeaderboard.total_marks || 100,
+              batch: latestExamLeaderboard.batch_name || 'WBJEE 2027',
+              date: evaluatedResults && evaluatedResults[0]?.date ? evaluatedResults[0].date : '31 Oct 2026'
+            } : (evaluatedResults && evaluatedResults[0] ? evaluatedResults[0] : null);
 
             return (
               <div className="sp-card sp-leaderboard-hero-card" id="sp-topper-board">
@@ -872,20 +895,20 @@ export default function TestsTab({
                         </div>
                       ))}
 
-                      {/* View All / Toggle Button */}
-                      {meritList.length > 5 && (
-                        <div style={{ textAlign: 'center', marginTop: '10px' }}>
-                          <button 
-                            className="sp-rrc-view-all-btn"
-                            onClick={() => setShowAllRecentRanks(!showAllRecentRanks)}
-                          >
-                            {showAllRecentRanks 
-                              ? '▲ Show Top 5 Only' 
-                              : `▼ View Full Merit List (${meritList.length} Students)`
+                      {/* View Full Merit List Button -> Redirects to Full Merit List Page */}
+                      <div style={{ textAlign: 'center', marginTop: '14px' }}>
+                        <button 
+                          type="button"
+                          className="sp-rrc-view-all-btn"
+                          onClick={() => {
+                            if (targetExamForMerit) {
+                              setViewingMeritTest(targetExamForMerit);
                             }
-                          </button>
-                        </div>
-                      )}
+                          }}
+                        >
+                          View Full Merit List ({meritList.length} Students) &gt;
+                        </button>
+                      </div>
                     </div>
                   </>
                 ) : (
