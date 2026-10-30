@@ -53,14 +53,30 @@ export default function FinanceView({
     return `${y}-${m}`;
   }, []);
 
-  const [selectedMonth, setSelectedMonth] = useState(currentMonthStr);
   const [selectedBatch, setSelectedBatch] = useState('ALL');
+  const [selectedMonth, setSelectedMonth] = useState('ALL');
+  const [selectedYear, setSelectedYear] = useState('ALL');
   const [selectedStatus, setSelectedStatus] = useState('ALL');
-  const [activeTab, setActiveTab] = useState('demands'); // 'demands' | 'batches'
+  const [activeTab, setActiveTab] = useState('demands'); // 'demands' | 'batches' | 'queue'
+
+  const selectedBatchObj = useMemo(() => {
+    if (!selectedBatch || selectedBatch === 'ALL') return null;
+    return batches.find(b => b.id === selectedBatch) || null;
+  }, [batches, selectedBatch]);
+
+  const isOneTimeBatch = selectedBatchObj?.fee_type === 'ONE_TIME';
+
+  // Cash Verification Queue State
+  const [verificationQueue, setVerificationQueue] = useState([]);
+  const [queueCount, setQueueCount] = useState(0);
+  const [totalPendingCash, setTotalPendingCash] = useState(0);
+  const [rejectModalItem, setRejectModalItem] = useState(null);
+  const [rejectReason, setRejectReason] = useState('Cash not received at center counter');
+  const [actionLoadingId, setActionLoadingId] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
 
   const [invoices, setInvoices] = useState([]);
-  const [summary, setSummary] = useState({
+  const [globalSummary, setGlobalSummary] = useState({
     total_invoices_count: 0,
     total_demanded_amount: 0,
     total_collected_amount: 0,
@@ -94,22 +110,64 @@ export default function FinanceView({
     discount_amount: 0
   });
 
+  const fetchQueue = useCallback(async () => {
+    try {
+      const res = await apiRequest('/api/admin/payments/verification-queue');
+      setVerificationQueue(res.items || []);
+      setQueueCount(res.queue_count || 0);
+      setTotalPendingCash(res.total_pending_cash || 0);
+    } catch (err) {
+      console.warn('Queue fetch error:', err.message);
+    }
+  }, []);
+
+  const handleApproveCash = async (paymentId) => {
+    try {
+      setActionLoadingId(paymentId);
+      await apiRequest(`/api/admin/payments/${paymentId}/approve`, { method: 'POST' });
+      showToast('Payment Approved', 'Cash received and invoice marked as PAID. Official receipt issued.');
+      fetchInvoices();
+      fetchQueue();
+    } catch (err) {
+      showToast('Approval Failed', err.message || 'Could not approve payment.');
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  const handleRejectCash = async () => {
+    if (!rejectModalItem) return;
+    try {
+      setActionLoadingId(rejectModalItem.id);
+      await apiRequest(`/api/admin/payments/${rejectModalItem.id}/reject`, {
+        method: 'POST',
+        body: JSON.stringify({ reason: rejectReason })
+      });
+      showToast('Payment Rejected', `Request rejected. Note logged: "${rejectReason}"`);
+      setRejectModalItem(null);
+      fetchInvoices();
+      fetchQueue();
+    } catch (err) {
+      showToast('Rejection Failed', err.message || 'Could not reject payment.');
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
   // Load Invoices from Backend API
   const fetchInvoices = useCallback(async () => {
     setLoading(true);
     try {
       const queryParams = new URLSearchParams();
-      if (selectedMonth && selectedMonth !== 'ALL') {
-        if (selectedMonth.includes('-')) {
-          const [y, m] = selectedMonth.split('-');
-          queryParams.append('billing_year', y);
-          queryParams.append('billing_month', m);
-        } else {
-          queryParams.append('billing_month', selectedMonth);
-        }
-      }
+
       if (selectedBatch && selectedBatch !== 'ALL') {
         queryParams.append('batch_id', selectedBatch);
+      }
+      if (selectedMonth && selectedMonth !== 'ALL') {
+        queryParams.append('billing_month', selectedMonth);
+      }
+      if (selectedYear && selectedYear !== 'ALL') {
+        queryParams.append('billing_year', selectedYear);
       }
       if (selectedStatus && selectedStatus !== 'ALL') {
         queryParams.append('status', selectedStatus);
@@ -122,7 +180,7 @@ export default function FinanceView({
       if (res) {
         setInvoices(res.invoices || []);
         if (res.summary) {
-          setSummary(res.summary);
+          setGlobalSummary(res.global_summary || res.summary);
         }
       }
     } catch (err) {
@@ -131,11 +189,12 @@ export default function FinanceView({
     } finally {
       setLoading(false);
     }
-  }, [selectedMonth, selectedBatch, selectedStatus, searchTerm, showToast]);
+  }, [selectedBatch, selectedMonth, selectedYear, selectedStatus, searchTerm, showToast]);
 
   useEffect(() => {
     fetchInvoices();
-  }, [fetchInvoices]);
+    fetchQueue();
+  }, [fetchInvoices, fetchQueue]);
 
   // Copy invoice number helper
   const handleCopy = (text) => {
@@ -150,7 +209,7 @@ export default function FinanceView({
     const defaultBatch = targetBatchId || (batches[0]?.id || 'ALL');
     setBatchForm({
       batch_id: defaultBatch,
-      billing_month: selectedMonth || currentMonthStr
+      billing_month: currentMonthStr
     });
     setDemandTab('batch');
     setDemandModalOpen(true);
@@ -196,9 +255,7 @@ export default function FinanceView({
       );
 
       setDemandModalOpen(false);
-      if (batchForm.billing_month && !isOneTime) {
-        setSelectedMonth(batchForm.billing_month);
-      }
+
       fetchInvoices();
     } catch (err) {
       console.error('Batch demand failed:', err);
@@ -307,20 +364,62 @@ export default function FinanceView({
     });
   }, [batches, students, invoices]);
 
-  // Month selector options
-  const monthOptions = useMemo(() => {
-    const opts = [];
-    const now = new Date();
-    for (let i = -3; i <= 3; i++) {
-      const d = new Date(now.getFullYear(), now.getMonth() + i, 1);
-      const val = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      opts.push({
-        value: val,
-        label: d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
-      });
+  // Print official receipt for a paid invoice
+  const handlePrintPaidReceipt = (inv) => {
+    if (!inv) return;
+    const pmts = inv.payments || [];
+    const primaryPmt = pmts.find(p => p.status === 'SUCCESS') || pmts[0] || {};
+    const invNo = inv.invoice_number || 'INV-2026';
+    const dateStr = primaryPmt.paid_at
+      ? new Date(primaryPmt.paid_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+      : 'Online Verified';
+    const amt = Number(inv.amount_paid || inv.payable_amount || 0).toLocaleString('en-IN');
+    const rzpId = primaryPmt.razorpay_payment_id || 'Online Verified';
+
+    const printWin = window.open('', '_blank', 'width=650,height=750');
+    if (printWin) {
+      printWin.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Fee Receipt - ${invNo}</title>
+          <style>
+            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 36px; color: #1e293b; margin: 0; }
+            .header { border-bottom: 2px solid #0d9488; padding-bottom: 16px; margin-bottom: 24px; display: flex; justify-content: space-between; align-items: flex-end; }
+            .title { font-size: 24px; font-weight: 800; color: #0d9488; margin: 0; }
+            .badge { background: #dcfce7; color: #15803d; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 700; }
+            .row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #f1f5f9; font-size: 14px; }
+            .total { font-size: 18px; font-weight: 800; border-top: 2px solid #0d9488; margin-top: 14px; padding-top: 14px; border-bottom: none; }
+            .footer { margin-top: 40px; text-align: center; font-size: 12px; color: #94a3b8; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div>
+              <h1 class="title">DigiTute Institute</h1>
+              <p style="margin:4px 0 0;font-size:13px;color:#64748b;">Official Tuition Fee Payment Receipt</p>
+            </div>
+            <span class="badge">✓ PAID & VERIFIED</span>
+          </div>
+          <div class="row"><span>Invoice Number:</span><strong>${invNo}</strong></div>
+          <div class="row"><span>Student Name:</span><strong>${inv.student_name || 'Student'}</strong></div>
+          <div class="row"><span>Course Batch:</span><strong>${inv.batch_name || 'Enrolled Batch'}</strong></div>
+          <div class="row"><span>Transaction Date:</span><strong>${dateStr}</strong></div>
+          <div class="row"><span>Payment Mode:</span><strong>${primaryPmt.payment_mode || 'Razorpay (Online)'}</strong></div>
+          <div class="row"><span>Razorpay Payment ID:</span><strong style="font-family:monospace;">${rzpId}</strong></div>
+          <div class="row total"><span>Total Amount Settled:</span><span style="color:#0d9488;">₹${amt}</span></div>
+          <div class="footer">
+            <p>This is a computer-generated official receipt issued by DigiTute Education Platform.</p>
+          </div>
+          <script>
+            window.onload = function() { window.print(); }
+          </script>
+        </body>
+        </html>
+      `);
+      printWin.document.close();
     }
-    return opts;
-  }, []);
+  };
 
   return (
     <div className="module-container" style={{ animation: 'fade-in 0.25s ease' }}>
@@ -330,9 +429,6 @@ export default function FinanceView({
           <h1 style={{ fontSize: 22, fontWeight: 700, margin: 0, color: 'var(--text)' }}>
             Finance & Fee Demands
           </h1>
-          <p style={{ margin: '4px 0 0 0', color: 'var(--text-3)', fontSize: 13.5 }}>
-            Issue monthly tuition fee demands, monitor batch billing coverage and track student online settlements.
-          </p>
         </div>
 
         <div className="module-actions" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
@@ -346,20 +442,7 @@ export default function FinanceView({
             <RefreshCw size={15} className={loading ? 'spin-anim' : ''} />
           </button>
 
-          {/* Month Selector Filter */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, padding: '4px 10px' }}>
-            <Calendar size={15} style={{ color: 'var(--text-3)' }} />
-            <select
-              value={selectedMonth}
-              onChange={(e) => setSelectedMonth(e.target.value)}
-              style={{ border: 'none', background: 'transparent', fontWeight: 600, fontSize: 13, color: 'var(--text)', cursor: 'pointer', outline: 'none' }}
-            >
-              <option value="ALL">All Billing Months</option>
-              {monthOptions.map(m => (
-                <option key={m.value} value={m.value}>{m.label}</option>
-              ))}
-            </select>
-          </div>
+
 
           {/* Primary Action: Demand Monthly Fees Button */}
           <button
@@ -367,24 +450,24 @@ export default function FinanceView({
             onClick={() => handleOpenDemandModal()}
             style={{ minHeight: 36, background: 'var(--teal-dark)' }}
           >
-            <Plus size={16} /> Demand Monthly Fees
+            <Plus size={16} /> Issue Invoice
           </button>
         </div>
       </div>
 
       {/* Real-time Dynamic KPI Metric Cards (100% calculated from live invoices) */}
-      <div className="metrics-grid" style={{ marginTop: 8 }}>
+      <div className="metrics-grid" style={{ marginTop: 8, gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}>
         {/* Card 1: Total Demanded */}
         <div className="metric-card">
           <div className="metric-card-top">
             <div className="metric-icon teal-icon"><ReceiptText size={18} /></div>
             <span className="metric-change positive">
-              {summary.total_invoices_count} Invoices
+              {globalSummary.total_invoices_count} Invoices
             </span>
           </div>
-          <div className="metric-value">{formatINR(summary.total_demanded_amount)}</div>
+          <div className="metric-value">{formatINR(globalSummary.total_demanded_amount)}</div>
           <div className="metric-label">
-            Total Demanded ({selectedMonth === 'ALL' ? 'All Months' : getMonthLabel(selectedMonth)})
+            Total Demanded
           </div>
           <div className="metric-bottom">
             <span>Demanded across active enrolled students</span>
@@ -398,13 +481,13 @@ export default function FinanceView({
               <CheckCircle2 size={18} />
             </div>
             <span className="metric-change positive" style={{ color: '#059669' }}>
-              {summary.recovery_rate_percent}% cleared
+              {globalSummary.recovery_rate_percent}% cleared
             </span>
           </div>
-          <div className="metric-value">{formatINR(summary.total_collected_amount)}</div>
+          <div className="metric-value">{formatINR(globalSummary.total_collected_amount)}</div>
           <div className="metric-label">Total Fee Collected</div>
           <div className="metric-bottom">
-            <span>{summary.paid_count} settled · {summary.pending_count} pending</span>
+            <span>{globalSummary.paid_count} settled · {globalSummary.pending_count} pending</span>
           </div>
         </div>
 
@@ -413,17 +496,17 @@ export default function FinanceView({
           <div className="metric-card-top">
             <div className="metric-icon rose-icon"><AlertCircle size={18} /></div>
             <span className="metric-change negative">
-              {summary.pending_count} students due
+              {globalSummary.pending_count} students due
             </span>
           </div>
-          <div className="metric-value" style={{ color: summary.total_outstanding_amount > 0 ? '#b91c1c' : 'inherit' }}>
-            {formatINR(summary.total_outstanding_amount)}
+          <div className="metric-value" style={{ color: globalSummary.total_outstanding_amount > 0 ? '#b91c1c' : 'inherit' }}>
+            {formatINR(globalSummary.total_outstanding_amount)}
           </div>
           <div className="metric-label">Outstanding Unpaid Balance</div>
           <div className="metric-bottom">
             <span>
-              {summary.pending_count > 0 ? (
-                <strong style={{ color: '#d97706' }}>{summary.pending_count} pending payment demands</strong>
+              {globalSummary.pending_count > 0 ? (
+                <strong style={{ color: '#d97706' }}>{globalSummary.pending_count} pending payment demands</strong>
               ) : (
                 'All fee demands cleared'
               )}
@@ -431,24 +514,7 @@ export default function FinanceView({
           </div>
         </div>
 
-        {/* Card 4: Demands & Batch Coverage */}
-        <div className="metric-card">
-          <div className="metric-card-top">
-            <div className="metric-icon violet-icon"><Building2 size={18} /></div>
-            <span className="metric-change positive">{batches.length} Batches</span>
-          </div>
-          <div className="metric-value">
-            {batchBillingStats.filter(b => b.isDemanded).length} / {batches.length}
-          </div>
-          <div className="metric-label">Batches Invoiced ({getMonthLabel(selectedMonth) || 'Selected'})</div>
-          <div className="metric-bottom">
-            <span>
-              {batchBillingStats.filter(b => !b.isDemanded).length > 0
-                ? `${batchBillingStats.filter(b => !b.isDemanded).length} batches not demanded yet`
-                : 'All batches invoiced'}
-            </span>
-          </div>
-        </div>
+
       </div>
 
       {/* Logical Sub-Tabs */}
@@ -458,8 +524,8 @@ export default function FinanceView({
           onClick={() => setActiveTab('demands')}
         >
           <ReceiptText size={15} />
-          <span>Fee Demands & Invoices</span>
-          <span className="sub-tab-badge">{invoices.length}</span>
+          <span>Invoices</span>
+          <span className="sub-tab-badge">{globalSummary.total_invoices_count || invoices.length}</span>
         </button>
 
         <button
@@ -470,14 +536,29 @@ export default function FinanceView({
           <span>Batch Billing Overview</span>
           <span className="sub-tab-badge">{batches.length}</span>
         </button>
+
+        <button
+          className={`sub-tab ${activeTab === 'queue' ? 'active' : ''}`}
+          onClick={() => setActiveTab('queue')}
+          style={queueCount > 0 ? { color: '#b45309', fontWeight: 700 } : {}}
+        >
+          <ShieldCheck size={15} />
+          <span>Cash Verification Queue</span>
+          <span
+            className="sub-tab-badge"
+            style={queueCount > 0 ? { background: '#fef3c7', color: '#b45309', fontWeight: 800 } : {}}
+          >
+            {queueCount}
+          </span>
+        </button>
       </div>
 
-      {/* TAB 1: ALL FEE DEMANDS & INVOICES */}
+      {/* TAB 1:INVOICES */}
       {activeTab === 'demands' && (
         <div className="data-table-card" style={{ marginTop: 12 }}>
           {/* Table Filters & Search Toolbar */}
-          <div className="data-table-toolbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-            <div className="data-table-search" style={{ minWidth: 280 }}>
+          <div className="data-table-toolbar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'nowrap', gap: 12, overflowX: 'auto', padding: '12px 18px' }}>
+            <div className="data-table-search" style={{ width: 250, minWidth: 200, flexShrink: 0, height: 36 }}>
               <Search size={15} />
               <input
                 type="text"
@@ -487,18 +568,81 @@ export default function FinanceView({
               />
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'nowrap', flexShrink: 0 }}>
               {/* Batch Filter */}
               <select
                 value={selectedBatch}
-                onChange={(e) => setSelectedBatch(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setSelectedBatch(val);
+                  const found = batches.find(b => b.id === val);
+                  if (found?.fee_type === 'ONE_TIME') {
+                    setSelectedMonth('ALL');
+                    setSelectedYear('ALL');
+                  }
+                }}
                 className="subtle-select"
-                style={{ padding: '6px 10px', fontSize: 13 }}
+                style={{ padding: '6px 10px', fontSize: 13, height: 36 }}
               >
                 <option value="ALL">All Batches</option>
                 {batches.map(b => (
-                  <option key={b.id} value={b.id}>{b.name}</option>
+                  <option key={b.id} value={b.id}>
+                    {b.name} {b.fee_type === 'ONE_TIME' ? '(One-Time)' : ''}
+                  </option>
                 ))}
+              </select>
+
+              {/* Month Filter - Blocked if ONE_TIME */}
+              <select
+                disabled={isOneTimeBatch}
+                value={selectedMonth}
+                onChange={(e) => setSelectedMonth(e.target.value)}
+                className="subtle-select"
+                title={isOneTimeBatch ? 'Month filter is blocked for One-Time payment batches' : 'Filter by billing month'}
+                style={{
+                  padding: '6px 10px',
+                  fontSize: 13,
+                  height: 36,
+                  background: isOneTimeBatch ? '#f1f5f9' : '#fff',
+                  cursor: isOneTimeBatch ? 'not-allowed' : 'pointer',
+                  opacity: isOneTimeBatch ? 0.5 : 1
+                }}
+              >
+                <option value="ALL">All Months</option>
+                <option value="1">January</option>
+                <option value="2">February</option>
+                <option value="3">March</option>
+                <option value="4">April</option>
+                <option value="5">May</option>
+                <option value="6">June</option>
+                <option value="7">July</option>
+                <option value="8">August</option>
+                <option value="9">September</option>
+                <option value="10">October</option>
+                <option value="11">November</option>
+                <option value="12">December</option>
+              </select>
+
+              {/* Year Filter - Blocked if ONE_TIME */}
+              <select
+                disabled={isOneTimeBatch}
+                value={selectedYear}
+                onChange={(e) => setSelectedYear(e.target.value)}
+                className="subtle-select"
+                title={isOneTimeBatch ? 'Year filter is blocked for One-Time payment batches' : 'Filter by billing year'}
+                style={{
+                  padding: '6px 10px',
+                  fontSize: 13,
+                  height: 36,
+                  background: isOneTimeBatch ? '#f1f5f9' : '#fff',
+                  cursor: isOneTimeBatch ? 'not-allowed' : 'pointer',
+                  opacity: isOneTimeBatch ? 0.5 : 1
+                }}
+              >
+                <option value="ALL">All Years</option>
+                <option value="2026">2026</option>
+                <option value="2027">2027</option>
+                <option value="2025">2025</option>
               </select>
 
               {/* Status Filter */}
@@ -506,15 +650,15 @@ export default function FinanceView({
                 value={selectedStatus}
                 onChange={(e) => setSelectedStatus(e.target.value)}
                 className="subtle-select"
-                style={{ padding: '6px 10px', fontSize: 13 }}
+                style={{ padding: '6px 10px', fontSize: 13, height: 36 }}
               >
                 <option value="ALL">All Statuses</option>
                 <option value="PENDING">Pending Dues Only</option>
                 <option value="PAID">Paid Only</option>
               </select>
 
-              <span style={{ fontSize: 13, color: 'var(--text-3)' }}>
-                Showing <strong>{invoices.length}</strong> invoices
+              <span style={{ fontSize: 13, color: 'var(--text-3)', whiteSpace: 'nowrap' }}>
+                Showing <strong>{invoices.length}</strong> of {globalSummary.total_invoices_count} invoices
               </span>
             </div>
           </div>
@@ -545,7 +689,7 @@ export default function FinanceView({
                       <div style={{ maxWidth: 420, margin: '0 auto' }}>
                         <ReceiptText size={36} style={{ color: 'var(--teal)', opacity: 0.6, marginBottom: 12 }} />
                         <h3 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 6px 0', color: 'var(--text)' }}>
-                          No Invoices Demanded for {selectedMonth === 'ALL' ? 'this filter' : getMonthLabel(selectedMonth)}
+                          No Invoices Found
                         </h3>
                         <p style={{ fontSize: 13.5, color: 'var(--text-3)', margin: '0 0 16px 0' }}>
                           You have not generated fee demands yet. Click below to demand fees for your enrolled batches or an individual student.
@@ -555,14 +699,25 @@ export default function FinanceView({
                           onClick={() => handleOpenDemandModal()}
                           style={{ margin: '0 auto', fontSize: 13.5 }}
                         >
-                          <Plus size={15} /> Demand Fees for {getMonthLabel(selectedMonth) || 'This Month'}
+                          <Plus size={15} /> Demand Monthly Fees
                         </button>
                       </div>
                     </td>
                   </tr>
                 ) : (
                   invoices.map((inv) => (
-                    <tr key={inv.id}>
+                    <tr
+                      key={inv.id}
+                      onClick={() => {
+                        if (inv.status === 'PAID') {
+                          setSelectedPaidInvoice(inv);
+                        }
+                      }}
+                      style={{
+                        cursor: inv.status === 'PAID' ? 'pointer' : 'default'
+                      }}
+                      title={inv.status === 'PAID' ? 'Click to view payment details' : undefined}
+                    >
                       {/* Invoice */}
                       <td>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -571,7 +726,7 @@ export default function FinanceView({
                           </span>
                           <button
                             type="button"
-                            onClick={() => handleCopy(inv.invoice_number)}
+                            onClick={(e) => { e.stopPropagation(); handleCopy(inv.invoice_number); }}
                             title="Copy Invoice #"
                             style={{ background: 'none', border: 'none', padding: 2, color: 'var(--text-3)', cursor: 'pointer' }}
                           >
@@ -619,26 +774,45 @@ export default function FinanceView({
                       {/* Status */}
                       <td>
                         {inv.status === 'PAID' ? (
-                          <button
-                            type="button"
-                            onClick={() => setSelectedPaidInvoice(inv)}
-                            title="Click to view payment details"
+                          <span style={{ color: '#059669', fontWeight: 700, fontSize: 13 }}>
+                            Paid
+                          </span>
+                        ) : inv.is_under_verification ? (
+                          <span
+                            onClick={(e) => { e.stopPropagation(); setActiveTab('queue'); }}
                             style={{
-                              background: '#ecfdf5',
-                              color: '#059669',
-                              border: '1px solid #a7f3d0',
-                              borderRadius: 20,
-                              padding: '3px 10px',
-                              fontSize: 12,
-                              fontWeight: 600,
                               display: 'inline-flex',
                               alignItems: 'center',
-                              gap: 5,
+                              gap: 4,
+                              background: '#fef3c7',
+                              color: '#b45309',
+                              padding: '3px 8px',
+                              borderRadius: 12,
+                              fontSize: 11.5,
+                              fontWeight: 700,
                               cursor: 'pointer'
                             }}
+                            title="Click to view in Cash Verification Queue"
                           >
-                            <CheckCircle2 size={13} /> Paid • Details
-                          </button>
+                            <Clock3 size={12} /> Cash • Verification Pending
+                          </span>
+                        ) : inv.has_rejected_payment ? (
+                          <span
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 4,
+                              background: '#fff1f2',
+                              color: '#be123c',
+                              padding: '3px 8px',
+                              borderRadius: 12,
+                              fontSize: 11.5,
+                              fontWeight: 700
+                            }}
+                            title={inv.rejected_payment?.rejection_reason ? `Rejected: ${inv.rejected_payment.rejection_reason}` : 'Cash Rejected'}
+                          >
+                            ⚠️ Due • Cash Rejected
+                          </span>
                         ) : (
                           <span className="status-badge warning" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#fffbeb', color: '#b45309' }}>
                             <Clock3 size={12} /> Due
@@ -660,7 +834,7 @@ export default function FinanceView({
           <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
               <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: 'var(--text)' }}>
-                Batch Billing Status ({selectedMonth === 'ALL' ? 'All Months' : getMonthLabel(selectedMonth)})
+                Batch Billing Status
               </h3>
               <p style={{ margin: '4px 0 0 0', fontSize: 13, color: 'var(--text-3)' }}>
                 Overview of fee demand coverage across all institute course batches.
@@ -751,6 +925,254 @@ export default function FinanceView({
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* TAB 3: CASH VERIFICATION QUEUE */}
+      {activeTab === 'queue' && (
+        <div style={{ marginTop: 16 }}>
+          <div style={{
+            background: 'var(--surface)',
+            border: '1px solid var(--border)',
+            borderRadius: 14,
+            padding: '20px 24px',
+            marginBottom: 16,
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: 12
+          }}>
+            <div>
+              <h3 style={{ fontSize: 17, fontWeight: 700, margin: 0, color: 'var(--text)' }}>
+                Teacher Cash Handover Clearance Queue
+              </h3>
+              <p style={{ margin: '4px 0 0 0', fontSize: 13, color: 'var(--text-3)' }}>
+                Physically count cash handed over by faculty, then approve to officially settle the student's tuition fee.
+              </p>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+              <div style={{ textAlign: 'right' }}>
+                <span style={{ fontSize: 12, color: 'var(--text-3)' }}>Pending Handover Cash</span>
+                <div style={{ fontSize: 20, fontWeight: 800, color: '#b45309' }}>
+                  {formatINR(totalPendingCash)}
+                </div>
+              </div>
+              <button
+                type="button"
+                className="button-secondary"
+                onClick={fetchQueue}
+                style={{ minHeight: 36, padding: '0 12px', fontSize: 12.5 }}
+                title="Refresh Queue"
+              >
+                <RefreshCw size={14} /> Refresh
+              </button>
+            </div>
+          </div>
+
+          <div className="data-table-card">
+            {verificationQueue.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '56px 24px', color: 'var(--text-3)' }}>
+                <ShieldCheck size={44} style={{ color: '#059669', margin: '0 auto 12px', opacity: 0.8 }} />
+                <h4 style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', margin: '0 0 6px' }}>
+                  Verification Queue is Clear
+                </h4>
+                <p style={{ fontSize: 13.5, margin: 0 }}>
+                  There are no pending offline cash payments awaiting admin handover.
+                </p>
+              </div>
+            ) : (
+              <div className="data-table-wrap">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Submission Date</th>
+                      <th>Invoice No</th>
+                      <th>Student</th>
+                      <th>Batch</th>
+                      <th>Collected By (Teacher)</th>
+                      <th>Amount</th>
+                      <th style={{ textAlign: 'right' }}>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {verificationQueue.map((item) => {
+                      const dateStr = item.created_at
+                        ? new Date(item.created_at).toLocaleString('en-US', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+                        : 'Today';
+                      const isLoading = actionLoadingId === item.id;
+
+                      return (
+                        <tr key={item.id}>
+                          <td style={{ fontSize: 12.5, color: 'var(--text-2)' }}>{dateStr}</td>
+                          <td>
+                            <span style={{ fontFamily: 'monospace', fontWeight: 700, color: 'var(--teal-dark)', fontSize: 13 }}>
+                              {item.invoice_number}
+                            </span>
+                          </td>
+                          <td>
+                            <strong style={{ fontSize: 13.5, color: 'var(--text)' }}>
+                              {item.student_name}
+                            </strong>
+                            {item.student_phone && (
+                              <div style={{ fontSize: 11.5, color: 'var(--text-3)' }}>
+                                {item.student_phone}
+                              </div>
+                            )}
+                          </td>
+                          <td>
+                            <span className="batch-name" style={{ fontSize: 12, fontWeight: 500 }}>
+                              {item.batch_name}
+                            </span>
+                          </td>
+                          <td>
+                            <strong style={{ fontSize: 13, color: '#0d9488' }}>
+                              👨‍🏫 {item.teacher_name}
+                            </strong>
+                            {item.teacher_phone && (
+                              <div style={{ fontSize: 11.5, color: 'var(--text-3)' }}>
+                                {item.teacher_phone}
+                              </div>
+                            )}
+                          </td>
+                          <td>
+                            <strong style={{ fontSize: 15, color: '#059669' }}>
+                              {formatINR(item.amount)}
+                            </strong>
+                          </td>
+                          <td style={{ textAlign: 'right' }}>
+                            <div style={{ display: 'inline-flex', gap: 8 }}>
+                              <button
+                                type="button"
+                                disabled={isLoading}
+                                onClick={() => handleApproveCash(item.id)}
+                                style={{
+                                  background: '#059669',
+                                  color: '#fff',
+                                  border: 'none',
+                                  borderRadius: 8,
+                                  padding: '6px 12px',
+                                  fontSize: 12.5,
+                                  fontWeight: 600,
+                                  cursor: 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 4
+                                }}
+                              >
+                                {isLoading ? 'Processing...' : '✓ Approve & Settle'}
+                              </button>
+
+                              <button
+                                type="button"
+                                disabled={isLoading}
+                                onClick={() => { setRejectModalItem(item); setRejectReason('Cash not received at center counter'); }}
+                                style={{
+                                  background: '#fff1f2',
+                                  color: '#e11d48',
+                                  border: '1px solid #fecdd3',
+                                  borderRadius: 8,
+                                  padding: '6px 10px',
+                                  fontSize: 12.5,
+                                  fontWeight: 600,
+                                  cursor: 'pointer'
+                                }}
+                              >
+                                ✕ Reject
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* REJECTION REASON MODAL */}
+      {rejectModalItem && (
+        <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) setRejectModalItem(null); }}>
+          <div className="modal-card" style={{ maxWidth: 480 }}>
+            <div className="modal-header">
+              <div className="modal-heading-icon" style={{ background: '#fff1f2', color: '#e11d48' }}>
+                <AlertTriangle size={20} />
+              </div>
+              <div>
+                <h2>Reject Cash Collection Request</h2>
+                <p>The student and teacher will be notified with this reason.</p>
+              </div>
+              <button className="icon-button" onClick={() => setRejectModalItem(null)}><X size={19} /></button>
+            </div>
+
+            <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div style={{ background: '#f8fafc', padding: '12px 14px', borderRadius: 10, fontSize: 13, border: '1px solid #e2e8f0' }}>
+                <div><strong>Student:</strong> {rejectModalItem.student_name} ({rejectModalItem.invoice_number})</div>
+                <div style={{ marginTop: 4 }}><strong>Collected By:</strong> {rejectModalItem.teacher_name}</div>
+                <div style={{ marginTop: 4 }}><strong>Amount:</strong> {formatINR(rejectModalItem.amount)}</div>
+              </div>
+
+              <div>
+                <label style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-2)', display: 'block', marginBottom: 6 }}>
+                  Select Preset Rejection Reason:
+                </label>
+                <select
+                  value={rejectReason}
+                  onChange={(e) => setRejectReason(e.target.value)}
+                  className="subtle-select"
+                  style={{ width: '100%', padding: '8px 10px', fontSize: 13 }}
+                >
+                  <option value="Cash not received at center counter">Cash not received at center counter</option>
+                  <option value="Discrepancy in collected amount">Discrepancy in collected amount</option>
+                  <option value="Selected incorrect student or batch">Selected incorrect student or batch</option>
+                  <option value="Currency note issue or duplicate entry">Currency note issue or duplicate entry</option>
+                </select>
+              </div>
+
+              <div>
+                <label style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--text-2)', display: 'block', marginBottom: 6 }}>
+                  Or Custom Reason:
+                </label>
+                <input
+                  type="text"
+                  value={rejectReason}
+                  onChange={(e) => setRejectReason(e.target.value)}
+                  placeholder="Enter rejection reason..."
+                  style={{ width: '100%', padding: '8px 12px', fontSize: 13, borderRadius: 8, border: '1px solid var(--border)', background: 'var(--bg-card)' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 10 }}>
+                <button
+                  type="button"
+                  className="button-secondary"
+                  onClick={() => setRejectModalItem(null)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleRejectCash}
+                  style={{
+                    background: '#e11d48',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: 8,
+                    padding: '8px 16px',
+                    fontSize: 13,
+                    fontWeight: 700,
+                    cursor: 'pointer'
+                  }}
+                >
+                  Confirm Rejection
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -1022,152 +1444,188 @@ export default function FinanceView({
         </div>
       )}
 
-      {/* PAYMENT TRANSACTION DETAILS MODAL */}
+      {/* PAYMENT TRANSACTION DETAILS POPUP MODAL (LANDSCAPE 2-COLUMN VIEW) */}
       {selectedPaidInvoice && (
-        <div className="modal-overlay" onClick={() => setSelectedPaidInvoice(null)}>
+        <div
+          className="modal-backdrop"
+          style={{ zIndex: 999 }}
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) setSelectedPaidInvoice(null);
+          }}
+        >
           <div
-            className="modal-content"
-            onClick={(e) => e.stopPropagation()}
-            style={{ maxWidth: 520, borderRadius: 16, overflow: 'hidden' }}
+            className="modal-card"
+            style={{
+              maxWidth: 900,
+              width: 'min(94vw, 900px)',
+              padding: 0,
+              borderRadius: 18,
+              overflow: 'hidden',
+              boxShadow: '0 25px 80px rgba(0, 0, 0, 0.32)'
+            }}
           >
-            <div className="modal-header" style={{ borderBottom: '1px solid #f1f5f9', padding: '16px 20px', background: '#f8fafc' }}>
+            {/* Modal Header */}
+            <div className="modal-header" style={{ borderBottom: '1px solid #f1f5f9', padding: '18px 26px', background: '#f8fafc', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#dcfce7', color: '#16a34a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <CheckCircle2 size={16} />
-                  </div>
-                  <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: 'var(--text)' }}>Payment Details</h3>
-                </div>
-                <span style={{ fontSize: 12, color: 'var(--text-3)', fontFamily: 'monospace', marginLeft: 36 }}>
-                  Invoice #{selectedPaidInvoice.invoice_number}
+                <h3 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 3px 0', color: 'var(--text)' }}>
+                  Payment Details
+                </h3>
+                <span style={{ fontSize: 13.5, color: 'var(--text-3)', fontFamily: 'monospace' }}>
+                  Invoice: {selectedPaidInvoice.invoice_number}
                 </span>
               </div>
               <button
                 onClick={() => setSelectedPaidInvoice(null)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)' }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', padding: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 8 }}
+                title="Close"
               >
-                <X size={18} />
+                <X size={20} />
               </button>
             </div>
 
-            <div style={{ padding: '20px' }}>
-              {/* Paid Amount Highlight Card */}
-              <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 12, padding: '14px 16px', marginBottom: 18, textAlign: 'center' }}>
-                <div style={{ fontSize: 12, fontWeight: 600, color: '#166534', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                  Total Fee Paid
-                </div>
-                <div style={{ fontSize: 26, fontWeight: 800, color: '#15803d', margin: '4px 0 2px' }}>
-                  {formatINR(selectedPaidInvoice.amount_paid || selectedPaidInvoice.payable_amount)}
-                </div>
-                <div style={{ fontSize: 12, color: '#166534' }}>
-                  Status: <strong>PAID & SETTLED</strong>
-                </div>
-              </div>
-
-              {/* Student & Course Information */}
-              <div style={{ background: '#f8fafc', borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
-                <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', marginBottom: 8, letterSpacing: '0.03em' }}>
-                  Student & Course
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, fontSize: 13 }}>
-                  <div>
-                    <span style={{ color: 'var(--text-3)', fontSize: 11.5 }}>Student Name:</span>
-                    <div style={{ fontWeight: 600, color: 'var(--text)' }}>{selectedPaidInvoice.student_name}</div>
-                  </div>
-                  <div>
-                    <span style={{ color: 'var(--text-3)', fontSize: 11.5 }}>Contact:</span>
-                    <div style={{ fontWeight: 500, color: 'var(--text)' }}>{selectedPaidInvoice.student_phone || selectedPaidInvoice.guardian_phone || 'N/A'}</div>
-                  </div>
-                  <div>
-                    <span style={{ color: 'var(--text-3)', fontSize: 11.5 }}>Batch:</span>
-                    <div style={{ fontWeight: 600, color: 'var(--text)' }}>{selectedPaidInvoice.batch_name}</div>
-                  </div>
-                  <div>
-                    <span style={{ color: 'var(--text-3)', fontSize: 11.5 }}>Fee Type & Period:</span>
-                    <div style={{ fontWeight: 500, color: 'var(--text)' }}>
-                      {selectedPaidInvoice.invoice_type === 'ONE_TIME' ? 'One-Time Package' : getMonthLabel(selectedPaidInvoice.billing_month, selectedPaidInvoice.billing_year)}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Fee Breakdown */}
-              <div style={{ background: '#f8fafc', borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
-                <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', marginBottom: 8, letterSpacing: '0.03em' }}>
-                  Fee Calculation Breakdown
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ color: 'var(--text-2)' }}>Base Tuition Fee:</span>
-                    <span style={{ fontWeight: 600 }}>{formatINR(selectedPaidInvoice.base_amount)}</span>
-                  </div>
-                  {selectedPaidInvoice.discount_amount > 0 && (
-                    <div style={{ display: 'flex', justifyContent: 'space-between', color: '#16a34a' }}>
-                      <span>Scholarship / Concession Discount:</span>
-                      <span style={{ fontWeight: 600 }}>- {formatINR(selectedPaidInvoice.discount_amount)}</span>
-                    </div>
-                  )}
-                  <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: 6, marginTop: 2, display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 14 }}>
-                    <span>Net Settled Amount:</span>
-                    <span style={{ color: '#15803d' }}>{formatINR(selectedPaidInvoice.payable_amount)}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Payment Gateway & Transaction Logs */}
+            {/* Modal Body: 2-Column Landscape Layout */}
+            <div style={{ padding: '24px 26px' }}>
               {(() => {
                 const pmts = selectedPaidInvoice.payments || [];
                 const primaryPmt = pmts.find(p => p.status === 'SUCCESS') || pmts[0] || {};
+                const pmtStatus = primaryPmt.status || selectedPaidInvoice.status || 'SUCCESS';
+                const isOnline = (primaryPmt.payment_mode || '').toUpperCase().includes('RAZORPAY') || !!primaryPmt.razorpay_payment_id;
+
                 return (
-                  <div style={{ background: '#f8fafc', borderRadius: 10, padding: '12px 14px' }}>
-                    <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', marginBottom: 8, letterSpacing: '0.03em' }}>
-                      Transaction & Gateway Audit
-                    </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, fontSize: 12.5 }}>
-                      <div>
-                        <span style={{ color: 'var(--text-3)', fontSize: 11 }}>Payment Mode:</span>
-                        <div style={{ fontWeight: 600, color: 'var(--text)' }}>
-                          {primaryPmt.payment_mode || 'RAZORPAY (ONLINE)'}
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 1fr))', gap: 20, alignItems: 'stretch' }}>
+                    {/* LEFT COLUMN: Student & Fee Breakdown Information */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                      {/* Student & Course Box */}
+                      <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 14, padding: '18px 20px', flex: 1 }}>
+                        <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', marginBottom: 14, letterSpacing: '0.04em' }}>
+                          Student Details
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                          <div>
+                            <span style={{ color: '#64748b', fontSize: 13, fontWeight: 500 }}>Student Name:</span>
+                            <div style={{ fontWeight: 600, color: 'var(--text)', fontSize: 15, marginTop: 3 }}>
+                              {selectedPaidInvoice.student_name}
+                            </div>
+                          </div>
+                          <div>
+                            <span style={{ color: '#64748b', fontSize: 13, fontWeight: 500 }}>Contact Number:</span>
+                            <div style={{ fontWeight: 500, color: 'var(--text)', fontSize: 14.5, marginTop: 3 }}>
+                              {selectedPaidInvoice.student_phone || selectedPaidInvoice.guardian_phone || 'N/A'}
+                            </div>
+                          </div>
+                          <div>
+                            <span style={{ color: '#64748b', fontSize: 13, fontWeight: 500 }}>Enrolled Batch:</span>
+                            <div style={{ fontWeight: 600, color: 'var(--text)', fontSize: 15, marginTop: 3 }}>
+                              {selectedPaidInvoice.batch_name}
+                            </div>
+                          </div>
+                          <div>
+                            <span style={{ color: '#64748b', fontSize: 13, fontWeight: 500 }}>Fee Period:</span>
+                            <div style={{ fontWeight: 500, color: 'var(--text)', fontSize: 14.5, marginTop: 3 }}>
+                              {selectedPaidInvoice.invoice_type === 'ONE_TIME' ? 'One-Time Package' : getMonthLabel(selectedPaidInvoice.billing_month, selectedPaidInvoice.billing_year)}
+                            </div>
+                          </div>
                         </div>
                       </div>
-                      <div>
-                        <span style={{ color: 'var(--text-3)', fontSize: 11 }}>Transaction Date:</span>
-                        <div style={{ fontWeight: 500, color: 'var(--text)' }}>
-                          {primaryPmt.paid_at ? new Date(primaryPmt.paid_at).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }) : 'Verified Online'}
+
+                      {/* Fee Calculation Breakdown */}
+                      <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 14, padding: '18px 20px' }}>
+                        <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', marginBottom: 12, letterSpacing: '0.04em' }}>
+                          Fee Calculation Breakdown
                         </div>
-                      </div>
-                      <div style={{ gridColumn: 'span 2' }}>
-                        <span style={{ color: 'var(--text-3)', fontSize: 11 }}>Razorpay Payment ID:</span>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
-                          <code style={{ background: '#e2e8f0', padding: '3px 8px', borderRadius: 6, fontSize: 12, fontFamily: 'monospace' }}>
-                            {primaryPmt.razorpay_payment_id || 'pay_online_verified'}
-                          </code>
-                          {primaryPmt.razorpay_payment_id && (
-                            <button
-                              onClick={() => handleCopy(primaryPmt.razorpay_payment_id)}
-                              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, color: 'var(--text-3)' }}
-                              title="Copy ID"
-                            >
-                              {copiedId === primaryPmt.razorpay_payment_id ? <Check size={13} color="var(--teal)" /> : <Copy size={13} />}
-                            </button>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14 }}>
+                            <span style={{ color: 'var(--text-2)' }}>Base Tuition Fee:</span>
+                            <span style={{ fontWeight: 600, color: 'var(--text)' }}>{formatINR(selectedPaidInvoice.base_amount)}</span>
+                          </div>
+                          {selectedPaidInvoice.discount_amount > 0 && (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', color: '#16a34a', fontSize: 14 }}>
+                              <span>Scholarship / Concession:</span>
+                              <span style={{ fontWeight: 600 }}>- {formatINR(selectedPaidInvoice.discount_amount)}</span>
+                            </div>
                           )}
+                          <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: 8, marginTop: 3, display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 15.5 }}>
+                            <span style={{ color: 'var(--text)' }}>Net Settled Amount:</span>
+                            <span style={{ color: '#15803d', fontWeight: 800 }}>{formatINR(selectedPaidInvoice.payable_amount)}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* RIGHT COLUMN: Payment & Gateway Audit Trail */}
+                    <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 14, padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #e2e8f0', paddingBottom: 12 }}>
+                        <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                          Transaction Audit
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                        <div>
+                          <span style={{ color: '#64748b', fontSize: 13, fontWeight: 500 }}>Payment Mode:</span>
+                          <div style={{ fontWeight: 600, color: 'var(--text)', fontSize: 15, marginTop: 3 }}>
+                            {primaryPmt.payment_mode || (isOnline ? 'RAZORPAY (ONLINE)' : 'CASH')}
+                          </div>
+                        </div>
+
+                        <div>
+                          <span style={{ color: '#64748b', fontSize: 13, fontWeight: 500 }}>Transaction Date & Time:</span>
+                          <div style={{ fontWeight: 600, color: 'var(--text)', fontSize: 14.5, marginTop: 3 }}>
+                            {primaryPmt.paid_at ? new Date(primaryPmt.paid_at).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }) : 'Verified Online'}
+                          </div>
+                        </div>
+
+                        <div style={{ gridColumn: 'span 2' }}>
+                          <span style={{ color: '#64748b', fontSize: 13, fontWeight: 500 }}>Settled Amount:</span>
+                          <div style={{ fontWeight: 800, color: '#15803d', fontSize: 19, marginTop: 3 }}>
+                            {formatINR(primaryPmt.amount || selectedPaidInvoice.amount_paid || selectedPaidInvoice.payable_amount)}
+                          </div>
+                        </div>
+
+                        {/* Razorpay Payment ID */}
+                        <div style={{ gridColumn: 'span 2' }}>
+                          <span style={{ color: '#64748b', fontSize: 13, fontWeight: 500 }}>Razorpay Payment ID:</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                            <code style={{ background: '#e2e8f0', padding: '5px 10px', borderRadius: 8, fontSize: 13.5, fontFamily: 'monospace', color: '#0f172a', fontWeight: 600 }}>
+                              {primaryPmt.razorpay_payment_id || 'pay_online_verified'}
+                            </code>
+                            {primaryPmt.razorpay_payment_id && (
+                              <button
+                                type="button"
+                                onClick={() => handleCopy(primaryPmt.razorpay_payment_id)}
+                                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: 'var(--text-3)', display: 'flex', alignItems: 'center' }}
+                                title="Copy Payment ID"
+                              >
+                                {copiedId === primaryPmt.razorpay_payment_id ? <Check size={15} color="var(--teal)" /> : <Copy size={15} />}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Gateway Order ID */}
+                        <div style={{ gridColumn: 'span 2' }}>
+                          <span style={{ color: '#64748b', fontSize: 13, fontWeight: 500 }}>Razorpay Order ID:</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                            <code style={{ background: '#e2e8f0', padding: '5px 10px', borderRadius: 8, fontSize: 13.5, fontFamily: 'monospace', color: '#0f172a', fontWeight: 600 }}>
+                              {primaryPmt.razorpay_order_id || 'order_online_verified'}
+                            </code>
+                            {primaryPmt.razorpay_order_id && (
+                              <button
+                                type="button"
+                                onClick={() => handleCopy(primaryPmt.razorpay_order_id)}
+                                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, color: 'var(--text-3)', display: 'flex', alignItems: 'center' }}
+                                title="Copy Order ID"
+                              >
+                                {copiedId === primaryPmt.razorpay_order_id ? <Check size={15} color="var(--teal)" /> : <Copy size={15} />}
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
                   </div>
                 );
               })()}
-            </div>
-
-            <div className="modal-footer" style={{ borderTop: '1px solid #f1f5f9', padding: '14px 20px', background: '#f8fafc', display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-              <button
-                type="button"
-                className="button-secondary"
-                onClick={() => setSelectedPaidInvoice(null)}
-                style={{ minHeight: 34, fontSize: 13 }}
-              >
-                Close
-              </button>
             </div>
           </div>
         </div>

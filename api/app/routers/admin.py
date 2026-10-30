@@ -13,9 +13,11 @@ from app.models import (
     SessionActionRequest,
     BatchInvoiceDemandRequest,
     SingleInvoiceDemandRequest,
-    AdminNoticeCreate
+    AdminNoticeCreate,
+    AdminRejectCashRequest
 )
 from datetime import date, datetime
+from typing import Any, Optional
 import calendar
 import uuid
 import re
@@ -1643,6 +1645,10 @@ def list_invoices(
                 except Exception:
                     pass
 
+            raw_pmts = inv.get("payments") or []
+            under_verif = next((p for p in raw_pmts if p.get("status") == "UNDER_VERIFICATION"), None)
+            failed_pmt = next((p for p in raw_pmts if p.get("status") == "FAILED"), None)
+
             enriched.append({
                 "id": inv["id"],
                 "invoice_number": inv_num,
@@ -1663,29 +1669,50 @@ def list_invoices(
                 "outstanding_amount": max(0.0, float(inv.get("payable_amount") or 0.0) - float(inv.get("amount_paid") or 0.0)),
                 "status": inv_status,
                 "created_at": inv.get("created_at"),
-                "payments": inv.get("payments") or []
+                "payments": raw_pmts,
+                "is_under_verification": bool(under_verif),
+                "under_verification_payment": under_verif,
+                "has_rejected_payment": bool(failed_pmt),
+                "rejected_payment": failed_pmt
             })
 
-        total_invoices = len(enriched)
-        total_demanded = sum(i["payable_amount"] for i in enriched)
-        total_collected = sum(i["amount_paid"] for i in enriched)
-        total_outstanding = sum(i["outstanding_amount"] for i in enriched if i["status"] == "PENDING")
-        pending_count = sum(1 for i in enriched if i["status"] == "PENDING")
-        paid_count = sum(1 for i in enriched if i["status"] == "PAID")
+        # Compute universal all-over institute metrics across all database invoices
+        all_invoices_res = safe_execute(supabase.table("invoices").select("payable_amount, amount_paid, status"))
+        all_raw = all_invoices_res.data or []
+        global_total_demanded = sum(float(i.get("payable_amount") or 0.0) for i in all_raw)
+        global_total_collected = sum(float(i.get("amount_paid") or 0.0) for i in all_raw)
+        global_total_outstanding = sum(max(0.0, float(i.get("payable_amount") or 0.0) - float(i.get("amount_paid") or 0.0)) for i in all_raw if i.get("status") == "PENDING")
+        global_pending_count = sum(1 for i in all_raw if i.get("status") == "PENDING")
+        global_paid_count = sum(1 for i in all_raw if i.get("status") == "PAID")
+        global_recovery_rate = round((global_total_collected / global_total_demanded * 100), 1) if global_total_demanded > 0 else 0.0
 
-        recovery_rate = round((total_collected / total_demanded * 100), 1) if total_demanded > 0 else 0.0
+        global_summary = {
+            "total_invoices_count": len(all_raw),
+            "total_demanded_amount": global_total_demanded,
+            "total_collected_amount": global_total_collected,
+            "total_outstanding_amount": global_total_outstanding,
+            "pending_count": global_pending_count,
+            "paid_count": global_paid_count,
+            "recovery_rate_percent": global_recovery_rate
+        }
+
+        filtered_total_demanded = sum(i["payable_amount"] for i in enriched)
+        filtered_total_collected = sum(i["amount_paid"] for i in enriched)
+        filtered_summary = {
+            "total_invoices_count": len(enriched),
+            "total_demanded_amount": filtered_total_demanded,
+            "total_collected_amount": filtered_total_collected,
+            "total_outstanding_amount": sum(i["outstanding_amount"] for i in enriched if i["status"] == "PENDING"),
+            "pending_count": sum(1 for i in enriched if i["status"] == "PENDING"),
+            "paid_count": sum(1 for i in enriched if i["status"] == "PAID"),
+            "recovery_rate_percent": round((filtered_total_collected / filtered_total_demanded * 100), 1) if filtered_total_demanded > 0 else 0.0
+        }
 
         return {
             "invoices": enriched,
-            "summary": {
-                "total_invoices_count": total_invoices,
-                "total_demanded_amount": total_demanded,
-                "total_collected_amount": total_collected,
-                "total_outstanding_amount": total_outstanding,
-                "pending_count": pending_count,
-                "paid_count": paid_count,
-                "recovery_rate_percent": recovery_rate
-            }
+            "summary": global_summary,  # Universal institute-wide summary for KPI cards
+            "global_summary": global_summary,
+            "filtered_summary": filtered_summary
         }
     except Exception as e:
         traceback.print_exc()
@@ -1717,6 +1744,165 @@ def delete_invoice(invoice_id: str):
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
+
+
+# ==============================================================================
+# 8. CASH VERIFICATION QUEUE (Teacher Handover Approval / Rejection)
+# ==============================================================================
+
+@router.get("/payments/verification-queue", summary="List All Offline Cash Payments Awaiting Admin Approval")
+def list_cash_verification_queue():
+    """
+    Returns pending cash collection requests submitted by teachers that need physical cash handover approval.
+    """
+    try:
+        supabase = get_supabase_client()
+        res = supabase.table("payments").select(
+            "*, invoices(id, invoice_number, payable_amount, billing_month, billing_year), users!payments_student_id_fkey(id, full_name, phone, batches(name)), teacher:collected_by(id, full_name, phone)"
+        ).eq("status", "UNDER_VERIFICATION").order("created_at", desc=True).execute()
+
+        raw = res.data or []
+        queue = []
+        total_pending_cash = 0.0
+
+        for p in raw:
+            inv = p.get("invoices") or {}
+            student = p.get("users") or {}
+            batch = student.get("batches") or {}
+            teacher = p.get("teacher") or {}
+            amt = float(p.get("amount") or 0.0)
+            total_pending_cash += amt
+
+            queue.append({
+                "id": p.get("id"),
+                "payment_id": p.get("id"),
+                "amount": amt,
+                "payment_mode": p.get("payment_mode") or "CASH",
+                "status": p.get("status") or "UNDER_VERIFICATION",
+                "created_at": p.get("created_at"),
+                "invoice_id": p.get("invoice_id"),
+                "invoice_number": inv.get("invoice_number") or "N/A",
+                "billing_month": inv.get("billing_month"),
+                "billing_year": inv.get("billing_year"),
+                "payable_amount": float(inv.get("payable_amount") or 0.0),
+                "student_id": p.get("student_id"),
+                "student_name": student.get("full_name") or "Student",
+                "student_phone": student.get("phone") or "",
+                "batch_name": batch.get("name") or "Course Batch",
+                "teacher_id": p.get("collected_by"),
+                "teacher_name": teacher.get("full_name") or "Faculty",
+                "teacher_phone": teacher.get("phone") or ""
+            })
+
+        return {
+            "queue_count": len(queue),
+            "total_pending_cash": total_pending_cash,
+            "items": queue
+        }
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/payments/{payment_id}/approve", summary="Admin Approves Cash Payment Handover & Settles Invoice")
+def approve_cash_payment(payment_id: str):
+    """
+    Admin confirms receipt of physical cash from teacher:
+    1. Updates payment status to 'SUCCESS', sets paid_at = NOW()
+    2. Updates invoice amount_paid and marks status = 'PAID' if full amount settled
+    """
+    try:
+        supabase = get_supabase_client()
+
+        # 1. Fetch payment
+        p_res = supabase.table("payments").select("*, invoices(*)").eq("id", payment_id).execute()
+        if not p_res.data:
+            raise HTTPException(status_code=404, detail="Payment record not found.")
+
+        pmt = p_res.data[0]
+        if pmt.get("status") == "SUCCESS":
+            return {"message": "Payment is already approved and settled.", "payment_id": payment_id}
+
+        now_iso = datetime.now().isoformat()
+        pmt_amount = float(pmt.get("amount") or 0.0)
+        inv_id = pmt.get("invoice_id")
+
+        # 2. Update payment to SUCCESS
+        supabase.table("payments").update({
+            "status": "SUCCESS",
+            "paid_at": now_iso,
+            "rejection_reason": None
+        }).eq("id", payment_id).execute()
+
+        # 3. Update invoice amount_paid & status
+        inv_res = supabase.table("invoices").select("*").eq("id", inv_id).execute()
+        if inv_res.data:
+            inv = inv_res.data[0]
+            current_paid = float(inv.get("amount_paid") or 0.0)
+            payable = float(inv.get("payable_amount") or 0.0)
+            new_paid = current_paid + pmt_amount
+            new_status = "PAID" if new_paid >= payable else inv.get("status")
+
+            supabase.table("invoices").update({
+                "amount_paid": new_paid,
+                "status": new_status,
+                "updated_at": now_iso
+            }).eq("id", inv_id).execute()
+
+        return {
+            "message": "Cash payment verified and settled successfully. Official receipt issued.",
+            "payment_id": payment_id,
+            "status": "SUCCESS"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/payments/{payment_id}/reject", summary="Admin Rejects Cash Handover Request")
+def reject_cash_payment(payment_id: str, req: AdminRejectCashRequest):
+    """
+    Admin rejects cash request (e.g. discrepancy or cash not received):
+    1. Updates payment status to 'FAILED'
+    2. Stores rejection_reason
+    3. Leaves invoice as 'PENDING'
+    """
+    try:
+        supabase = get_supabase_client()
+
+        # 1. Fetch payment
+        p_res = supabase.table("payments").select("*").eq("id", payment_id).execute()
+        if not p_res.data:
+            raise HTTPException(status_code=404, detail="Payment record not found.")
+
+        pmt = p_res.data[0]
+        if pmt.get("status") == "SUCCESS":
+            raise HTTPException(status_code=400, detail="Cannot reject an already settled payment.")
+
+        reason = (req.reason or "Cash not received at center counter").strip()
+
+        # 2. Update payment to FAILED with rejection_reason
+        supabase.table("payments").update({
+            "status": "FAILED",
+            "rejection_reason": reason,
+            "paid_at": None
+        }).eq("id", payment_id).execute()
+
+        return {
+            "message": f"Payment rejected: {reason}",
+            "payment_id": payment_id,
+            "status": "FAILED",
+            "reason": reason
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 # ==============================================================================
 # 12. ADMIN NOTICE BOARD ENDPOINTS (schema.sql Table 12)
@@ -1835,5 +2021,3 @@ def delete_admin_notice(notice_id: str, current_user: dict = Depends(get_current
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
-
-

@@ -83,6 +83,47 @@ const ACADEMIC_SUB_ITEMS = [
   }
 ];
 
+const FINANCE_SUB_ITEMS = [
+  {
+    id: 'collect-cash',
+    label: 'Collect Cash',
+    route: 'finance/collect-cash',
+    icon: (
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="2" y="6" width="20" height="12" rx="2" />
+        <circle cx="12" cy="12" r="2" />
+        <path d="M6 12h.01M18 12h.01" />
+      </svg>
+    )
+  },
+  {
+    id: 'all-payments',
+    label: 'All Payments',
+    route: 'finance/all-payments',
+    icon: (
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+        <polyline points="14 2 14 8 20 8" />
+        <line x1="16" y1="13" x2="8" y2="13" />
+        <line x1="16" y1="17" x2="8" y2="17" />
+        <polyline points="10 9 9 9 8 9" />
+      </svg>
+    )
+  },
+  {
+    id: 'my-earnings',
+    label: 'My Earnings',
+    route: 'finance/my-earnings',
+    icon: (
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="10" />
+        <path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8" />
+        <path d="M12 6v2m0 8v2" />
+      </svg>
+    )
+  }
+];
+
 const MENU_ITEMS = [
   {
     id: 'dashboard',
@@ -141,6 +182,7 @@ const MENU_ITEMS = [
     id: 'finance',
     label: 'Finance',
     route: 'finance',
+    hasSubmenu: true,
     icon: (
       <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <rect x="2" y="5" width="20" height="14" rx="2" />
@@ -179,6 +221,9 @@ export function Sidebar({ activeTab = 'dashboard', isOpen = false, onClose, onTa
   const isAcademicTab = ACADEMIC_SUB_ITEMS.some((sub) => sub.id === currentTab) || currentTab === 'academics';
   const [academicsOpen, setAcademicsOpen] = useState(true);
 
+  const isFinanceTab = currentTab === 'finance' || FINANCE_SUB_ITEMS.some((sub) => sub.id === currentTab || currentTab === sub.route || currentTab === `finance/${sub.id}`);
+  const [financeOpen, setFinanceOpen] = useState(true);
+
   // Automatically ensure submenu is open whenever navigating to an academic sub-tab
   useEffect(() => {
     if (isAcademicTab) {
@@ -186,12 +231,18 @@ export function Sidebar({ activeTab = 'dashboard', isOpen = false, onClose, onTa
     }
   }, [currentTab, isAcademicTab]);
 
+  useEffect(() => {
+    if (isFinanceTab) {
+      setFinanceOpen(true);
+    }
+  }, [currentTab, isFinanceTab]);
+
   const isItemActive = (id) => {
     if (id === 'dashboard') return currentTab === 'dashboard' || currentTab === '';
     if (id === 'routine') return currentTab === 'routine' || currentTab === 'timetable' || currentTab === 'timetable-routine';
     if (id === 'academics') return isAcademicTab;
     if (id === 'study-material') return currentTab === 'study-material' || currentTab === 'study-materials';
-    if (id === 'finance') return currentTab === 'finance';
+    if (id === 'finance') return isFinanceTab;
     if (id === 'notice') return currentTab === 'notice' || currentTab === 'notice-board';
     if (id === 'settings') return currentTab === 'settings';
     return false;
@@ -212,6 +263,15 @@ export function Sidebar({ activeTab = 'dashboard', isOpen = false, onClose, onTa
       handleItemClick('student-info');
     } else {
       setAcademicsOpen((prev) => !prev);
+    }
+  };
+
+  const handleFinanceParentClick = () => {
+    if (!isFinanceTab) {
+      setFinanceOpen(true);
+      handleItemClick('finance/collect-cash');
+    } else {
+      setFinanceOpen((prev) => !prev);
     }
   };
 
@@ -278,6 +338,60 @@ export function Sidebar({ activeTab = 'dashboard', isOpen = false, onClose, onTa
           <ul className="dt-sidebar-menu">
             {MENU_ITEMS.map((item) => {
               const active = isItemActive(item.id);
+
+              if (item.hasSubmenu && item.id === 'finance') {
+                return (
+                  <li key={item.id} className="dt-sidebar-menu-group">
+                    <button
+                      type="button"
+                      className={`dt-sidebar-item ${active ? 'is-active' : ''}`}
+                      onClick={handleFinanceParentClick}
+                      aria-expanded={financeOpen}
+                    >
+                      <span className="dt-sidebar-icon">
+                        {item.icon}
+                      </span>
+                      <span className="dt-sidebar-label">{item.label}</span>
+                      <span
+                        className={`dt-sidebar-chevron ${financeOpen ? 'is-open' : ''}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setFinanceOpen((prev) => !prev);
+                        }}
+                        title={financeOpen ? 'Collapse Finance' : 'Expand Finance'}
+                      >
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="6 9 12 15 18 9" />
+                        </svg>
+                      </span>
+                    </button>
+
+                    {/* Expandable Submenu for Finance */}
+                    {financeOpen && (
+                      <ul className="dt-sidebar-submenu" aria-label="Finance sub-menu">
+                        {FINANCE_SUB_ITEMS.map((sub) => {
+                          const isSubActive = currentTab === sub.id || currentTab === sub.route || (currentTab === 'finance' && sub.id === 'collect-cash');
+                          return (
+                            <li key={sub.id}>
+                              <button
+                                type="button"
+                                className={`dt-sidebar-sub-item ${isSubActive ? 'is-active' : ''}`}
+                                onClick={() => handleItemClick(sub.route)}
+                                aria-current={isSubActive ? 'page' : undefined}
+                              >
+                                <span className="dt-sidebar-sub-icon">
+                                  {sub.icon}
+                                </span>
+                                <span className="dt-sidebar-sub-label">{sub.label}</span>
+                              </button>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                  </li>
+                );
+              }
 
               if (item.hasSubmenu && item.id === 'academics') {
                 return (

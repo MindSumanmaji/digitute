@@ -14,7 +14,8 @@ from app.models import (
     SyllabusToggleChapterRequest,
     ExamCreate,
     ExamUpdate,
-    TeacherNoticeCreate
+    TeacherNoticeCreate,
+    TeacherCollectCashRequest
 )
 from datetime import date, datetime, timezone
 from typing import Any, Optional
@@ -2146,4 +2147,223 @@ def get_teacher_profile(current_user: dict = Depends(get_current_user)):
             return res.data[0]
         return current_user
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==============================================================================
+
+@router.get("/student-dues", summary="Get Due Invoices for Students in Teacher's Batches")
+def get_teacher_student_dues(
+    batch_id: Optional[str] = None,
+    status: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Returns invoices (pending, paid, or all) for enrolled students in the logged-in teacher's batches.
+    """
+    try:
+        supabase = get_supabase_client()
+        teacher_id = current_user.get("id")
+
+        # 1. Find batches assigned to this teacher
+        assigned_batch_ids = []
+        if current_user.get("role") == "ADMIN":
+            b_res = supabase.table("batches").select("id").execute()
+            assigned_batch_ids = [b["id"] for b in (b_res.data or [])]
+        else:
+            # Query routines or batch subjects
+            routines = supabase.table("class_routines").select("batch_id").eq("teacher_id", teacher_id).execute()
+            routine_batch_ids = [r["batch_id"] for r in (routines.data or []) if r.get("batch_id")]
+
+            # Also check batches table JSON subjects
+            all_batches = supabase.table("batches").select("id, subjects").execute()
+            subject_batch_ids = []
+            for b in (all_batches.data or []):
+                for s in (b.get("subjects") or []):
+                    s_tid = s.get("teacherId") or s.get("teacher_id")
+                    s_tname = (s.get("teacher") or s.get("teacher_name") or s.get("teacherName") or "").strip().lower()
+                    teacher_name = (current_user.get("full_name") or "").strip().lower()
+                    if s_tid == teacher_id or (s_tname and s_tname == teacher_name):
+                        subject_batch_ids.append(b["id"])
+
+            assigned_batch_ids = list(set(routine_batch_ids + subject_batch_ids))
+
+        if not assigned_batch_ids:
+            return {"batches": [], "invoices": []}
+
+        # If filtered by specific batch_id
+        target_batches = [batch_id] if batch_id and batch_id in assigned_batch_ids else assigned_batch_ids
+
+        # 2. Fetch invoices for these batches with student and payments info
+        inv_query = supabase.table("invoices").select(
+            "*, batches(id, name), users!invoices_student_id_fkey(id, full_name, phone, email, guardian_name, guardian_phone), payments(*)"
+        ).in_("batch_id", target_batches).order("created_at", desc=True)
+
+        if status and status.upper() != "ALL":
+            inv_query = inv_query.eq("status", status.upper())
+
+        inv_res = inv_query.execute()
+        raw_invoices = inv_res.data or []
+
+        enriched = []
+        for inv in raw_invoices:
+            student = inv.get("users") or {}
+            batch = inv.get("batches") or {}
+            pmts = inv.get("payments") or []
+
+            # Check if there is a payment under verification
+            under_verification_pmt = next((p for p in pmts if p.get("status") == "UNDER_VERIFICATION"), None)
+            rejected_pmt = next((p for p in pmts if p.get("status") == "FAILED"), None)
+
+            net_due = max(0.0, float(inv.get("payable_amount") or 0.0) - float(inv.get("amount_paid") or 0.0))
+
+            enriched.append({
+                "id": inv["id"],
+                "invoice_number": inv.get("invoice_number"),
+                "invoice_type": inv.get("invoice_type"),
+                "billing_month": inv.get("billing_month"),
+                "billing_year": inv.get("billing_year"),
+                "payable_amount": float(inv.get("payable_amount") or 0.0),
+                "amount_paid": float(inv.get("amount_paid") or 0.0),
+                "net_due": net_due,
+                "status": inv.get("status"),
+                "batch_id": inv.get("batch_id"),
+                "batch_name": batch.get("name") or "Course Batch",
+                "student_id": inv.get("student_id"),
+                "student_name": student.get("full_name") or "Student",
+                "student_phone": student.get("phone") or "",
+                "guardian_phone": student.get("guardian_phone") or "",
+                "is_under_verification": bool(under_verification_pmt),
+                "under_verification_amount": float(under_verification_pmt.get("amount") or 0.0) if under_verification_pmt else None,
+                "has_rejected_payment": bool(rejected_pmt),
+                "rejected_reason": rejected_pmt.get("rejection_reason") if rejected_pmt else None
+            })
+
+        # Fetch batch summary list for filter dropdown including fee_type
+        batches_res = supabase.table("batches").select("id, name, fee_type").in_("id", assigned_batch_ids).execute()
+
+        return {
+            "batches": batches_res.data or [],
+            "invoices": enriched
+        }
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/collect-cash", summary="Teacher Collects Student Cash & Submits for Admin Verification")
+def teacher_collect_cash(
+    req: TeacherCollectCashRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    try:
+        supabase = get_supabase_client()
+        teacher_id = current_user.get("id")
+
+        # 1. Fetch target invoice
+        inv_res = supabase.table("invoices").select("*, payments(*)").eq("id", req.invoice_id).execute()
+        if not inv_res.data:
+            raise HTTPException(status_code=404, detail="Invoice not found.")
+
+        inv = inv_res.data[0]
+        if inv.get("status") == "PAID":
+            raise HTTPException(status_code=400, detail="Invoice is already fully paid.")
+
+        # 2. Check if a cash payment is already under verification
+        pmts = inv.get("payments") or []
+        pending_verif = any(p.get("status") == "UNDER_VERIFICATION" for p in pmts)
+        if pending_verif:
+            raise HTTPException(
+                status_code=400,
+                detail="A cash payment for this invoice is already submitted and awaiting Admin clearance."
+            )
+
+        # 3. Insert new payment row in payments table
+        payment_payload = {
+            "invoice_id": req.invoice_id,
+            "student_id": inv["student_id"],
+            "amount": float(req.amount),
+            "payment_mode": "CASH",
+            "status": "UNDER_VERIFICATION",
+            "collected_by": teacher_id,
+            "rejection_reason": None,
+            "paid_at": None
+        }
+
+        insert_res = supabase.table("payments").insert(payment_payload).execute()
+        created_payment = insert_res.data[0] if insert_res.data else payment_payload
+
+        return {
+            "message": "Cash collection recorded successfully. Forwarded to Admin verification queue.",
+            "payment": created_payment
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/cash-handover-ledger", summary="Get Cash Collection & Handover History for Logged-In Teacher")
+def get_teacher_cash_ledger(current_user: dict = Depends(get_current_user)):
+    try:
+        supabase = get_supabase_client()
+        teacher_id = current_user.get("id")
+
+        # Query all payments collected by this teacher
+        pmt_res = supabase.table("payments").select(
+            "*, invoices(id, invoice_number, billing_month, billing_year, invoice_type, payable_amount), users!payments_student_id_fkey(id, full_name, phone, batches(name))"
+        ).eq("collected_by", teacher_id).order("created_at", desc=True).execute()
+
+        raw_pmts = pmt_res.data or []
+
+        records = []
+        pending_total = 0.0
+        cleared_total = 0.0
+        rejected_count = 0
+
+        for p in raw_pmts:
+            inv = p.get("invoices") or {}
+            student = p.get("users") or {}
+            batch = student.get("batches") or {}
+            amt = float(p.get("amount") or 0.0)
+            st = p.get("status")
+
+            if st == "UNDER_VERIFICATION":
+                pending_total += amt
+            elif st == "SUCCESS":
+                cleared_total += amt
+            elif st == "FAILED":
+                rejected_count += 1
+
+            records.append({
+                "id": p.get("id"),
+                "amount": amt,
+                "status": st,
+                "payment_mode": p.get("payment_mode") or "CASH",
+                "invoice_id": p.get("invoice_id"),
+                "invoice_number": inv.get("invoice_number") or "N/A",
+                "billing_month": inv.get("billing_month"),
+                "billing_year": inv.get("billing_year"),
+                "student_name": student.get("full_name") or "Student",
+                "student_phone": student.get("phone") or "",
+                "batch_name": batch.get("name") or "Batch",
+                "created_at": p.get("created_at"),
+                "paid_at": p.get("paid_at"),
+                "rejection_reason": p.get("rejection_reason")
+            })
+
+        return {
+            "summary": {
+                "pending_handover_amount": pending_total,
+                "pending_handover_count": sum(1 for r in records if r["status"] == "UNDER_VERIFICATION"),
+                "cleared_amount": cleared_total,
+                "cleared_count": sum(1 for r in records if r["status"] == "SUCCESS"),
+                "rejected_count": rejected_count,
+                "total_collected": pending_total + cleared_total
+            },
+            "records": records
+        }
+    except Exception as e:
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))

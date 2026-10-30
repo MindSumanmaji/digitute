@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+﻿import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useLocation, useNavigate, Link } from 'react-router-dom';
 import {
   Activity, AlertCircle, ArrowDownRight, ArrowUpRight, Bell, BookOpen,
   CalendarDays, Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight,
@@ -6,7 +7,7 @@ import {
   FileText, GraduationCap, Home, LifeBuoy, LogOut, Menu, Moon,
   MoreHorizontal, Plus, Search, Settings2, ShieldCheck, SlidersHorizontal,
   Sparkles, Sun, Users, Wallet, X, Megaphone, Building2, UserRoundPlus,
-  BookMarked, CalendarCheck, ChartNoAxesCombined, ClipboardList, PanelLeftClose,
+  BookMarked, CalendarCheck, ClipboardList, PanelLeftClose,
   PanelLeftOpen, ReceiptText, TrendingUp, UserCheck, UserCog, WalletCards,
   CircleHelp, Filter, CheckCheck, Printer, MessageSquare, Copy, Link2, Trash2, Edit3
 } from 'lucide-react';
@@ -19,18 +20,53 @@ import TeachersView from './components/Admin/TeachersView';
 import StudentsView from './components/Admin/StudentsView';
 import FinanceView from './components/Admin/FinanceView';
 import NoticeBoardView from './components/Admin/NoticeBoardView';
-import ReportsView from './components/Admin/ReportsView';
 
 const navItems = [
-  { label: 'Home', icon: Home },
-  { label: 'Batches & Courses', icon: BookOpen },
-  { label: 'Routine & Schedule', icon: CalendarDays },
-  { label: 'Teachers & Staff', icon: UserCog },
-  { label: 'Students & Admissions', icon: Users },
-  { label: 'Finance & Fees', icon: WalletCards },
-  { label: 'Notice Board', icon: Megaphone },
-  { label: 'Reports & Analytics', icon: ChartNoAxesCombined },
+  { label: 'Home', icon: Home, path: '/admin' },
+  { label: 'Batches & Courses', icon: BookOpen, path: '/admin/batches' },
+  { label: 'Routine & Schedule', icon: CalendarDays, path: '/admin/routine-schedule' },
+  { label: 'Teachers & Staff', icon: UserCog, path: '/admin/teachers' },
+  { label: 'Students & Admissions', icon: Users, path: '/admin/students' },
+  { label: 'Finance & Fees', icon: WalletCards, path: '/admin/finance' },
+  { label: 'Notice Board', icon: Megaphone, path: '/admin/notice-board' },
 ];
+
+const pathToPage = {
+  '/admin': 'Home',
+  '/admin/': 'Home',
+  '/admin/home': 'Home',
+  '/admin/dashboard': 'Home',
+  '/admin/batches': 'Batches & Courses',
+  '/admin/batches-courses': 'Batches & Courses',
+  '/admin/courses': 'Batches & Courses',
+  '/admin/routine-schedule': 'Routine & Schedule',
+  '/admin/routine': 'Routine & Schedule',
+  '/admin/schedule': 'Routine & Schedule',
+  '/admin/teachers': 'Teachers & Staff',
+  '/admin/teachers-staff': 'Teachers & Staff',
+  '/admin/staff': 'Teachers & Staff',
+  '/admin/faculty': 'Teachers & Staff',
+  '/admin/students': 'Students & Admissions',
+  '/admin/students-admissions': 'Students & Admissions',
+  '/admin/admissions': 'Students & Admissions',
+  '/admin/finance': 'Finance & Fees',
+  '/admin/finance-fees': 'Finance & Fees',
+  '/admin/fees': 'Finance & Fees',
+  '/admin/invoices': 'Finance & Fees',
+  '/admin/notice-board': 'Notice Board',
+  '/admin/notices': 'Notice Board',
+  '/admin/notice': 'Notice Board',
+};
+
+const pageToPath = {
+  'Home': '/admin',
+  'Batches & Courses': '/admin/batches',
+  'Routine & Schedule': '/admin/routine-schedule',
+  'Teachers & Staff': '/admin/teachers',
+  'Students & Admissions': '/admin/students',
+  'Finance & Fees': '/admin/finance',
+  'Notice Board': '/admin/notice-board',
+};
 
 const monthData = [
   { month: 'May', cash: 35, online: 24 },
@@ -42,9 +78,9 @@ const monthData = [
 ];
 
 const schedule = [
-  { time: '04:00 PM', end: '05:30 PM', subject: 'Physics', batch: 'Class 12 · Science', teacher: 'Arindam Roy', room: 'Room 02', color: 'teal' },
+  { time: '04:00 PM', end: '05:30 PM', subject: 'Physics', batch: 'Class 12 ┬╖ Science', teacher: 'Arindam Roy', room: 'Room 02', color: 'teal' },
   { time: '04:30 PM', end: '06:00 PM', subject: 'Mathematics', batch: 'JEE Foundation', teacher: 'S. Mukherjee', room: 'Room 01', color: 'violet' },
-  { time: '05:30 PM', end: '07:00 PM', subject: 'Chemistry', batch: 'Class 11 · Science', teacher: 'Debjani Paul', room: 'Room 03', color: 'orange' },
+  { time: '05:30 PM', end: '07:00 PM', subject: 'Chemistry', batch: 'Class 11 ┬╖ Science', teacher: 'Debjani Paul', room: 'Room 03', color: 'orange' },
 ];
 
 function formatINR(value) {
@@ -52,37 +88,15 @@ function formatINR(value) {
 }
 
 function Brand({ collapsed }) {
-  const handleDeleteNotice = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this notice?')) return;
-    try {
-      await apiRequest(`/api/admin/notices/${id}`, { method: 'DELETE' });
-      setNotices(prev => prev.filter(n => n.id !== id));
-      showToast('Notice Deleted', 'The notice has been removed from the board.');
-    } catch (err) {
-      showToast('Delete Failed', err.message || 'Could not delete notice.');
-    }
-  };
-
   return (
-    <div className={`brand ${collapsed ? 'brand-collapsed' : ''}`}>
+    <Link to="/admin" className={`brand ${collapsed ? 'brand-collapsed' : ''}`} style={{ textDecoration: 'none', color: 'inherit' }}>
       <div className="brand-mark"><GraduationCap size={21} strokeWidth={2.4} /></div>
       {!collapsed && <div className="brand-copy"><span>DigiTute</span><small>ADMIN WORKSPACE</small></div>}
-    </div>
+    </Link>
   );
 }
 
 function Sidebar({ activePage, onNavigate, collapsed, setCollapsed, mobileOpen, setMobileOpen, onSignOut }) {
-  const handleDeleteNotice = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this notice?')) return;
-    try {
-      await apiRequest(`/api/admin/notices/${id}`, { method: 'DELETE' });
-      setNotices(prev => prev.filter(n => n.id !== id));
-      showToast('Notice Deleted', 'The notice has been removed from the board.');
-    } catch (err) {
-      showToast('Delete Failed', err.message || 'Could not delete notice.');
-    }
-  };
-
   return (
     <>
       {mobileOpen && <button className="mobile-scrim" aria-label="Close navigation" onClick={() => setMobileOpen(false)} />}
@@ -98,27 +112,18 @@ function Sidebar({ activePage, onNavigate, collapsed, setCollapsed, mobileOpen, 
           {navItems.map((item) => {
             const Icon = item.icon;
             const active = activePage === item.label;
-            const handleDeleteNotice = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this notice?')) return;
-    try {
-      await apiRequest(`/api/admin/notices/${id}`, { method: 'DELETE' });
-      setNotices(prev => prev.filter(n => n.id !== id));
-      showToast('Notice Deleted', 'The notice has been removed from the board.');
-    } catch (err) {
-      showToast('Delete Failed', err.message || 'Could not delete notice.');
-    }
-  };
-
-  return (
-              <button
+            return (
+              <Link
                 key={item.label}
+                to={item.path}
                 className={`nav-item ${active ? 'active' : ''}`}
-                onClick={() => { onNavigate(item.label); setMobileOpen(false); }}
+                style={{ textDecoration: 'none' }}
+                onClick={() => { onNavigate(item.path); setMobileOpen(false); }}
               >
                 <Icon size={18} />
                 {!collapsed && <span className="nav-item-label">{item.label}</span>}
                 {collapsed && <span className="nav-tooltip">{item.label}</span>}
-              </button>
+              </Link>
             );
           })}
         </nav>
@@ -154,17 +159,6 @@ function Topbar({ user, searchQuery, setSearchQuery, onMobileMenu, darkMode, set
     .slice(0, 2)
     .join('')
     .toUpperCase() || 'AD';
-
-  const handleDeleteNotice = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this notice?')) return;
-    try {
-      await apiRequest(`/api/admin/notices/${id}`, { method: 'DELETE' });
-      setNotices(prev => prev.filter(n => n.id !== id));
-      showToast('Notice Deleted', 'The notice has been removed from the board.');
-    } catch (err) {
-      showToast('Delete Failed', err.message || 'Could not delete notice.');
-    }
-  };
 
   return (
     <header className="topbar">
@@ -202,7 +196,7 @@ function Topbar({ user, searchQuery, setSearchQuery, onMobileMenu, darkMode, set
               <div className="notification-row">
                 <div className="notification-icon orange-soft"><Wallet size={16} /></div>
                 <div>
-                  <strong>₹2,000 received via Razorpay</strong>
+                  <strong>Γé╣2,000 received via Razorpay</strong>
                   <p>Priyanka Roy (Class 12) paid October tuition fees.</p>
                   <small>Today, 11:24 AM</small>
                 </div>
@@ -259,17 +253,6 @@ function Topbar({ user, searchQuery, setSearchQuery, onMobileMenu, darkMode, set
 }
 
 function MetricCard({ icon: Icon, label, value, change, changeType = 'positive', note, iconClass, trend }) {
-  const handleDeleteNotice = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this notice?')) return;
-    try {
-      await apiRequest(`/api/admin/notices/${id}`, { method: 'DELETE' });
-      setNotices(prev => prev.filter(n => n.id !== id));
-      showToast('Notice Deleted', 'The notice has been removed from the board.');
-    } catch (err) {
-      showToast('Delete Failed', err.message || 'Could not delete notice.');
-    }
-  };
-
   return (
     <div className="metric-card">
       <div className="metric-card-top">
@@ -291,17 +274,6 @@ function MetricCard({ icon: Icon, label, value, change, changeType = 'positive',
 }
 
 function CollectionChart({ period, setPeriod }) {
-  const handleDeleteNotice = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this notice?')) return;
-    try {
-      await apiRequest(`/api/admin/notices/${id}`, { method: 'DELETE' });
-      setNotices(prev => prev.filter(n => n.id !== id));
-      showToast('Notice Deleted', 'The notice has been removed from the board.');
-    } catch (err) {
-      showToast('Delete Failed', err.message || 'Could not delete notice.');
-    }
-  };
-
   return (
     <section className="panel collection-panel">
       <div className="card-header">
@@ -319,7 +291,7 @@ function CollectionChart({ period, setPeriod }) {
       </div>
 
       <div className="chart-summary">
-        <strong>₹4,82,500</strong>
+        <strong>Γé╣4,82,500</strong>
         <span className="summary-positive"><ArrowUpRight size={13} /> +12.8%</span>
         <span className="chart-summary-note">collected in October 2026</span>
       </div>
@@ -331,25 +303,14 @@ function CollectionChart({ period, setPeriod }) {
 
       <div className="bar-chart">
         <div className="chart-grid-lines">
-          <span>₹6L</span><span>₹4L</span><span>₹2L</span><span>₹0</span>
+          <span>Γé╣6L</span><span>Γé╣4L</span><span>Γé╣2L</span><span>Γé╣0</span>
         </div>
         <div className="bar-chart-area">
           {monthData.map((d) => {
             const total = d.cash + d.online;
             const pct = Math.min(100, (total / 100) * 100);
             const onlineRatio = (d.online / total) * 100;
-            const handleDeleteNotice = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this notice?')) return;
-    try {
-      await apiRequest(`/api/admin/notices/${id}`, { method: 'DELETE' });
-      setNotices(prev => prev.filter(n => n.id !== id));
-      showToast('Notice Deleted', 'The notice has been removed from the board.');
-    } catch (err) {
-      showToast('Delete Failed', err.message || 'Could not delete notice.');
-    }
-  };
-
-  return (
+            return (
               <div className="bar-column" key={d.month}>
                 <div className="bar-stack" style={{ height: `${pct}%` }}>
                   <span className="bar-online" style={{ height: `${onlineRatio}%` }} />
@@ -363,25 +324,14 @@ function CollectionChart({ period, setPeriod }) {
       </div>
 
       <div className="chart-footnote">
-        <span><i className="tiny-dot teal-dot" /> Razorpay: <strong>₹2,17,000</strong></span>
-        <span><i className="tiny-dot orange-dot" /> Cash: <strong>₹2,65,500</strong></span>
+        <span><i className="tiny-dot teal-dot" /> Razorpay: <strong>Γé╣2,17,000</strong></span>
+        <span><i className="tiny-dot orange-dot" /> Cash: <strong>Γé╣2,65,500</strong></span>
       </div>
     </section>
   );
 }
 
 function TodaySchedule({ onViewAll }) {
-  const handleDeleteNotice = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this notice?')) return;
-    try {
-      await apiRequest(`/api/admin/notices/${id}`, { method: 'DELETE' });
-      setNotices(prev => prev.filter(n => n.id !== id));
-      showToast('Notice Deleted', 'The notice has been removed from the board.');
-    } catch (err) {
-      showToast('Delete Failed', err.message || 'Could not delete notice.');
-    }
-  };
-
   return (
     <section className="panel schedule-panel">
       <div className="card-header">
@@ -425,27 +375,16 @@ function TodaySchedule({ onViewAll }) {
   );
 }
 
-function HomeView({ searchQuery, onQuickAction, onNavigate, students, notices = [] }) {
+function HomeView({ searchQuery, onQuickAction, onNavigate, students }) {
   const [period, setPeriod] = useState('This month');
   const dueList = students.filter(s => s.dueAmount > 0);
 
   const metrics = [
     { icon: Users, label: 'Active students', value: '180', change: '+12 new', note: 'across 4 batches', iconClass: 'teal-icon', trend: [30, 50, 42, 65, 56, 84, 76, 100] },
     { icon: BookOpen, label: 'Active batches', value: '4', change: '100% active', note: 'running smoothly', iconClass: 'violet-icon', trend: [35, 35, 45, 45, 60, 60, 83, 83] },
-    { icon: Wallet, label: 'Fee collected', value: '₹4.82L', change: '+12.8%', note: 'this month', iconClass: 'orange-icon', trend: [24, 43, 34, 62, 51, 75, 69, 100] },
-    { icon: AlertCircle, label: 'Pending dues', value: '₹7,400', change: '4 students', changeType: 'negative', note: 'due by 10th Oct', iconClass: 'rose-icon', trend: [80, 64, 73, 52, 58, 42, 30, 22] },
+    { icon: Wallet, label: 'Fee collected', value: 'Γé╣4.82L', change: '+12.8%', note: 'this month', iconClass: 'orange-icon', trend: [24, 43, 34, 62, 51, 75, 69, 100] },
+    { icon: AlertCircle, label: 'Pending dues', value: 'Γé╣7,400', change: '4 students', changeType: 'negative', note: 'due by 10th Oct', iconClass: 'rose-icon', trend: [80, 64, 73, 52, 58, 42, 30, 22] },
   ];
-
-  const handleDeleteNotice = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this notice?')) return;
-    try {
-      await apiRequest(`/api/admin/notices/${id}`, { method: 'DELETE' });
-      setNotices(prev => prev.filter(n => n.id !== id));
-      showToast('Notice Deleted', 'The notice has been removed from the board.');
-    } catch (err) {
-      showToast('Delete Failed', err.message || 'Could not delete notice.');
-    }
-  };
 
   return (
     <>
@@ -494,7 +433,7 @@ function HomeView({ searchQuery, onQuickAction, onNavigate, students, notices = 
                         </div>
                       </td>
                       <td><span className="batch-name">{s.batch}</span></td>
-                      <td><strong className="due-amount">₹{s.dueAmount.toLocaleString('en-IN')}</strong></td>
+                      <td><strong className="due-amount">Γé╣{s.dueAmount.toLocaleString('en-IN')}</strong></td>
                       <td><span className="due-date">{s.dueDate}</span></td>
                       <td style={{ textAlign: 'right' }}>
                         <button
@@ -523,28 +462,20 @@ function HomeView({ searchQuery, onQuickAction, onNavigate, students, notices = 
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 14 }}>
-            {(!notices || notices.length === 0) ? (
-              <div style={{ padding: '16px', textAlign: 'center', color: '#64748B', fontSize: 13.5 }}>
-                No active announcements published yet.
+            <div style={{ padding: 14, borderRadius: 10, background: '#f8fbfb', border: '1px solid #ebf2f0', display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <strong style={{ fontSize: 16 }}>Kali Puja & Diwali Vacation</strong>
+                <span className="notice-audience-pill" style={{ fontSize: 13 }}>All Students</span>
               </div>
-            ) : (
-              notices.slice(0, 3).map(n => (
-                <div key={n.id} style={{ padding: 14, borderRadius: 10, background: '#f8fbfb', border: '1px solid #ebf2f0', display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <strong style={{ fontSize: 15, color: '#0F172A' }}>{n.title}</strong>
-                    <span className="notice-audience-pill" style={{ fontSize: 12.5 }}>
-                      {n.audience_label || (n.target_audience === 'BATCH' ? (n.batch_names?.join(', ') || 'Batch') : 'All')}
-                    </span>
-                  </div>
-                  <p style={{ margin: 0, fontSize: 13.5, color: 'var(--text-2)', lineHeight: 1.5 }}>
-                    {n.body && n.body.length > 90 ? n.body.slice(0, 90) + '...' : n.body}
-                  </p>
-                  <span style={{ fontSize: 12, color: '#0F766E', fontWeight: 600 }}>
-                    {n.sender_role === 'ADMIN' ? `Sent by ${n.sender_name || 'Admin'} – Admin` : `Sent by ${n.sender_name || 'Teacher'} – Teacher`}
-                  </span>
-                </div>
-              ))
-            )}
+              <p style={{ margin: 0, fontSize: 14, color: 'var(--text-2)' }}>Classes suspended from 28th Oct to 3rd Nov 2026.</p>
+            </div>
+            <div style={{ padding: 14, borderRadius: 10, background: '#f8fbfb', border: '1px solid #ebf2f0', display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <strong style={{ fontSize: 16 }}>October Fee Due Reminder</strong>
+                <span className="notice-audience-pill" style={{ fontSize: 13 }}>Pending Dues</span>
+              </div>
+              <p style={{ margin: 0, fontSize: 14, color: 'var(--text-2)' }}>Kindly clear dues by 10th Oct to avoid late fines.</p>
+            </div>
           </div>
         </section>
       </div>
@@ -585,7 +516,7 @@ function Modal({ modal, onClose, onSubmit, selectedItem, batches, teachers }) {
     lateFine: '100',
     qualification: selectedItem?.qualification || '',
     specialization: selectedItem?.specialization || '',
-    payoutModel: 'Fixed Monthly (₹6,000/mo)',
+    payoutModel: 'Fixed Monthly (Γé╣6,000/mo)',
     audience: 'All Students & Teachers',
     message: '',
   });
@@ -664,17 +595,6 @@ function Modal({ modal, onClose, onSubmit, selectedItem, batches, teachers }) {
     }
   }
 
-  const handleDeleteNotice = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this notice?')) return;
-    try {
-      await apiRequest(`/api/admin/notices/${id}`, { method: 'DELETE' });
-      setNotices(prev => prev.filter(n => n.id !== id));
-      showToast('Notice Deleted', 'The notice has been removed from the board.');
-    } catch (err) {
-      showToast('Delete Failed', err.message || 'Could not delete notice.');
-    }
-  };
-
   return (
     <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className={`modal-card ${isBatch || isTeacher ? 'modal-card-lg' : ''}`}>
@@ -745,7 +665,7 @@ function Modal({ modal, onClose, onSubmit, selectedItem, batches, teachers }) {
                   margin: '12px auto 0',
                   textAlign: 'left'
                 }}>
-                  ⚠️ <strong>Warning:</strong> {selectedItem?.studentCount || selectedItem?.student_count} student(s) currently enrolled will be unassigned from this batch.
+                  ΓÜá∩╕Å <strong>Warning:</strong> {selectedItem?.studentCount || selectedItem?.student_count} student(s) currently enrolled will be unassigned from this batch.
                 </div>
               )}
             </div>
@@ -781,7 +701,7 @@ function Modal({ modal, onClose, onSubmit, selectedItem, batches, teachers }) {
               <div style={{ borderTop: '1px solid #e1e9e7', marginTop: 12, paddingTop: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: 12, fontWeight: 700 }}>Total Amount Paid:</span>
                 <strong style={{ font: '800 18px Manrope, sans-serif', color: 'var(--teal-dark)' }}>
-                  ₹{(selectedItem?.amount || Number(form.amount) || 2000).toLocaleString('en-IN')}
+                  Γé╣{(selectedItem?.amount || Number(form.amount) || 2000).toLocaleString('en-IN')}
                 </strong>
               </div>
             </div>
@@ -806,7 +726,7 @@ function Modal({ modal, onClose, onSubmit, selectedItem, batches, teachers }) {
                     </label>
                   ) : (
                     <label className="form-field">
-                      <span>Email Address (Login Identity · Read-only)</span>
+                      <span>Email Address (Login Identity ┬╖ Read-only)</span>
                       <input type="email" value={form.email} disabled readOnly style={{ opacity: 0.75, cursor: 'not-allowed', background: 'var(--bg-card)' }} />
                     </label>
                   )}
@@ -835,7 +755,7 @@ function Modal({ modal, onClose, onSubmit, selectedItem, batches, teachers }) {
                 </div>
                 <div className="form-row">
                   <label className="form-field">
-                    <span>Scholarship / Discount (₹/mo)</span>
+                    <span>Scholarship / Discount (Γé╣/mo)</span>
                     <input type="number" min="0" value={form.discountAmount} onChange={(e) => update('discountAmount', e.target.value)} placeholder="0 for regular fee" />
                   </label>
                   <label className="form-field">
@@ -881,7 +801,7 @@ function Modal({ modal, onClose, onSubmit, selectedItem, batches, teachers }) {
                       </select>
                     </label>
                     <label className="form-field">
-                      <span>{form.feeType === 'ONE_TIME' ? 'Full Course Fee (₹)' : 'Monthly Tuition Fee (₹)'} <b>*</b></span>
+                      <span>{form.feeType === 'ONE_TIME' ? 'Full Course Fee (Γé╣)' : 'Monthly Tuition Fee (Γé╣)'} <b>*</b></span>
                       <input
                         required
                         type="number"
@@ -960,11 +880,11 @@ function Modal({ modal, onClose, onSubmit, selectedItem, batches, teachers }) {
                   <div className="batch-share-summary">
                     <span>
                       Faculty Share Total: <strong>{totalShare}%</strong>
-                      {' · '}
+                      {' ┬╖ '}
                       Institute Retains: <strong>{Math.max(0, 100 - totalShare)}%</strong>
                     </span>
                     {totalShare > 100 && (
-                      <span style={{ color: '#d33', fontWeight: 700 }}>⚠️ Exceeds 100%</span>
+                      <span style={{ color: '#d33', fontWeight: 700 }}>ΓÜá∩╕Å Exceeds 100%</span>
                     )}
                   </div>
                 </div>
@@ -980,7 +900,7 @@ function Modal({ modal, onClose, onSubmit, selectedItem, batches, teachers }) {
                   </label>
                   {isEditTeacher ? (
                     <label className="form-field">
-                      <span>Email Address (Login Identity · Read-only)</span>
+                      <span>Email Address (Login Identity ┬╖ Read-only)</span>
                       <input type="email" value={form.email} disabled readOnly style={{ opacity: 0.75, cursor: 'not-allowed', background: 'var(--bg-card)' }} />
                     </label>
                   ) : (
@@ -1046,11 +966,12 @@ function Modal({ modal, onClose, onSubmit, selectedItem, batches, teachers }) {
                   <input required value={form.title} onChange={(e) => update('title', e.target.value)} placeholder="e.g. Upcoming Exam & Vacation Notice" />
                 </label>
                 <label className="form-field">
-                  <span>Share With (Target Audience) <b>*</b></span>
+                  <span>Target Audience</span>
                   <select value={form.audience} onChange={(e) => update('audience', e.target.value)}>
-                    <option value="Teachers & Students">Teachers & Students</option>
-                    <option value="Students Only">Students Only</option>
-                    <option value="Teachers Only">Teachers Only</option>
+                    <option>All Students & Teachers</option>
+                    <option>Students Only</option>
+                    <option>Teachers Only</option>
+                    <option>Students with Pending Dues</option>
                   </select>
                 </label>
                 <label className="form-field">
@@ -1094,17 +1015,6 @@ function Modal({ modal, onClose, onSubmit, selectedItem, batches, teachers }) {
 
 function Toast({ toast, onClose }) {
   if (!toast) return null;
-  const handleDeleteNotice = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this notice?')) return;
-    try {
-      await apiRequest(`/api/admin/notices/${id}`, { method: 'DELETE' });
-      setNotices(prev => prev.filter(n => n.id !== id));
-      showToast('Notice Deleted', 'The notice has been removed from the board.');
-    } catch (err) {
-      showToast('Delete Failed', err.message || 'Could not delete notice.');
-    }
-  };
-
   return (
     <div className="toast-message">
       <span className="toast-check"><Check size={16} /></span>
@@ -1118,6 +1028,24 @@ function Toast({ toast, onClose }) {
 }
 
 export default function AdminPanel({ onBackToLanding }) {
+  const location = useLocation();
+  const routerNavigate = useNavigate();
+
+  // Derive activePage reactively from current URL path
+  const activePage = useMemo(() => {
+    const rawPath = (location.pathname || '').toLowerCase();
+    const cleanPath = rawPath.replace(/\/+$/, '') || '/admin';
+    return pathToPage[cleanPath] || pathToPage['/admin'] || 'Home';
+  }, [location.pathname]);
+
+  // Keep URL clean: redirect root '/' to '/admin' when inside AdminPanel
+  useEffect(() => {
+    const current = (location.pathname || '').toLowerCase();
+    if (current === '/' || current === '') {
+      routerNavigate('/admin', { replace: true });
+    }
+  }, [location.pathname, routerNavigate]);
+
   const [currentUser, setCurrentUser] = useState(() => {
     try {
       const u = localStorage.getItem('digitute_user');
@@ -1135,8 +1063,6 @@ export default function AdminPanel({ onBackToLanding }) {
       if (onBackToLanding) onBackToLanding();
     }
   }, [onBackToLanding]);
-
-  const [activePage, setActivePage] = useState('Home');
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -1189,18 +1115,7 @@ export default function AdminPanel({ onBackToLanding }) {
       }
     }
     fetchInitialData();
-    const handleDeleteNotice = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this notice?')) return;
-    try {
-      await apiRequest(`/api/admin/notices/${id}`, { method: 'DELETE' });
-      setNotices(prev => prev.filter(n => n.id !== id));
-      showToast('Notice Deleted', 'The notice has been removed from the board.');
-    } catch (err) {
-      showToast('Delete Failed', err.message || 'Could not delete notice.');
-    }
-  };
-
-  return () => { isMounted = false; };
+    return () => { isMounted = false; };
   }, []);
 
   function showToast(title, message) {
@@ -1473,10 +1388,11 @@ export default function AdminPanel({ onBackToLanding }) {
     setModal(null);
   }
 
-  function navigate(page) {
-    setActivePage(page);
+  const navigate = useCallback((pageOrPath) => {
+    const target = pageToPath[pageOrPath] || (pageOrPath.startsWith('/admin') ? pageOrPath : `/admin/${pageOrPath}`);
+    routerNavigate(target);
     setSearchQuery('');
-  }
+  }, [routerNavigate]);
 
   const handleDeleteNotice = async (id) => {
     if (!window.confirm('Are you sure you want to delete this notice?')) return;
@@ -1582,11 +1498,7 @@ export default function AdminPanel({ onBackToLanding }) {
             />
           )}
 
-          {activePage === 'Reports & Analytics' && (
-            <ReportsView
-              onExportReport={() => openAction('Export report')}
-            />
-          )}
+
         </main>
       </div>
 

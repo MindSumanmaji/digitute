@@ -118,7 +118,7 @@ WHERE invoice_type = 'ONE_TIME';
 -- 4. PAYMENTS & TRANSACTIONS (Online Razorpay + Offline Cash + Receipts)
 -- ==============================================================================
 CREATE TYPE payment_mode AS ENUM ('RAZORPAY', 'CASH');
-CREATE TYPE payment_status AS ENUM ('INITIATED', 'SUCCESS', 'FAILED');
+CREATE TYPE payment_status AS ENUM ('INITIATED', 'UNDER_VERIFICATION', 'SUCCESS', 'FAILED');
 
 CREATE TABLE payments (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -135,7 +135,8 @@ CREATE TABLE payments (
     razorpay_signature VARCHAR(255),
     
     -- Offline Cash Collection
-    collected_by UUID REFERENCES users(id), -- Admin/Staff who received cash
+    collected_by UUID REFERENCES users(id), -- Admin/Teacher/Staff who received cash
+    rejection_reason TEXT,                  -- Optional reason if rejected by Admin
     
     paid_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ DEFAULT NOW()

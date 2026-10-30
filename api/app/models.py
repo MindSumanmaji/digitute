@@ -232,6 +232,15 @@ class VerifyPaymentResponse(BaseModel):
     payment_id: Optional[str] = None
     amount_paid: float
 
+# Offline Cash Collection & Verification Models
+class TeacherCollectCashRequest(BaseModel):
+    invoice_id: str = Field(..., description="Target invoice UUID to record cash payment")
+    amount: float = Field(..., gt=0, description="Amount collected in cash")
+    notes: Optional[str] = None
+
+class AdminRejectCashRequest(BaseModel):
+    reason: Optional[str] = Field("Cash not received or amount discrepancy", description="Reason for rejecting cash payment")
+
 # ==============================================================================
 # 7. STUDY MATERIALS, DPPS, DOUBTS & EXAMS
 # ==============================================================================

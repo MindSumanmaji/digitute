@@ -442,10 +442,62 @@ def get_my_invoices(current_user: dict = Depends(get_current_user)):
         student_id = current_user.get("id")
         
         res = supabase.table("invoices").select(
-            "*, batches(name)"
+            "*, batches(name), payments(*, teacher:users!payments_collected_by_fkey(full_name))"
         ).eq("student_id", student_id).order("created_at", desc=True).execute()
         
-        invoices = res.data or []
+        raw_invoices = res.data or []
+        invoices = []
+
+        for inv in raw_invoices:
+            pmts = inv.get("payments") or []
+            under_verif = next((p for p in pmts if p.get("status") == "UNDER_VERIFICATION"), None)
+            # Gather all failed payments sorted latest first
+            failed_pmts = [p for p in pmts if p.get("status") == "FAILED"]
+            failed_pmts.sort(key=lambda x: x.get("created_at") or "", reverse=True)
+            failed_pmt = failed_pmts[0] if failed_pmts else None
+
+            under_verif_info = None
+            if under_verif:
+                t_info = under_verif.get("teacher") or {}
+                under_verif_info = {
+                    "id": under_verif.get("id"),
+                    "amount": float(under_verif.get("amount") or 0.0),
+                    "payment_mode": under_verif.get("payment_mode") or "CASH",
+                    "teacher_name": t_info.get("full_name") or "Teacher",
+                    "created_at": under_verif.get("created_at")
+                }
+
+            rejected_info = None
+            if failed_pmt:
+                t_info = failed_pmt.get("teacher") or {}
+                rejected_info = {
+                    "id": failed_pmt.get("id"),
+                    "amount": float(failed_pmt.get("amount") or 0.0),
+                    "payment_mode": failed_pmt.get("payment_mode") or "CASH",
+                    "teacher_name": t_info.get("full_name") or "Teacher",
+                    "rejection_reason": failed_pmt.get("rejection_reason") or "Cash not received at center counter",
+                    "created_at": failed_pmt.get("created_at")
+                }
+
+            rejected_history = []
+            for fp in failed_pmts:
+                t_info = fp.get("teacher") or {}
+                rejected_history.append({
+                    "id": fp.get("id"),
+                    "amount": float(fp.get("amount") or 0.0),
+                    "payment_mode": fp.get("payment_mode") or "CASH",
+                    "teacher_name": t_info.get("full_name") or "Teacher",
+                    "rejection_reason": fp.get("rejection_reason") or "Cash not received at center counter",
+                    "created_at": fp.get("created_at")
+                })
+
+            inv["is_under_verification"] = bool(under_verif)
+            inv["under_verification_payment"] = under_verif_info
+            inv["has_rejected_payment"] = bool(failed_pmt)
+            inv["rejected_payment"] = rejected_info
+            inv["rejected_history"] = rejected_history
+            invoices.append(inv)
+
         total_outstanding = sum(
             max(0.0, float(i.get("payable_amount", 0)) - float(i.get("amount_paid", 0)))
             for i in invoices if i.get("status") == "PENDING"
@@ -456,6 +508,7 @@ def get_my_invoices(current_user: dict = Depends(get_current_user)):
             "invoices": invoices
         }
     except Exception as e:
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 # ==============================================================================
@@ -629,10 +682,19 @@ def get_my_payments(current_user: dict = Depends(get_current_user)):
         student_id = current_user.get("id")
         
         res = supabase.table("payments").select(
-            "*, invoices(invoice_number, billing_month, billing_year, invoice_type, base_amount, payable_amount)"
-        ).eq("student_id", student_id).eq("status", "SUCCESS").order("paid_at", desc=True).execute()
-        return res.data or []
+            "*, invoices(invoice_number, billing_month, billing_year, invoice_type, base_amount, payable_amount), teacher:users!payments_collected_by_fkey(full_name)"
+        ).eq("student_id", student_id).order("created_at", desc=True).execute()
+
+        raw_data = res.data or []
+        enriched = []
+        for p in raw_data:
+            teacher_info = p.get("teacher") or {}
+            p["collected_by_name"] = teacher_info.get("full_name") or None
+            enriched.append(p)
+
+        return enriched
     except Exception as e:
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 # ==============================================================================

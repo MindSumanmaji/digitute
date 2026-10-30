@@ -29,6 +29,23 @@ function getPaymentDescription(p) {
   return 'Tuition Fees';
 }
 
+function formatDateTime(dtStr) {
+  if (!dtStr) return 'Recently';
+  try {
+    const d = new Date(dtStr);
+    return d.toLocaleString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    });
+  } catch (e) {
+    return dtStr;
+  }
+}
+
 
 // Helper to dynamically load official Razorpay standard checkout script
 const loadRazorpayScript = () => {
@@ -54,6 +71,11 @@ export default function FeesTab({
   const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(false);
   const [payingInvoiceId, setPayingInvoiceId] = useState(null);
+  const [expandedRejections, setExpandedRejections] = useState({});
+
+  const toggleRejectionHistory = (invId) => {
+    setExpandedRejections(prev => ({ ...prev, [invId]: !prev[invId] }));
+  };
 
   // Fetch student invoices & payment receipts
   const fetchData = useCallback(async () => {
@@ -80,7 +102,9 @@ export default function FeesTab({
   // Outstanding due invoices
   const pendingInvoices = invoices.filter(inv => inv.status === 'PENDING');
 
-  // Filter payment history
+  // Filter payment history:
+  // Only successfully settled payments (SUCCESS) with receipts are shown in history.
+  // Active dues and cash rejections are displayed directly on the respective invoice card above.
   const filteredPayments = payments.filter((p) => p.status === 'SUCCESS');
 
   // Direct Razorpay Standard Checkout Handler (No dummy intermediate modal!)
@@ -249,70 +273,231 @@ export default function FeesTab({
 
               const isThisPaying = payingInvoiceId === inv.id;
 
-              return (
-                <div key={inv.id} className="sp-due-invoice-item">
-                  {/* Left Column: Details */}
-                  <div className="sp-due-invoice-details">
-                    <div className="sp-due-invoice-tags">
-                      <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 13.5, color: '#0f766e' }}>
-                        {inv.invoice_number}
-                      </span>
+              const isUnderVerif = inv.is_under_verification;
+              const hasRejected = inv.has_rejected_payment && !isUnderVerif;
 
-                      <span
-                        style={{
-                          fontSize: 11,
-                          fontWeight: 600,
-                          padding: '2px 8px',
-                          borderRadius: 10,
-                          background: isOneTime ? '#f0fdf4' : '#f1f5f9',
-                          color: isOneTime ? '#15803d' : '#475569'
-                        }}
-                      >
-                        {isOneTime ? 'One-Time' : 'Monthly'}
-                      </span>
+              return (
+                <div key={inv.id} className="sp-due-invoice-item" style={{ flexDirection: 'column', alignItems: 'stretch', gap: 0, padding: 0 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', flexWrap: 'wrap', gap: 14 }}>
+                      {/* Left Column: Details */}
+                      <div className="sp-due-invoice-details">
+                        <div className="sp-due-invoice-tags">
+                        <span style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: 13.5, color: '#0f766e' }}>
+                          {inv.invoice_number}
+                        </span>
+
+                        <span
+                          style={{
+                            fontSize: 11,
+                            fontWeight: 600,
+                            padding: '2px 8px',
+                            borderRadius: 10,
+                            background: isOneTime ? '#f0fdf4' : '#f1f5f9',
+                            color: isOneTime ? '#15803d' : '#475569'
+                          }}
+                        >
+                          {isOneTime ? 'One-Time' : 'Monthly'}
+                        </span>
+
+                        {isUnderVerif && (
+                          <span
+                            style={{
+                              fontSize: 11.5,
+                              fontWeight: 700,
+                              padding: '2px 9px',
+                              borderRadius: 10,
+                              background: '#fef3c7',
+                              color: '#b45309',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 4
+                            }}
+                          >
+                            Cash Collected by: {inv.under_verification_payment?.teacher_name || 'Teacher'}
+                          </span>
+                        )}
+
+                        {hasRejected && (
+                          <>
+                            <span
+                              style={{
+                                fontSize: 11.5,
+                                fontWeight: 700,
+                                padding: '2px 9px',
+                                borderRadius: 10,
+                                background: '#fef3c7',
+                                color: '#b45309',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 4
+                              }}
+                            >
+                              Cash Collected by: {inv.rejected_payment?.teacher_name || 'Teacher'}
+                            </span>
+                            <span
+                              style={{
+                                fontSize: 11.5,
+                                fontWeight: 700,
+                                padding: '2px 9px',
+                                borderRadius: 10,
+                                background: '#fff1f2',
+                                color: '#e11d48',
+                                border: '1px solid #fecdd3',
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 4
+                              }}
+                            >
+                              Rejection Reason: {inv.rejected_payment?.rejection_reason || 'Not approved'}
+                            </span>
+
+                            {Array.isArray(inv.rejected_history) && inv.rejected_history.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => toggleRejectionHistory(inv.id)}
+                                title={expandedRejections[inv.id] ? "Hide rejection history" : `View all ${inv.rejected_history.length} rejection attempts`}
+                                style={{
+                                  background: expandedRejections[inv.id] ? '#fee2e2' : '#f1f5f9',
+                                  border: '1px solid ' + (expandedRejections[inv.id] ? '#fca5a5' : '#cbd5e1'),
+                                  borderRadius: 8,
+                                  padding: '3px 7px',
+                                  cursor: 'pointer',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  color: expandedRejections[inv.id] ? '#e11d48' : '#64748b',
+                                  transition: 'all 0.15s ease'
+                                }}
+                              >
+                                <svg
+                                  width="14"
+                                  height="14"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2.5"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  style={{
+                                    transform: expandedRejections[inv.id] ? 'rotate(180deg)' : 'rotate(0deg)',
+                                    transition: 'transform 0.2s ease'
+                                  }}
+                                >
+                                  <polyline points="6 9 12 15 18 9" />
+                                </svg>
+                              </button>
+                            )}
+                          </>
+                        )}
+                      </div>
+
+                      <h4 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: 'var(--text, #0f172a)' }}>
+                        {billingDesc}
+                      </h4>
                     </div>
 
-                    <h4 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: 'var(--text, #0f172a)' }}>
-                      {billingDesc}
-                    </h4>
+                    {/* Right Column: Amount & Direct Razorpay Button */}
+                    <div className="sp-due-invoice-action">
+                      <div className="sp-due-amount-box">
+                        <span className="sp-amount-label">
+                          Net Payable
+                        </span>
+                        <div className="sp-amount-value">
+                          ₹{Number(netDue).toLocaleString('en-IN')}
+                        </div>
+                      </div>
+
+                      <button
+                        className="sp-due-pay-btn"
+                        disabled={isThisPaying || isUnderVerif}
+                        onClick={() => handlePayDirectly(inv)}
+                        style={isUnderVerif ? { background: '#fef3c7', color: '#b45309', cursor: 'not-allowed', borderColor: '#fde68a' } : {}}
+                        title={isUnderVerif ? 'Cash already handed to teacher. Awaiting admin clearance.' : 'Pay Online'}
+                      >
+                        {isThisPaying ? (
+                          <span style={{ display: 'inline-flex', alignItems: 'center' }}>
+                            Initiating
+                            <span className="sp-loading-dots">
+                              <span></span>
+                              <span></span>
+                              <span></span>
+                            </span>
+                          </span>
+                        ) : isUnderVerif ? (
+                          <span>Under Verification</span>
+                        ) : (
+                          <>
+                            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+                              <rect width="20" height="14" x="2" y="5" rx="2" />
+                              <line x1="2" x2="22" y1="10" y2="10" />
+                            </svg>
+                            <span>Pay</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
                   </div>
 
-                  {/* Right Column: Amount & Direct Razorpay Button */}
-                  <div className="sp-due-invoice-action">
-                    <div className="sp-due-amount-box">
-                      <span className="sp-amount-label">
-                        Net Payable
-                      </span>
-                      <div className="sp-amount-value">
-                        ₹{Number(netDue).toLocaleString('en-IN')}
+                  {/* Embedded Rejection History Log inside the same card (Shown only when toggled with down arrow if multiple) */}
+                  {hasRejected && Boolean(expandedRejections[inv.id]) && (
+                    <div
+                      style={{
+                        background: '#fffbfb',
+                        borderTop: '1px solid #fee2e2',
+                        padding: '12px 20px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 8,
+                        borderBottomLeftRadius: 'inherit',
+                        borderBottomRightRadius: 'inherit'
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: 11, fontWeight: 800, color: '#991b1b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                          Rejection History Log ({inv.rejected_history?.length || 1})
+                        </span>
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        {(inv.rejected_history || [inv.rejected_payment]).map((rh, rhIdx) => (
+                          <div
+                            key={rh?.id || rhIdx}
+                            style={{
+                              display: 'flex',
+                              flexWrap: 'wrap',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              gap: 8,
+                              background: '#ffffff',
+                              border: '1px solid #fecdd3',
+                              borderRadius: 8,
+                              padding: '7px 12px',
+                              fontSize: 12
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                              <span style={{ color: '#e11d48', fontWeight: 800 }}>✕ Attempt #{ (inv.rejected_history?.length || 1) - rhIdx }</span>
+                              <span style={{ color: '#334155', fontWeight: 600 }}>
+                                Collected by: <strong>{rh.teacher_name || 'Teacher'}</strong>
+                              </span>
+                              <span style={{ color: '#cbd5e1' }}>•</span>
+                              <span style={{ color: '#b91c1c' }}>
+                                Reason: <em>"{rh.rejection_reason || 'Not approved by admin'}"</em>
+                              </span>
+                            </div>
+
+                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#64748b', fontSize: 11.5, fontWeight: 500 }}>
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <circle cx="12" cy="12" r="10" />
+                                <polyline points="12 6 12 12 16 14" />
+                              </svg>
+                              <span>{formatDateTime(rh.created_at)}</span>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
-
-                    <button
-                      className="sp-due-pay-btn"
-                      disabled={isThisPaying}
-                      onClick={() => handlePayDirectly(inv)}
-                    >
-                      {isThisPaying ? (
-                        <span style={{ display: 'inline-flex', alignItems: 'center' }}>
-                          Initiating
-                          <span className="sp-loading-dots">
-                            <span></span>
-                            <span></span>
-                            <span></span>
-                          </span>
-                        </span>
-                      ) : (
-                        <>
-                          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-                            <rect width="20" height="14" x="2" y="5" rx="2" />
-                            <line x1="2" x2="22" y1="10" y2="10" />
-                          </svg>
-                          <span>Pay</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
+                  )}
                 </div>
               );
             })}
@@ -362,6 +547,12 @@ export default function FeesTab({
                   const invNo = p.invoices?.invoice_number || p.invoice_number || '—';
                   const rzpId = p.razorpay_payment_id ? ` · ${p.razorpay_payment_id}` : '';
 
+                  const isSuccess = p.status === 'SUCCESS';
+                  const isUnderVerif = p.status === 'UNDER_VERIFICATION';
+                  const isFailed = p.status === 'FAILED';
+
+                  const teacherNote = p.collected_by_name ? ` (Cash via ${p.collected_by_name})` : '';
+
                   return (
                     <tr key={p.id || idx}>
                       <td className="sp-date-cell">{dateStr}</td>
@@ -372,27 +563,50 @@ export default function FeesTab({
                       </td>
                       <td>
                         <strong className="sp-desc-main" style={{ color: 'var(--text, #0f172a)', fontSize: '13.5px' }}>
-                          {getPaymentDescription(p)}
+                          {getPaymentDescription(p)}{teacherNote}
                         </strong>
+                        {isFailed && p.rejection_reason && (
+                          <div style={{ fontSize: 11.5, color: '#e11d48', marginTop: 2, fontWeight: 500 }}>
+                            ⚠️ Rejected: "{p.rejection_reason}"
+                          </div>
+                        )}
                       </td>
                       <td className="sp-amt-cell">₹{Number(p.amount).toLocaleString('en-IN')}</td>
                       <td>
-                        <span style={{ color: '#059669', fontWeight: 700, fontSize: '13px' }}>
-                          {p.status || 'SUCCESS'}
-                        </span>
+                        {isSuccess && (
+                          <span style={{ color: '#059669', fontWeight: 700, fontSize: '13px' }}>
+                            SUCCESS
+                          </span>
+                        )}
+                        {isUnderVerif && (
+                          <span style={{ color: '#b45309', background: '#fef3c7', padding: '3px 8px', borderRadius: 6, fontWeight: 700, fontSize: '12px' }}>
+                            UNDER VERIFICATION
+                          </span>
+                        )}
+                        {isFailed && (
+                          <span style={{ color: '#be123c', background: '#fff1f2', padding: '3px 8px', borderRadius: 6, fontWeight: 700, fontSize: '12px' }}>
+                            REJECTED
+                          </span>
+                        )}
                       </td>
                       <td>
-                        <button
-                          className="sp-receipt-download-btn"
-                          onClick={() => handleDownloadReceipt(p)}
-                          title="Print or Download Official Receipt"
-                        >
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                            <polyline points="14 2 14 8 20 8" />
-                          </svg>
-                          <span>Download</span>
-                        </button>
+                        {isSuccess ? (
+                          <button
+                            className="sp-receipt-download-btn"
+                            onClick={() => handleDownloadReceipt(p)}
+                            title="Print or Download Official Receipt"
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                              <polyline points="14 2 14 8 20 8" />
+                            </svg>
+                            <span>Download</span>
+                          </button>
+                        ) : isUnderVerif ? (
+                          <span style={{ fontSize: 12, color: '#94a3b8' }}>Pending Clearance</span>
+                        ) : (
+                          <span style={{ fontSize: 12, color: '#94a3b8' }}>—</span>
+                        )}
                       </td>
                     </tr>
                   );

@@ -34,7 +34,13 @@ const tabToRoute = {
   'doubt-corner': '/academics/doubt-corner',
   'dpp-management': '/academics/dpp-management',
   'study-material': '/study-material',
-  finance: '/finance',
+  finance: '/finance/collect-cash',
+  'finance/collect-cash': '/finance/collect-cash',
+  'collect-cash': '/finance/collect-cash',
+  'finance/all-payments': '/finance/all-payments',
+  'all-payments': '/finance/all-payments',
+  'finance/my-earnings': '/finance/my-earnings',
+  'my-earnings': '/finance/my-earnings',
   notice: '/notice',
   settings: '/settings',
   profile: '/profile',
@@ -56,7 +62,10 @@ const routeToTab = {
   '/academics/doubt-corner': 'doubt-corner',
   '/academics/dpp-management': 'dpp-management',
   '/study-material': 'study-material',
-  '/finance': 'finance',
+  '/finance': 'collect-cash',
+  '/finance/collect-cash': 'collect-cash',
+  '/finance/all-payments': 'all-payments',
+  '/finance/my-earnings': 'my-earnings',
   '/notice': 'notice',
   '/settings': 'settings',
   '/profile': 'profile',
@@ -232,7 +241,10 @@ export function TeacherPanel({ onBackToLanding }) {
             />
 
             <Route path="/study-material" element={<StudyMaterial onNavigate={handleTabChange} />} />
-            <Route path="/finance" element={<Finance onNavigate={handleTabChange} />} />
+            <Route path="/finance" element={<Navigate to="/finance/collect-cash" replace />} />
+            <Route path="/finance/collect-cash" element={<Finance onNavigate={handleTabChange} activeSubSection="collect" />} />
+            <Route path="/finance/all-payments" element={<Finance onNavigate={handleTabChange} activeSubSection="all-payments" />} />
+            <Route path="/finance/my-earnings" element={<Finance onNavigate={handleTabChange} activeSubSection="earnings" />} />
             <Route path="/notice" element={<Notice onNavigate={handleTabChange} />} />
             <Route path="/profile" element={<Profile onNavigate={handleTabChange} onBackToLanding={onBackToLanding} user={currentUser} />} />
             <Route path="/settings" element={<Settings onNavigate={handleTabChange} onBackToLanding={onBackToLanding} user={currentUser} />} />

@@ -19,16 +19,22 @@ export default function App() {
         if (userStr) role = JSON.parse(userStr)?.role;
       } catch (e) {}
 
-      // If user has a token or refresh token, respect their role & active view
+      const pathname = window.location.pathname;
+
+      // If user has a token or refresh token, respect their role & active view or URL path
       if (token || refreshToken) {
-        if (hash === '#admin' && role === 'ADMIN') return 'admin';
-        if (hash === '#teacher' && role === 'TEACHER') return 'teacher';
-        if (hash === '#student' && role === 'STUDENT') return 'student';
+        if ((pathname.startsWith('/admin') || hash === '#admin') && (role === 'ADMIN' || !role)) return 'admin';
+        if ((pathname.startsWith('/teacher') || hash === '#teacher') && (role === 'TEACHER' || !role)) return 'teacher';
+        if ((pathname.startsWith('/student') || hash === '#student') && (role === 'STUDENT' || !role)) return 'student';
 
         const saved = localStorage.getItem('digitute_active_view');
         if (saved === 'admin' && role === 'ADMIN') return 'admin';
         if (saved === 'teacher' && role === 'TEACHER') return 'teacher';
         if (saved === 'student' && role === 'STUDENT') return 'student';
+
+        if (role === 'ADMIN') return 'admin';
+        if (role === 'TEACHER') return 'teacher';
+        if (role === 'STUDENT') return 'student';
       }
     }
     return 'landing'; // Default to landing page
@@ -71,6 +77,11 @@ export default function App() {
     setLoginModalOpen(false);
     setCurrentView('landing');
     localStorage.setItem('digitute_active_view', 'landing');
+    if (window.location.pathname.startsWith('/admin') || 
+        window.location.pathname.startsWith('/teacher') || 
+        window.location.pathname.startsWith('/student')) {
+      window.history.pushState(null, '', '/');
+    }
   };
 
   // Proactive Session Lifecycle (Mobile / SPA Standard)
@@ -130,6 +141,9 @@ export default function App() {
       setTimeout(() => {
         closeLoginModal();
         setCurrentView(targetView);
+        if (targetView === 'admin' && !window.location.pathname.startsWith('/admin')) {
+          window.history.pushState(null, '', '/admin');
+        }
       }, 500);
     } catch (err) {
       setLoginError(err.message || 'Login failed. Please verify credentials.');
@@ -175,12 +189,14 @@ export default function App() {
     );
   }
 
-  // If in admin panel mode, render the AdminPanel directly
+  // If in admin panel mode, render the AdminPanel wrapped in Router
   if (currentView === 'admin') {
     return (
-      <AdminPanel 
-        onBackToLanding={handleLogoutToLanding} 
-      />
+      <Router>
+        <AdminPanel 
+          onBackToLanding={handleLogoutToLanding} 
+        />
+      </Router>
     );
   }
 
