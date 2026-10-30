@@ -108,11 +108,46 @@ def get_my_routine(current_user: dict = Depends(get_current_user)):
     try:
         supabase = get_supabase_client()
         teacher_id = current_user.get("id")
+        role = current_user.get("role")
         
-        res = supabase.table("class_routines").select(
+        query = supabase.table("class_routines").select(
             "*, batches(name)"
-        ).eq("teacher_id", teacher_id).eq("is_active", True).order("day_of_week").order("start_time").execute()
+        ).eq("is_active", True)
+        
+        if role == "TEACHER" or (role != "ADMIN" and teacher_id):
+            query = query.eq("teacher_id", teacher_id)
+            
+        res = query.order("day_of_week").order("start_time").execute()
         return res.data or []
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/routines/all", summary="Get ALL active class routines (own + other teachers, with is_own flag)")
+def get_all_routines_for_reschedule(
+    current_user: dict = Depends(get_current_user)
+):
+    """Returns every active class_routine (not filtered by teacher_id).
+    Each record gets an `is_own` boolean so the frontend knows which belong to
+    the logged-in teacher vs other teachers.
+    Used by the Reschedule calendar to show dots on future months even when no
+    concrete class_session records exist yet."""
+    try:
+        supabase = get_supabase_client()
+        teacher_id = current_user.get("id")
+
+        res = (
+            supabase.table("class_routines")
+            .select("*, batches(name)")
+            .eq("is_active", True)
+            .order("day_of_week")
+            .order("start_time")
+            .execute()
+        )
+        routines = res.data or []
+        for r in routines:
+            r["is_own"] = (r.get("teacher_id") == teacher_id)
+        return routines
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -367,10 +402,13 @@ def get_batch_students(
 # ==============================================================================
 # 2. CLASS SESSIONS & ATTENDANCE
 # ==============================================================================
-@router.get("/sessions", summary="Get Sessions for Teacher (by date or all)")
+@router.get("/sessions", summary="Get Sessions for Teacher (by date, range, month, or all)")
 def get_teacher_sessions(
     session_date: Optional[str] = None,
     batch_id: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    month: Optional[str] = None,
     current_user: dict = Depends(get_current_user)
 ):
     try:
@@ -385,11 +423,18 @@ def get_teacher_sessions(
             
         if session_date:
             query = query.eq("session_date", session_date)
+        elif month:
+            query = query.gte("session_date", f"{month}-01").lte("session_date", f"{month}-31")
+        else:
+            if start_date:
+                query = query.gte("session_date", start_date)
+            if end_date:
+                query = query.lte("session_date", end_date)
             
         if batch_id:
             query = query.eq("batch_id", batch_id)
             
-        res = query.order("start_time").execute()
+        res = query.order("session_date").order("start_time").execute()
         sessions = res.data or []
         
         if sessions:
@@ -417,6 +462,112 @@ def get_teacher_sessions(
 def get_today_sessions(current_user: dict = Depends(get_current_user)):
     today_str = date.today().isoformat()
     return get_teacher_sessions(session_date=today_str, batch_id=None, current_user=current_user)
+
+
+@router.get("/sessions/all", summary="Get ALL sessions for a date/month (own + other teachers)")
+def get_all_sessions_for_reschedule(
+    session_date: Optional[str] = None,
+    month: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """Returns all class sessions (not filtered by teacher_id) so teacher can see their own + other teachers' classes.
+    Each session has an extra field `is_own: bool` to identify the logged-in teacher's sessions."""
+    try:
+        supabase = get_supabase_client()
+        teacher_id = current_user.get("id")
+
+        query = supabase.table("class_sessions").select("*, batches(name)")
+
+        if session_date:
+            query = query.eq("session_date", session_date)
+        elif month:
+            query = query.gte("session_date", f"{month}-01").lte("session_date", f"{month}-31")
+
+        res = query.order("session_date").order("start_time").execute()
+        sessions = res.data or []
+
+        for s in sessions:
+            s["is_own"] = (s.get("teacher_id") == teacher_id)
+
+        return sessions
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/sessions/{session_id}/reschedule", summary="Reschedule a class session to a new date/time")
+def reschedule_session(
+    session_id: str,
+    new_date: str,
+    new_start_time: str,
+    new_end_time: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Reschedule a session: updates session_date, start_time, end_time, status=SCHEDULED."""
+    try:
+        supabase = get_supabase_client()
+        teacher_id = current_user.get("id")
+        role = current_user.get("role")
+
+        # Verify session exists and belongs to this teacher (unless ADMIN)
+        sess_res = supabase.table("class_sessions").select("id, teacher_id, status").eq("id", session_id).execute()
+        if not sess_res.data:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        sess = sess_res.data[0]
+        if role == "TEACHER" and sess.get("teacher_id") != teacher_id:
+            raise HTTPException(status_code=403, detail="You can only reschedule your own sessions")
+
+        update_payload = {
+            "session_date": new_date,
+            "start_time": new_start_time,
+            "end_time": new_end_time,
+            "status": "SCHEDULED",
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }
+        result = supabase.table("class_sessions").update(update_payload).eq("id", session_id).execute()
+        updated = result.data[0] if result.data else {}
+
+        return {"message": "Session rescheduled successfully", "session": updated}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/sessions/{session_id}/cancel", summary="Cancel a class session with a reason")
+def cancel_session(
+    session_id: str,
+    reason: str = "",
+    current_user: dict = Depends(get_current_user)
+):
+    """Cancel a session: sets status=CANCELLED and stores cancel_reason."""
+    try:
+        supabase = get_supabase_client()
+        teacher_id = current_user.get("id")
+        role = current_user.get("role")
+
+        # Verify session exists and belongs to this teacher (unless ADMIN)
+        sess_res = supabase.table("class_sessions").select("id, teacher_id, status").eq("id", session_id).execute()
+        if not sess_res.data:
+            raise HTTPException(status_code=404, detail="Session not found")
+
+        sess = sess_res.data[0]
+        if role == "TEACHER" and sess.get("teacher_id") != teacher_id:
+            raise HTTPException(status_code=403, detail="You can only cancel your own sessions")
+
+        update_payload = {
+            "status": "CANCELLED",
+            "cancel_reason": reason.strip() if reason else None,
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        }
+        result = supabase.table("class_sessions").update(update_payload).eq("id", session_id).execute()
+        updated = result.data[0] if result.data else {}
+
+        return {"message": "Session cancelled successfully", "session": updated}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/sessions/create", summary="Create or Start a Class Session")
 def create_session(session: SessionCreate, current_user: dict = Depends(get_current_user)):

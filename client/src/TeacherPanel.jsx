@@ -9,6 +9,7 @@ import Finance from './components/Teacher/Finance';
 import Notice from './components/Teacher/Notice';
 import Settings from './components/Teacher/Settings';
 import Profile from './components/Teacher/Profile';
+import TimetableRoutine from './components/Teacher/TimetableRoutine';
 
 // Direct Academic Sub-Pages
 import StudentInfo from './components/Teacher/StudentInfo';
@@ -20,6 +21,9 @@ import DppManagement from './components/Teacher/DppManagement';
 
 const tabToRoute = {
   dashboard: '/',
+  routine: '/routine',
+  'timetable-routine': '/routine',
+  timetable: '/routine',
   academics: '/academics/student-info',
   'student-info': '/academics/student-info',
   attendance: '/academics/attendance',
@@ -38,6 +42,9 @@ const tabToRoute = {
 
 const routeToTab = {
   '/': 'dashboard',
+  '/routine': 'routine',
+  '/timetable': 'routine',
+  '/timetable-routine': 'routine',
   '/academics': 'student-info',
   '/academics/students': 'student-info',
   '/academics/student-info': 'student-info',
@@ -133,6 +140,9 @@ export function TeacherPanel({ onBackToLanding }) {
         <main className="app-main-content">
           <Routes>
             <Route path="/" element={<Dashboard onNavigate={handleTabChange} user={currentUser} />} />
+            <Route path="/routine" element={<TimetableRoutine onNavigate={handleTabChange} user={currentUser} />} />
+            <Route path="/timetable" element={<Navigate to="/routine" replace />} />
+            <Route path="/timetable-routine" element={<Navigate to="/routine" replace />} />
 
             {/* Direct Academic Sub-Routes */}
             <Route path="/academics" element={<Navigate to="/academics/student-info" replace />} />

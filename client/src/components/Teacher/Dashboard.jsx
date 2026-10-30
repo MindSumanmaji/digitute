@@ -49,15 +49,12 @@ const Dashboard = ({ onNavigate, user }) => {
 
   // Date selection (defaults to today YYYY-MM-DD)
   const todayDateStr = useMemo(() => new Date().toISOString().split('T')[0], []);
-  const [selectedDate, setSelectedDate] = useState(() => todayDateStr);
-  const isToday = selectedDate === todayDateStr;
 
   // Scheduled sessions for selectedDate from database
   const [sessions, setSessions] = useState([]);
   const [loadingSessions, setLoadingSessions] = useState(false);
 
   // Ref for hidden native datepicker attached to the calendar icon
-  const dateInputRef = useRef(null);
 
   const teacherName = user?.full_name || (() => {
     try {
@@ -75,18 +72,35 @@ const Dashboard = ({ onNavigate, user }) => {
     return 'Teacher';
   })();
 
-  // Live time
-  const { timeStr } = getLiveDateTime();
+  // Live date + time (updates every minute automatically)
+  const [liveDateTime, setLiveDateTime] = useState(() => getLiveDateTime());
+
+  useEffect(() => {
+    // Sync to the top of the next minute so updates feel sharp
+    const msToNextMinute = (60 - new Date().getSeconds()) * 1000;
+    let interval;
+    const timeout = setTimeout(() => {
+      setLiveDateTime(getLiveDateTime());
+      interval = setInterval(() => setLiveDateTime(getLiveDateTime()), 60_000);
+    }, msToNextMinute);
+
+    return () => {
+      clearTimeout(timeout);
+      if (interval) clearInterval(interval);
+    };
+  }, []);
+
+  const { timeStr } = liveDateTime;
 
   // Formatted selected date
   const formattedSelectedDate = useMemo(() => {
     try {
-      const d = new Date(selectedDate + 'T00:00:00');
+      const d = new Date(todayDateStr + 'T00:00:00');
       return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
     } catch {
-      return selectedDate;
+      return todayDateStr;
     }
-  }, [selectedDate]);
+  }, [todayDateStr]);
 
   // Animation values for smooth number counter & progress advancement
   const [animatedSolved, setAnimatedSolved] = useState(0);
@@ -123,7 +137,7 @@ const Dashboard = ({ onNavigate, user }) => {
     let isMounted = true;
     setLoadingSessions(true);
 
-    apiRequest(`/api/teacher/sessions?session_date=${selectedDate}`)
+    apiRequest(`/api/teacher/sessions?session_date=${todayDateStr}`)
       .then((data) => {
         if (!isMounted) return;
         setSessions(Array.isArray(data) ? data : []);
@@ -139,7 +153,7 @@ const Dashboard = ({ onNavigate, user }) => {
     return () => {
       isMounted = false;
     };
-  }, [selectedDate]);
+  }, [todayDateStr]);
 
   // Derived batch metadata & available subjects from database
   const selectedBatchObj = useMemo(() => {
@@ -157,20 +171,83 @@ const Dashboard = ({ onNavigate, user }) => {
 
   const bothSelected = Boolean(selectedBatch && selectedSubject);
 
-  /* When batch changes, reset subject to blank */
+  // Track if user has manually chosen a batch/subject
+  const userManuallyChanged = useRef(false);
+
+  /* When batch changes, reset subject to blank and mark as user manual action */
   const handleBatchChange = (val) => {
+    userManuallyChanged.current = true;
     setSelectedBatch(val || null);
     setSelectedSubject(null);
   };
 
-  // Open native calendar picker on icon click
-  const handleOpenCalendar = () => {
-    try {
-      dateInputRef.current?.showPicker?.();
-    } catch {
-      dateInputRef.current?.click?.();
-    }
+  const handleSubjectChange = (val) => {
+    userManuallyChanged.current = true;
+    setSelectedSubject(val || null);
   };
+
+  // Helper to parse "HH:MM" or "HH:MM:SS" into minutes from midnight
+  const parseTimeToMinutes = (tStr) => {
+    if (!tStr) return null;
+    const parts = tStr.split(':');
+    const h = parseInt(parts[0], 10);
+    const m = parseInt(parts[1] || '0', 10);
+    if (isNaN(h) || isNaN(m)) return null;
+    return h * 60 + m;
+  };
+
+  // Auto-detect ongoing/active class for right now
+  useEffect(() => {
+    if (userManuallyChanged.current) return;
+    if (!sessions || sessions.length === 0 || !batchesList || batchesList.length === 0) return;
+
+    const now = new Date();
+    const currentMins = now.getHours() * 60 + now.getMinutes();
+
+    // Find any non-cancelled session happening right now
+    const activeSession = sessions.find((s) => {
+      if (s.status === 'CANCELLED') return false;
+      const startMins = parseTimeToMinutes(s.start_time);
+      const endMins = parseTimeToMinutes(s.end_time);
+      if (startMins === null || endMins === null) return false;
+      return currentMins >= startMins && currentMins < endMins;
+    });
+
+    if (activeSession) {
+      // Find matching batch in batchesList by batch_id or batch_name
+      const targetBatchId = activeSession.batch_id;
+      const targetBatchName = activeSession.batches?.name || activeSession.batch_name;
+      const matchedBatch = batchesList.find(
+        (b) => b.batch_id === targetBatchId || (targetBatchName && b.batch_name?.toLowerCase() === targetBatchName.toLowerCase())
+      );
+
+      if (matchedBatch) {
+        setSelectedBatch(matchedBatch.batch_id);
+
+        // Check if session subject matches available subjects in this batch
+        if (activeSession.subject) {
+          const subjects = (matchedBatch.subjects || []).map((subj) =>
+            typeof subj === 'string' ? subj : subj.name
+          );
+          const matchedSubject = subjects.find(
+            (subName) => subName && subName.toLowerCase() === activeSession.subject.toLowerCase()
+          );
+          if (matchedSubject) {
+            setSelectedSubject(matchedSubject);
+          } else {
+            setSelectedSubject(activeSession.subject);
+          }
+        }
+      }
+    } else {
+      // If class time has passed or no class is active right now, reset if it was auto-selected
+      // (Only if user hasn't manually selected)
+      if (!userManuallyChanged.current && selectedBatch) {
+        setSelectedBatch(null);
+        setSelectedSubject(null);
+      }
+    }
+  }, [sessions, batchesList, liveDateTime]);
 
   // 3. Live Batch Summary (students count and doubts) from database
   const [batchSummary, setBatchSummary] = useState(null);
@@ -404,15 +481,9 @@ const Dashboard = ({ onNavigate, user }) => {
             ════════════════════════════════════════════════════════════════ */}
         <section className="dashboard-top-row" aria-label="Date and Today's Classes">
 
-          {/* Card A: Date & Time with interactive Calendar Picker */}
-          <div className="dash-card metric-card" style={{ position: 'relative' }}>
-            <div
-              className="metric-left-circle"
-              aria-hidden="true"
-              onClick={handleOpenCalendar}
-              style={{ cursor: 'pointer', position: 'relative' }}
-              title="Click calendar icon to pick date"
-            >
+          {/* Card A: Date & Time — always shows today */}
+          <div className="dash-card metric-card">
+            <div className="metric-left-circle" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="none" stroke="#1E293B" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="3" y="4" width="18" height="18" rx="2.5" ry="2.5" />
                 <line x1="16" y1="2" x2="16" y2="6" />
@@ -424,51 +495,9 @@ const Dashboard = ({ onNavigate, user }) => {
                 <circle cx="8" cy="18" r="1" fill="#1E293B" />
                 <circle cx="12" cy="18" r="1" fill="#1E293B" />
               </svg>
-
-              {/* Invisible native date input directly over calendar icon */}
-              <input
-                ref={dateInputRef}
-                type="date"
-                value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  width: '100%',
-                  height: '100%',
-                  opacity: 0,
-                  cursor: 'pointer',
-                  zIndex: 2,
-                }}
-                aria-label="Select Date"
-              />
             </div>
-            <div className="metric-text-group" onClick={handleOpenCalendar} style={{ cursor: 'pointer' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-                <span className="metric-label">Date &amp; Time</span>
-                {!isToday && (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSelectedDate(todayDateStr);
-                    }}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      color: '#4F46E5',
-                      fontSize: '0.72rem',
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      padding: '0 4px',
-                    }}
-                    title="Reset to Today"
-                  >
-                    Today
-                  </button>
-                )}
-              </div>
+            <div className="metric-text-group">
+              <span className="metric-label">Date &amp; Time</span>
               <span className="metric-date">{formattedSelectedDate}</span>
               <span className="metric-time">{timeStr}</span>
             </div>
@@ -483,7 +512,7 @@ const Dashboard = ({ onNavigate, user }) => {
             style={{ cursor: sessions.length > 0 ? 'pointer' : 'default' }}
             role={sessions.length > 0 ? 'button' : undefined}
             tabIndex={sessions.length > 0 ? 0 : undefined}
-            aria-label={`${isToday ? "Today's" : "Scheduled"} ${sessions.length} classes${sessions.length > 0 ? ' — click to see details' : ''}`}
+            aria-label={`${"Today's"} ${sessions.length} classes${sessions.length > 0 ? ' — click to see details' : ''}`}
           >
             <div className="metric-left-circle" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="none" stroke="#1E293B" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
@@ -492,7 +521,7 @@ const Dashboard = ({ onNavigate, user }) => {
               </svg>
             </div>
             <div className="metric-text-group">
-              <span className="metric-label">{isToday ? "Today's Classes" : "Scheduled Classes"}</span>
+              <span className="metric-label">Today's Classes</span>
               <span className="metric-bold-value">{loadingSessions ? '…' : sessions.length}</span>
             </div>
             {sessions.length > 0 && (
@@ -561,7 +590,7 @@ const Dashboard = ({ onNavigate, user }) => {
                     id="subject-select-input"
                     className={`selector-native-select${!selectedSubject ? ' selector-placeholder' : ''}`}
                     value={selectedSubject || ''}
-                    onChange={(e) => setSelectedSubject(e.target.value || null)}
+                    onChange={(e) => handleSubjectChange(e.target.value || null)}
                     disabled={!selectedBatch || availableSubjects.length === 0}
                     aria-label="Select Subject"
                   >
@@ -840,7 +869,7 @@ const Dashboard = ({ onNavigate, user }) => {
             {/* Modal Header */}
             <div className="class-modal-header">
               <div className="class-modal-title-group">
-                <h2 className="class-modal-title">{isToday ? "Today's Schedule" : "Scheduled Classes"}</h2>
+                <h2 className="class-modal-title">Today's Schedule</h2>
                 <span className="class-modal-date">{formattedSelectedDate}</span>
               </div>
               <button
@@ -862,35 +891,40 @@ const Dashboard = ({ onNavigate, user }) => {
                 <path d="M22 10v6M2 10l10-5 10 5-10 5z" />
                 <path d="M6 12v5c3 3 9 3 12 0v-5" />
               </svg>
-              {sessions.length} {sessions.length === 1 ? 'Class' : 'Classes'} {isToday ? 'Today' : `on ${formattedSelectedDate}`}
+              {sessions.length} {sessions.length === 1 ? 'Class' : 'Classes'} Today
             </div>
 
             {/* Class Capsule List */}
             <div className="class-modal-list">
               {sessions.map((cls, idx) => {
-                const timeText = `${formatTime(cls.start_time)} - ${formatTime(cls.end_time)}`;
+                const startTimeStr = formatTime(cls.start_time) || '--:--';
+                const endTimeStr = formatTime(cls.end_time) || '--:--';
                 const batchName = cls.batches?.name || 'Assigned Batch';
                 const subjectName = cls.subject || 'Subject';
 
                 return (
                   <div key={cls.id || idx} className="class-capsule">
-                    {/* Time column */}
+                    {/* Clean Time column */}
                     <div className="class-capsule-time-col">
-                      <span className="class-capsule-time">{timeText}</span>
-                      {idx < sessions.length - 1 && (
-                        <div className="class-capsule-connector" aria-hidden="true" />
-                      )}
+                      <span className="class-capsule-time-start">{startTimeStr}</span>
+                      <span className="class-capsule-time-divider">to</span>
+                      <span className="class-capsule-time-end">{endTimeStr}</span>
                     </div>
 
-                    {/* Card */}
+                    {/* Card Content */}
                     <div className="class-capsule-card">
-                      <div className="class-capsule-dot" aria-hidden="true" />
                       <div className="class-capsule-info">
                         <span className="class-capsule-subject">{subjectName}</span>
-                        <span className="class-capsule-batch">{batchName}</span>
+                        <div className="class-capsule-batch-badge">
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M22 10v6M2 10l10-5 10 5-10 5z" />
+                            <path d="M6 12v5c3 3 9 3 12 0v-5" />
+                          </svg>
+                          <span>{batchName}</span>
+                        </div>
                       </div>
                       <div className="class-capsule-index" aria-hidden="true">
-                        {String(idx + 1).padStart(2, '0')}
+                        #{String(idx + 1).padStart(2, '0')}
                       </div>
                     </div>
                   </div>

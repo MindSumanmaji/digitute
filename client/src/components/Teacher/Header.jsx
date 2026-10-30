@@ -73,6 +73,10 @@ export function Header({
     switch (page) {
       case 'dashboard':
         return 'Dashboard';
+      case 'routine':
+      case 'timetable':
+      case 'timetable-routine':
+        return 'Timetable & Routine';
       case 'academics':
         return 'Academics';
       case 'student-info':
