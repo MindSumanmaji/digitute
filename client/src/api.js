@@ -260,6 +260,9 @@ export const apiRequest = async (endpoint, options = {}, isRetry = false) => {
   const token = getAuthToken();
 
   const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
+  const isPlainObject = options.body && typeof options.body === 'object' && !isFormData;
+
+  const serializedBody = isPlainObject ? JSON.stringify(options.body) : options.body;
 
   const headers = {
     ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
@@ -269,6 +272,7 @@ export const apiRequest = async (endpoint, options = {}, isRetry = false) => {
 
   const response = await fetch(url, {
     ...options,
+    body: serializedBody,
     headers,
   });
 
@@ -289,6 +293,7 @@ export const apiRequest = async (endpoint, options = {}, isRetry = false) => {
 
         const retryResponse = await fetch(url, {
           ...options,
+          body: serializedBody,
           headers: retryHeaders,
         });
 

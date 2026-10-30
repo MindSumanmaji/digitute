@@ -410,3 +410,37 @@ CREATE INDEX idx_exams_status_date
 CREATE INDEX idx_exams_batch_published
     ON exams(batch_id, is_published, results_published);
 
+
+
+-- ==============================================================================
+-- 12. NOTICES (Centralized Notice Board for Teachers, Admins & Students)
+-- Single-Table Architecture with Array-based Batch Targeting
+-- ==============================================================================
+CREATE TYPE notice_target_audience AS ENUM (
+    'BATCH',           -- Specific batches (used by Teachers)
+    'STUDENTS_ONLY',   -- All students institute-wide (used by Admin)
+    'TEACHERS_ONLY',   -- All teachers institute-wide (used by Admin)
+    'ALL'              -- All teachers & students institute-wide (used by Admin)
+);
+
+CREATE TABLE notices (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    title VARCHAR(255) NOT NULL,
+    body TEXT NOT NULL,
+    created_by UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    target_audience notice_target_audience NOT NULL DEFAULT 'BATCH',
+    
+    -- Array of assigned batch IDs targeted by teacher (empty for Admin institute-wide)
+    batch_ids UUID[] NOT NULL DEFAULT '{}',
+    
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Optimized Performance Indexes
+CREATE INDEX idx_notices_created_by ON notices(created_by);
+CREATE INDEX idx_notices_target_audience ON notices(target_audience);
+CREATE INDEX idx_notices_batch_ids ON notices USING GIN (batch_ids);
+CREATE INDEX idx_notices_created_at ON notices(created_at DESC);
+CREATE INDEX idx_notices_active ON notices(is_active) WHERE is_active = TRUE;

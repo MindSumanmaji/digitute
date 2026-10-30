@@ -102,15 +102,6 @@ export default function StudentPanel({ onBackToLanding }) {
 
   return (
     <div className="sp-layout-root">
-      {/* Toast Notification */}
-      {toastMessage && (
-        <div className="sp-floating-toast">
-          <span>✓</span> {toastMessage}
-        </div>
-      )}
-
-
-
       {/* Backdrop for mobile drawer */}
       {mobileSidebarOpen && (
         <div

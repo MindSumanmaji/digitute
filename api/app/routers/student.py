@@ -1510,6 +1510,7 @@ def get_peer_academic_card(peer_id: str, current_user: dict = Depends(get_curren
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+<<<<<<< Updated upstream
 
 @router.get("/academic-card", summary="Get Live Database Academic Card Metrics for Current Student")
 def get_current_user_academic_card(current_user: dict = Depends(get_current_user)):
@@ -1580,11 +1581,80 @@ async def upload_student_avatar(
             "storage_path": storage_path,
             "message": "Profile picture updated successfully!"
         }
+=======
+# ==============================================================================
+# 11. STUDENT ANNOUNCEMENTS & NOTICES (schema.sql Table 12)
+# ==============================================================================
+@router.get("/notices", summary="Get Notices & Announcements for Student")
+def get_student_notices(current_user: dict = Depends(get_current_user)):
+    try:
+        supabase = get_supabase_client()
+        batch_id = current_user.get("batch_id")
+
+        # 1. Fetch institute-wide Admin notices intended for students
+        admin_res = supabase.table("notices").select(
+            "*, users(id, full_name, role, avatar_url)"
+        ).eq("is_active", True).in_("target_audience", ["STUDENTS_ONLY", "ALL"]).execute()
+
+        admin_notices = admin_res.data or []
+
+        # 2. Fetch Teacher notices specifically targeted to student's batch
+        batch_notices = []
+        batch_name = "My Batch"
+        if batch_id:
+            # Get batch name
+            b_info = supabase.table("batches").select("name").eq("id", batch_id).execute()
+            if b_info.data:
+                batch_name = b_info.data[0].get("name", "My Batch")
+
+            b_res = supabase.table("notices").select(
+                "*, users(id, full_name, role, avatar_url)"
+            ).eq("is_active", True).eq("target_audience", "BATCH").contains("batch_ids", [batch_id]).execute()
+            batch_notices = b_res.data or []
+
+        # 3. Combine and deduplicate
+        seen_ids = set()
+        all_raw = []
+        for n in (admin_notices + batch_notices):
+            nid = n.get("id")
+            if nid and nid not in seen_ids:
+                seen_ids.add(nid)
+                all_raw.append(n)
+
+        # Sort newest first
+        all_raw.sort(key=lambda x: x.get("created_at") or "", reverse=True)
+
+        # 4. Format clean output
+        formatted = []
+        for n in all_raw:
+            u = n.get("users") or {}
+            u_role = u.get("role") or ("ADMIN" if n.get("target_audience") != "BATCH" else "TEACHER")
+            u_name = u.get("full_name") or ("Admin" if u_role == "ADMIN" else "Teacher")
+
+            aud = n.get("target_audience")
+            target_label = batch_name if aud == "BATCH" else ("All Students" if aud == "STUDENTS_ONLY" else "All Students & Teachers")
+
+            formatted.append({
+                "id": n.get("id"),
+                "title": n.get("title"),
+                "body": n.get("body"),
+                "target_audience": aud,
+                "target_label": target_label,
+                "sender_id": n.get("created_by"),
+                "sender_name": u_name,
+                "sender_role": u_role,
+                "sender_avatar": u.get("avatar_url"),
+                "created_at": n.get("created_at")
+            })
+
+        return formatted
+>>>>>>> Stashed changes
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+<<<<<<< Updated upstream
 
 @router.delete("/avatar", summary="Remove Student Profile Avatar")
 def remove_student_avatar(current_user: dict = Depends(get_current_user)):
@@ -1759,3 +1829,5 @@ def update_student_password(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+=======
+>>>>>>> Stashed changes

@@ -52,6 +52,17 @@ function formatINR(value) {
 }
 
 function Brand({ collapsed }) {
+  const handleDeleteNotice = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this notice?')) return;
+    try {
+      await apiRequest(`/api/admin/notices/${id}`, { method: 'DELETE' });
+      setNotices(prev => prev.filter(n => n.id !== id));
+      showToast('Notice Deleted', 'The notice has been removed from the board.');
+    } catch (err) {
+      showToast('Delete Failed', err.message || 'Could not delete notice.');
+    }
+  };
+
   return (
     <div className={`brand ${collapsed ? 'brand-collapsed' : ''}`}>
       <div className="brand-mark"><GraduationCap size={21} strokeWidth={2.4} /></div>
@@ -61,6 +72,17 @@ function Brand({ collapsed }) {
 }
 
 function Sidebar({ activePage, onNavigate, collapsed, setCollapsed, mobileOpen, setMobileOpen, onSignOut }) {
+  const handleDeleteNotice = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this notice?')) return;
+    try {
+      await apiRequest(`/api/admin/notices/${id}`, { method: 'DELETE' });
+      setNotices(prev => prev.filter(n => n.id !== id));
+      showToast('Notice Deleted', 'The notice has been removed from the board.');
+    } catch (err) {
+      showToast('Delete Failed', err.message || 'Could not delete notice.');
+    }
+  };
+
   return (
     <>
       {mobileOpen && <button className="mobile-scrim" aria-label="Close navigation" onClick={() => setMobileOpen(false)} />}
@@ -76,7 +98,18 @@ function Sidebar({ activePage, onNavigate, collapsed, setCollapsed, mobileOpen, 
           {navItems.map((item) => {
             const Icon = item.icon;
             const active = activePage === item.label;
-            return (
+            const handleDeleteNotice = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this notice?')) return;
+    try {
+      await apiRequest(`/api/admin/notices/${id}`, { method: 'DELETE' });
+      setNotices(prev => prev.filter(n => n.id !== id));
+      showToast('Notice Deleted', 'The notice has been removed from the board.');
+    } catch (err) {
+      showToast('Delete Failed', err.message || 'Could not delete notice.');
+    }
+  };
+
+  return (
               <button
                 key={item.label}
                 className={`nav-item ${active ? 'active' : ''}`}
@@ -121,6 +154,17 @@ function Topbar({ user, searchQuery, setSearchQuery, onMobileMenu, darkMode, set
     .slice(0, 2)
     .join('')
     .toUpperCase() || 'AD';
+
+  const handleDeleteNotice = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this notice?')) return;
+    try {
+      await apiRequest(`/api/admin/notices/${id}`, { method: 'DELETE' });
+      setNotices(prev => prev.filter(n => n.id !== id));
+      showToast('Notice Deleted', 'The notice has been removed from the board.');
+    } catch (err) {
+      showToast('Delete Failed', err.message || 'Could not delete notice.');
+    }
+  };
 
   return (
     <header className="topbar">
@@ -215,6 +259,17 @@ function Topbar({ user, searchQuery, setSearchQuery, onMobileMenu, darkMode, set
 }
 
 function MetricCard({ icon: Icon, label, value, change, changeType = 'positive', note, iconClass, trend }) {
+  const handleDeleteNotice = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this notice?')) return;
+    try {
+      await apiRequest(`/api/admin/notices/${id}`, { method: 'DELETE' });
+      setNotices(prev => prev.filter(n => n.id !== id));
+      showToast('Notice Deleted', 'The notice has been removed from the board.');
+    } catch (err) {
+      showToast('Delete Failed', err.message || 'Could not delete notice.');
+    }
+  };
+
   return (
     <div className="metric-card">
       <div className="metric-card-top">
@@ -236,6 +291,17 @@ function MetricCard({ icon: Icon, label, value, change, changeType = 'positive',
 }
 
 function CollectionChart({ period, setPeriod }) {
+  const handleDeleteNotice = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this notice?')) return;
+    try {
+      await apiRequest(`/api/admin/notices/${id}`, { method: 'DELETE' });
+      setNotices(prev => prev.filter(n => n.id !== id));
+      showToast('Notice Deleted', 'The notice has been removed from the board.');
+    } catch (err) {
+      showToast('Delete Failed', err.message || 'Could not delete notice.');
+    }
+  };
+
   return (
     <section className="panel collection-panel">
       <div className="card-header">
@@ -272,7 +338,18 @@ function CollectionChart({ period, setPeriod }) {
             const total = d.cash + d.online;
             const pct = Math.min(100, (total / 100) * 100);
             const onlineRatio = (d.online / total) * 100;
-            return (
+            const handleDeleteNotice = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this notice?')) return;
+    try {
+      await apiRequest(`/api/admin/notices/${id}`, { method: 'DELETE' });
+      setNotices(prev => prev.filter(n => n.id !== id));
+      showToast('Notice Deleted', 'The notice has been removed from the board.');
+    } catch (err) {
+      showToast('Delete Failed', err.message || 'Could not delete notice.');
+    }
+  };
+
+  return (
               <div className="bar-column" key={d.month}>
                 <div className="bar-stack" style={{ height: `${pct}%` }}>
                   <span className="bar-online" style={{ height: `${onlineRatio}%` }} />
@@ -294,6 +371,17 @@ function CollectionChart({ period, setPeriod }) {
 }
 
 function TodaySchedule({ onViewAll }) {
+  const handleDeleteNotice = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this notice?')) return;
+    try {
+      await apiRequest(`/api/admin/notices/${id}`, { method: 'DELETE' });
+      setNotices(prev => prev.filter(n => n.id !== id));
+      showToast('Notice Deleted', 'The notice has been removed from the board.');
+    } catch (err) {
+      showToast('Delete Failed', err.message || 'Could not delete notice.');
+    }
+  };
+
   return (
     <section className="panel schedule-panel">
       <div className="card-header">
@@ -337,7 +425,7 @@ function TodaySchedule({ onViewAll }) {
   );
 }
 
-function HomeView({ searchQuery, onQuickAction, onNavigate, students }) {
+function HomeView({ searchQuery, onQuickAction, onNavigate, students, notices = [] }) {
   const [period, setPeriod] = useState('This month');
   const dueList = students.filter(s => s.dueAmount > 0);
 
@@ -347,6 +435,17 @@ function HomeView({ searchQuery, onQuickAction, onNavigate, students }) {
     { icon: Wallet, label: 'Fee collected', value: '₹4.82L', change: '+12.8%', note: 'this month', iconClass: 'orange-icon', trend: [24, 43, 34, 62, 51, 75, 69, 100] },
     { icon: AlertCircle, label: 'Pending dues', value: '₹7,400', change: '4 students', changeType: 'negative', note: 'due by 10th Oct', iconClass: 'rose-icon', trend: [80, 64, 73, 52, 58, 42, 30, 22] },
   ];
+
+  const handleDeleteNotice = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this notice?')) return;
+    try {
+      await apiRequest(`/api/admin/notices/${id}`, { method: 'DELETE' });
+      setNotices(prev => prev.filter(n => n.id !== id));
+      showToast('Notice Deleted', 'The notice has been removed from the board.');
+    } catch (err) {
+      showToast('Delete Failed', err.message || 'Could not delete notice.');
+    }
+  };
 
   return (
     <>
@@ -424,20 +523,28 @@ function HomeView({ searchQuery, onQuickAction, onNavigate, students }) {
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 14 }}>
-            <div style={{ padding: 14, borderRadius: 10, background: '#f8fbfb', border: '1px solid #ebf2f0', display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <strong style={{ fontSize: 16 }}>Kali Puja & Diwali Vacation</strong>
-                <span className="notice-audience-pill" style={{ fontSize: 13 }}>All Students</span>
+            {(!notices || notices.length === 0) ? (
+              <div style={{ padding: '16px', textAlign: 'center', color: '#64748B', fontSize: 13.5 }}>
+                No active announcements published yet.
               </div>
-              <p style={{ margin: 0, fontSize: 14, color: 'var(--text-2)' }}>Classes suspended from 28th Oct to 3rd Nov 2026.</p>
-            </div>
-            <div style={{ padding: 14, borderRadius: 10, background: '#f8fbfb', border: '1px solid #ebf2f0', display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <strong style={{ fontSize: 16 }}>October Fee Due Reminder</strong>
-                <span className="notice-audience-pill" style={{ fontSize: 13 }}>Pending Dues</span>
-              </div>
-              <p style={{ margin: 0, fontSize: 14, color: 'var(--text-2)' }}>Kindly clear dues by 10th Oct to avoid late fines.</p>
-            </div>
+            ) : (
+              notices.slice(0, 3).map(n => (
+                <div key={n.id} style={{ padding: 14, borderRadius: 10, background: '#f8fbfb', border: '1px solid #ebf2f0', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <strong style={{ fontSize: 15, color: '#0F172A' }}>{n.title}</strong>
+                    <span className="notice-audience-pill" style={{ fontSize: 12.5 }}>
+                      {n.audience_label || (n.target_audience === 'BATCH' ? (n.batch_names?.join(', ') || 'Batch') : 'All')}
+                    </span>
+                  </div>
+                  <p style={{ margin: 0, fontSize: 13.5, color: 'var(--text-2)', lineHeight: 1.5 }}>
+                    {n.body && n.body.length > 90 ? n.body.slice(0, 90) + '...' : n.body}
+                  </p>
+                  <span style={{ fontSize: 12, color: '#0F766E', fontWeight: 600 }}>
+                    {n.sender_role === 'ADMIN' ? `Sent by ${n.sender_name || 'Admin'} – Admin` : `Sent by ${n.sender_name || 'Teacher'} – Teacher`}
+                  </span>
+                </div>
+              ))
+            )}
           </div>
         </section>
       </div>
@@ -556,6 +663,17 @@ function Modal({ modal, onClose, onSubmit, selectedItem, batches, teachers }) {
       onSubmit({ type: modal, form });
     }
   }
+
+  const handleDeleteNotice = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this notice?')) return;
+    try {
+      await apiRequest(`/api/admin/notices/${id}`, { method: 'DELETE' });
+      setNotices(prev => prev.filter(n => n.id !== id));
+      showToast('Notice Deleted', 'The notice has been removed from the board.');
+    } catch (err) {
+      showToast('Delete Failed', err.message || 'Could not delete notice.');
+    }
+  };
 
   return (
     <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
@@ -928,12 +1046,11 @@ function Modal({ modal, onClose, onSubmit, selectedItem, batches, teachers }) {
                   <input required value={form.title} onChange={(e) => update('title', e.target.value)} placeholder="e.g. Upcoming Exam & Vacation Notice" />
                 </label>
                 <label className="form-field">
-                  <span>Target Audience</span>
+                  <span>Share With (Target Audience) <b>*</b></span>
                   <select value={form.audience} onChange={(e) => update('audience', e.target.value)}>
-                    <option>All Students & Teachers</option>
-                    <option>Students Only</option>
-                    <option>Teachers Only</option>
-                    <option>Students with Pending Dues</option>
+                    <option value="Teachers & Students">Teachers & Students</option>
+                    <option value="Students Only">Students Only</option>
+                    <option value="Teachers Only">Teachers Only</option>
                   </select>
                 </label>
                 <label className="form-field">
@@ -977,6 +1094,17 @@ function Modal({ modal, onClose, onSubmit, selectedItem, batches, teachers }) {
 
 function Toast({ toast, onClose }) {
   if (!toast) return null;
+  const handleDeleteNotice = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this notice?')) return;
+    try {
+      await apiRequest(`/api/admin/notices/${id}`, { method: 'DELETE' });
+      setNotices(prev => prev.filter(n => n.id !== id));
+      showToast('Notice Deleted', 'The notice has been removed from the board.');
+    } catch (err) {
+      showToast('Delete Failed', err.message || 'Could not delete notice.');
+    }
+  };
+
   return (
     <div className="toast-message">
       <span className="toast-check"><Check size={16} /></span>
@@ -1032,7 +1160,7 @@ export default function AdminPanel({ onBackToLanding }) {
     let isMounted = true;
     async function fetchInitialData() {
       try {
-        const [batchData, teacherData, studentData] = await Promise.all([
+        const [batchData, teacherData, studentData, noticeData] = await Promise.all([
           apiRequest('/api/admin/batches').catch(err => {
             console.warn('API batches fetch notice:', err?.message || err);
             return [];
@@ -1044,19 +1172,35 @@ export default function AdminPanel({ onBackToLanding }) {
           apiRequest('/api/admin/students').catch(err => {
             console.warn('API students fetch notice:', err?.message || err);
             return [];
+          }),
+          apiRequest('/api/admin/notices').catch(err => {
+            console.warn('API notices fetch notice:', err?.message || err);
+            return [];
           })
         ]);
         if (isMounted) {
           if (Array.isArray(batchData)) setBatches(batchData);
           if (Array.isArray(teacherData)) setTeachers(teacherData);
           if (Array.isArray(studentData)) setStudents(studentData);
+          if (Array.isArray(noticeData)) setNotices(noticeData);
         }
       } catch (err) {
         console.warn('API initial data fetch notice:', err?.message || err);
       }
     }
     fetchInitialData();
-    return () => { isMounted = false; };
+    const handleDeleteNotice = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this notice?')) return;
+    try {
+      await apiRequest(`/api/admin/notices/${id}`, { method: 'DELETE' });
+      setNotices(prev => prev.filter(n => n.id !== id));
+      showToast('Notice Deleted', 'The notice has been removed from the board.');
+    } catch (err) {
+      showToast('Delete Failed', err.message || 'Could not delete notice.');
+    }
+  };
+
+  return () => { isMounted = false; };
   }, []);
 
   function showToast(title, message) {
@@ -1293,16 +1437,28 @@ export default function AdminPanel({ onBackToLanding }) {
         showToast('Update Failed', err.message || 'Could not update faculty member.');
       }
     } else if (type === 'Broadcast notice') {
-      const newN = {
-        id: `n-${Date.now()}`,
-        title: form.title,
-        audience: form.audience,
-        date: 'Today',
-        body: form.message,
-        isPinned: false,
-      };
-      setNotices(prev => [newN, ...prev]);
-      showToast('Notice Published', 'Notification broadcasted to student & faculty dashboards.');
+      try {
+        let audKey = 'ALL';
+        if (form.audience === 'Students Only') audKey = 'STUDENTS_ONLY';
+        else if (form.audience === 'Teachers Only') audKey = 'TEACHERS_ONLY';
+        else audKey = 'ALL';
+
+        await apiRequest('/api/admin/notices', {
+          method: 'POST',
+          body: {
+            title: form.title.trim(),
+            body: form.message.trim(),
+            target_audience: audKey
+          }
+        });
+
+        showToast('Notice Published', 'Notification broadcasted across the institute successfully.');
+        const updatedNotices = await apiRequest('/api/admin/notices').catch(() => []);
+        setNotices(updatedNotices);
+      } catch (err) {
+        console.error('Failed to broadcast notice:', err);
+        showToast('Publish Failed', err.message || 'Could not publish notice.');
+      }
     } else if (type === 'Export report') {
       const csv = [
         'Receipt Number,Student Name,Student ID,Batch,Amount,Mode,Date',
@@ -1321,6 +1477,17 @@ export default function AdminPanel({ onBackToLanding }) {
     setActivePage(page);
     setSearchQuery('');
   }
+
+  const handleDeleteNotice = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this notice?')) return;
+    try {
+      await apiRequest(`/api/admin/notices/${id}`, { method: 'DELETE' });
+      setNotices(prev => prev.filter(n => n.id !== id));
+      showToast('Notice Deleted', 'The notice has been removed from the board.');
+    } catch (err) {
+      showToast('Delete Failed', err.message || 'Could not delete notice.');
+    }
+  };
 
   return (
     <div className={`app-shell ${darkMode ? 'dark-mode' : ''} ${collapsed ? 'is-collapsed' : ''}`}>
@@ -1353,6 +1520,7 @@ export default function AdminPanel({ onBackToLanding }) {
               onQuickAction={openAction}
               onNavigate={navigate}
               students={students}
+              notices={notices}
             />
           )}
 
@@ -1410,6 +1578,7 @@ export default function AdminPanel({ onBackToLanding }) {
             <NoticeBoardView
               notices={notices}
               onBroadcastNotice={() => openAction('Broadcast notice')}
+              onDeleteNotice={handleDeleteNotice}
             />
           )}
 

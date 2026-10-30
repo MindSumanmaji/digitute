@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends
 from app.db import get_supabase_client, safe_execute
-from app.core.dependencies import require_roles
+from app.core.dependencies import require_roles, get_current_user
 from app.models import (
     BatchCreate,
     RoutineSlotCreate,
@@ -12,7 +12,8 @@ from app.models import (
     GenerateMonthSessionsRequest,
     SessionActionRequest,
     BatchInvoiceDemandRequest,
-    SingleInvoiceDemandRequest
+    SingleInvoiceDemandRequest,
+    AdminNoticeCreate
 )
 from datetime import date, datetime
 import calendar
@@ -1716,4 +1717,123 @@ def delete_invoice(invoice_id: str):
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
+# ==============================================================================
+# 12. ADMIN NOTICE BOARD ENDPOINTS (schema.sql Table 12)
+# ==============================================================================
+@router.post("/notices", summary="Publish Institute-wide Notice (Admin)")
+def create_admin_notice(
+    data: AdminNoticeCreate,
+    current_user: dict = Depends(get_current_user)
+):
+    try:
+        supabase = get_supabase_client()
+        admin_id = current_user.get("id")
+        admin_name = current_user.get("full_name") or "Admin"
+
+        title = data.title.strip()
+        body = data.body.strip()
+        audience = data.target_audience
+
+        if not title:
+            raise HTTPException(status_code=400, detail="Notice title cannot be empty.")
+        if not body:
+            raise HTTPException(status_code=400, detail="Notice body cannot be empty.")
+        if audience not in ("STUDENTS_ONLY", "TEACHERS_ONLY", "ALL"):
+            raise HTTPException(status_code=400, detail="Target audience must be STUDENTS_ONLY, TEACHERS_ONLY, or ALL.")
+
+        payload = {
+            "title": title,
+            "body": body,
+            "created_by": admin_id,
+            "target_audience": audience,
+            "batch_ids": [],
+            "is_active": True
+        }
+
+        res = supabase.table("notices").insert(payload).execute()
+        if not res.data:
+            raise HTTPException(status_code=500, detail="Failed to save notice.")
+
+        new_notice = res.data[0]
+        new_notice["sender_name"] = admin_name
+        new_notice["sender_role"] = "ADMIN"
+        new_notice["is_mine"] = True
+        return new_notice
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/notices", summary="List All Notices for Admin Board")
+def list_admin_notices(current_user: dict = Depends(get_current_user)):
+    try:
+        supabase = get_supabase_client()
+        admin_id = current_user.get("id")
+
+        res = supabase.table("notices").select(
+            "*, users(id, full_name, role, avatar_url)"
+        ).eq("is_active", True).order("created_at", desc=True).execute()
+
+        notices = res.data or []
+
+        # Batches map for name lookup
+        b_res = supabase.table("batches").select("id, name").execute()
+        batch_map = {b["id"]: b["name"] for b in (b_res.data or [])}
+
+        audience_labels = {
+            "STUDENTS_ONLY": "Students Only",
+            "TEACHERS_ONLY": "Teachers Only",
+            "ALL": "Teachers & Students",
+            "BATCH": "Specific Batches"
+        }
+
+        output = []
+        for n in notices:
+            u = n.get("users") or {}
+            u_role = u.get("role") or ("ADMIN" if str(n.get("created_by")) == str(admin_id) else "TEACHER")
+            b_ids = n.get("batch_ids") or []
+            aud = n.get("target_audience")
+
+            output.append({
+                "id": n.get("id"),
+                "title": n.get("title"),
+                "body": n.get("body"),
+                "target_audience": aud,
+                "audience_label": audience_labels.get(aud, aud),
+                "batch_ids": b_ids,
+                "batch_names": [batch_map.get(bid, "Batch") for bid in b_ids if bid in batch_map],
+                "sender_id": n.get("created_by"),
+                "sender_name": u.get("full_name") or ("Admin" if u_role == "ADMIN" else "Teacher"),
+                "sender_role": u_role,
+                "sender_avatar": u.get("avatar_url"),
+                "created_at": n.get("created_at"),
+                "is_mine": (str(n.get("created_by")) == str(admin_id))
+            })
+
+        return output
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/notices/{notice_id}", summary="Delete Any Notice (Admin)")
+def delete_admin_notice(notice_id: str, current_user: dict = Depends(get_current_user)):
+    try:
+        supabase = get_supabase_client()
+        existing = supabase.table("notices").select("*").eq("id", notice_id).execute()
+        if not existing.data:
+            raise HTTPException(status_code=404, detail="Notice not found.")
+
+        # Admin can delete any notice (soft-delete)
+        supabase.table("notices").update({"is_active": False}).eq("id", notice_id).execute()
+        return {"message": "Notice deleted successfully."}
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
 

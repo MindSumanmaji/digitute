@@ -1009,15 +1009,22 @@ export function ExamEvaluation({ onBack, onNavigateToStudentInfo }) {
                     value={status}
                     onChange={(e) => handleStatusChange(e.target.value)}
                     style={{
-                      borderColor: isCompleted ? '#16A34A' : '#2563EB',
-                      color: isCompleted ? '#15803D' : '#1E293B',
+                      borderColor: status === 'completed' ? '#16A34A' : status === 'cancelled' ? '#EF4444' : '#2563EB',
+                      color: status === 'completed' ? '#15803D' : status === 'cancelled' ? '#DC2626' : '#1E293B',
                       fontWeight: 700,
                     }}
                   >
-                    <option value="scheduled">🗓️ Scheduled (Upcoming)</option>
-                    <option value="completed">✓ Completed (Evaluated)</option>
-                    <option value="draft">Draft</option>
-                    <option value="cancelled">Cancelled</option>
+                    {editingExamId ? (
+                      <>
+                        <option value="completed">✓ Completed (Evaluated)</option>
+                        <option value="cancelled">Cancelled</option>
+                      </>
+                    ) : (
+                      <>
+                        <option value="scheduled">🗓️ Scheduled (Upcoming)</option>
+                        <option value="draft">Draft</option>
+                      </>
+                    )}
                   </select>
                   <div className="ee-caret" aria-hidden="true">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="6 9 12 15 18 9" /></svg>
@@ -1109,8 +1116,8 @@ export function ExamEvaluation({ onBack, onNavigateToStudentInfo }) {
                 <div className="ee-bottom-info">
                   <div className="ee-evaluated-summary">
                     <span>Status: </span>
-                    <strong style={{ color: status === 'scheduled' ? '#2563EB' : '#64748B' }}>
-                      {status === 'scheduled' ? '🗓️ Scheduled (Upcoming)' : status === 'draft' ? 'Draft' : status}
+                    <strong style={{ color: status === 'scheduled' ? '#2563EB' : status === 'cancelled' ? '#DC2626' : '#64748B' }}>
+                      {status === 'scheduled' ? '🗓️ Scheduled (Upcoming)' : status === 'draft' ? 'Draft' : status === 'cancelled' ? '⚠️ Cancelled' : status}
                     </strong>
                   </div>
                   <span className="ee-batch-tag">{selectedBatchName} • {selectedSubject}</span>
@@ -1121,13 +1128,15 @@ export function ExamEvaluation({ onBack, onNavigateToStudentInfo }) {
                   className="ee-submit-results-btn"
                   onClick={handleInitiateSubmit}
                   disabled={isSubmitting}
-                  style={{ background: 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)' }}
+                  style={{ background: status === 'cancelled' ? '#DC2626' : 'linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%)' }}
                 >
                   <span>
                     {isSubmitting
                       ? 'Saving...'
+                      : editingExamId && status === 'cancelled'
+                      ? 'Confirm & Cancel Exam'
                       : editingExamId
-                      ? 'Update Exam Schedule'
+                      ? 'Update Exam Record'
                       : 'Save & Schedule Exam'}
                   </span>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">

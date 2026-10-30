@@ -1,129 +1,167 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { BATCHES } from '../../data/academicData';
-const DEFAULT_NOTICES = [
-  {
-    id: 'notif-1',
-    title: 'Semester End Project Submission Guidelines',
-    batch: 'B.Sc 6th Sem',
-    category: 'Academic',
-    content: 'All final year students must submit their complete Computer Network laboratory documentation along with code repositories by Friday 5:00 PM. Late submissions will attract 10% penalty.',
-    date: '14 Oct 2026, 02:30 PM',
-    wordCount: 31,
-    priority: 'high'
-  },
-  {
-    id: 'notif-2',
-    title: 'Guest Lecture on Cloud Microservices Architecture',
-    batch: 'MCA 2nd Sem',
-    category: 'Workshop',
-    content: 'Special industry seminar on Distributed Architecture and Docker Containers is scheduled for tomorrow at 11:00 AM in Seminar Hall 1. Attendance is mandatory for all students.',
-    date: '13 Oct 2026, 04:15 PM',
-    wordCount: 30,
-    priority: 'normal'
-  },
-  {
-    id: 'notif-3',
-    title: 'Departmental Holiday on Durga Puja Festival',
-    batch: 'All Batches',
-    category: 'Holiday',
-    content: 'The DigiTute department will remain closed for festive celebrations from 19th October to 24th October. Online portal access for notes and assignment submission remains active 24x7.',
-    date: '12 Oct 2026, 10:00 AM',
-    wordCount: 29,
-    priority: 'info'
-  }
-];
-
-const countWords = (str = '') => {
-  const trimmed = str.trim();
-  if (!trimmed) return 0;
-  return trimmed.split(/\s+/).filter(Boolean).length;
-};
+import { apiRequest } from '../../api';
 
 export default function Notice() {
-  const [selectedBatch, setSelectedBatch] = useState('All Batches');
+  const [assignedBatches, setAssignedBatches] = useState([]);
+  const [selectedBatchIds, setSelectedBatchIds] = useState([]);
   const [noticeTitle, setNoticeTitle] = useState('');
-  const [noticeCategory, setNoticeCategory] = useState('Academic');
   const [noticeBody, setNoticeBody] = useState('');
   const [formError, setFormError] = useState('');
   const [toastMessage, setToastMessage] = useState('');
-  const [publishedNotices, setPublishedNotices] = useState(() => {
-    try {
-      const saved = localStorage.getItem('digitute_published_notices');
-      return saved ? JSON.parse(saved) : DEFAULT_NOTICES;
-    } catch {
-      return DEFAULT_NOTICES;
-    }
-  });
-
+  const [publishedNotices, setPublishedNotices] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
   const [filterBatch, setFilterBatch] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
 
-  const wordCount = countWords(noticeBody);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem('digitute_published_notices', JSON.stringify(publishedNotices));
-    } catch {
-      // localStorage may fail in some environments
-    }
-  }, [publishedNotices]);
-
   const showToast = (msg) => {
     setToastMessage(msg);
-    setTimeout(() => setToastMessage(''), 3000);
+    setTimeout(() => setToastMessage(''), 3500);
   };
 
-  const handlePublish = (e) => {
+  // Load teacher's assigned batches and notices from live API
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const [batchesRes, noticesRes] = await Promise.all([
+        apiRequest('/api/teacher/my-batches').catch(err => {
+          console.warn('Teacher batches load error:', err.message);
+          return [];
+        }),
+        apiRequest('/api/teacher/notices').catch(err => {
+          console.warn('Teacher notices load error:', err.message);
+          return [];
+        })
+      ]);
+
+      const batches = Array.isArray(batchesRes) ? batchesRes : [];
+      setAssignedBatches(batches);
+
+      // If only 1 batch assigned, automatically select it
+      if (batches.length === 1 && selectedBatchIds.length === 0) {
+        setSelectedBatchIds([batches[0].batch_id]);
+      }
+
+      setPublishedNotices(Array.isArray(noticesRes) ? noticesRes : []);
+    } catch (err) {
+      console.error('Failed to load notice board data:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const toggleBatchSelection = (batchId) => {
+    setFormError('');
+    setSelectedBatchIds(prev =>
+      prev.includes(batchId)
+        ? prev.filter(id => id !== batchId)
+        : [...prev, batchId]
+    );
+  };
+
+  const selectAllBatches = () => {
+    setFormError('');
+    if (selectedBatchIds.length === assignedBatches.length) {
+      setSelectedBatchIds([]);
+    } else {
+      setSelectedBatchIds(assignedBatches.map(b => b.batch_id));
+    }
+  };
+
+  const handlePublish = async (e) => {
     e.preventDefault();
-    if (!noticeTitle.trim()) {
+    const cleanTitle = noticeTitle.trim();
+    const cleanBody = noticeBody.trim();
+
+    if (!cleanTitle) {
       setFormError('Please provide a descriptive title for this notice.');
       return;
     }
-    if (!noticeBody.trim()) {
-      setFormError('Notice body content cannot be empty.');
+    if (!cleanBody) {
+      setFormError('Notice body message cannot be empty.');
       return;
     }
-    if (wordCount > 200) {
-      setFormError('Notice body cannot exceed 200 words. Please shorten your message.');
+    if (selectedBatchIds.length === 0) {
+      setFormError('Please select at least one of your assigned batches.');
       return;
     }
 
-    const newNotice = {
-      id: 'notif-' + Date.now(),
-      title: noticeTitle.trim(),
-      batch: selectedBatch,
-      category: noticeCategory,
-      content: noticeBody.trim(),
-      date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) + ', ' +
-            new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-      wordCount,
-      priority: noticeCategory === 'Urgent' ? 'high' : 'normal'
-    };
-
-    setPublishedNotices([newNotice, ...publishedNotices]);
-    window.dispatchEvent(new CustomEvent('digitute_notice_published', { detail: newNotice }));
-
-    setNoticeTitle('');
-    setNoticeBody('');
-    setNoticeCategory('Academic');
+    setSubmitting(true);
     setFormError('');
-    showToast(`Notice published successfully to ${selectedBatch}!`);
+
+    try {
+      const res = await apiRequest('/api/teacher/notices', {
+        method: 'POST',
+        body: {
+          title: cleanTitle,
+          body: cleanBody,
+          batch_ids: selectedBatchIds
+        }
+      });
+
+      showToast('Notice published successfully to your selected batch(es)!');
+      setNoticeTitle('');
+      setNoticeBody('');
+      // Reload notices list
+      const updatedNotices = await apiRequest('/api/teacher/notices').catch(() => []);
+      setPublishedNotices(updatedNotices);
+    } catch (err) {
+      console.error('Failed to publish notice:', err);
+      setFormError(err.message || 'Failed to publish notice. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const handleDeleteNotice = (id) => {
-    setPublishedNotices(prev => prev.filter(n => n.id !== id));
-    showToast('Notice removed from the board.');
+  const handleDeleteNotice = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this notice?')) {
+      return;
+    }
+
+    try {
+      await apiRequest(`/api/teacher/notices/${id}`, { method: 'DELETE' });
+      setPublishedNotices(prev => prev.filter(n => n.id !== id));
+      showToast('Notice removed from the board.');
+    } catch (err) {
+      console.error('Failed to delete notice:', err);
+      showToast(err.message || 'Could not delete notice.');
+    }
   };
 
   const filteredList = useMemo(() => {
     return publishedNotices.filter(n => {
-      const matchBatch = filterBatch === 'All' || n.batch === filterBatch || n.batch === 'All Batches';
-      const matchQuery = !searchQuery.trim() ||
-        n.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        n.content.toLowerCase().includes(searchQuery.toLowerCase());
+      // Filter by Batch
+      let matchBatch = true;
+      if (filterBatch !== 'All') {
+        const bNames = n.batch_names || [];
+        matchBatch = bNames.includes(filterBatch) || n.target_audience !== 'BATCH';
+      }
+
+      // Filter by Search Query
+      const q = searchQuery.trim().toLowerCase();
+      const matchQuery = !q ||
+        (n.title && n.title.toLowerCase().includes(q)) ||
+        (n.body && n.body.toLowerCase().includes(q)) ||
+        (n.sender_name && n.sender_name.toLowerCase().includes(q));
+
       return matchBatch && matchQuery;
     });
   }, [publishedNotices, filterBatch, searchQuery]);
+
+  const formatDate = (dateStr) => {
+    if (!dateStr) return 'Just now';
+    try {
+      const d = new Date(dateStr);
+      return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) +
+        ', ' + d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    } catch {
+      return dateStr;
+    }
+  };
 
   return (
     <div className="notice-page-wrapper">
@@ -146,7 +184,7 @@ export default function Notice() {
           <div>
             <h1 className="notice-page-title">Notice Board</h1>
             <p className="notice-page-subtitle">
-              Publish and broadcast notices to student batches.
+              Publish notices directly to your assigned student batches and view official center updates.
             </p>
           </div>
         </div>
@@ -157,8 +195,8 @@ export default function Notice() {
             <span className="notice-stat-val">{publishedNotices.length}</span>
           </div>
           <div className="notice-stat-pill indigo">
-            <span className="notice-stat-label">Active Batches:</span>
-            <span className="notice-stat-val">{BATCHES.length}</span>
+            <span className="notice-stat-label">My Assigned Batches:</span>
+            <span className="notice-stat-val">{assignedBatches.length}</span>
           </div>
           <div className="notice-stat-pill green">
             <span className="notice-stat-dot" />
@@ -178,85 +216,116 @@ export default function Notice() {
               </svg>
               <span>Publish New Notice</span>
             </div>
-            <span className="notice-word-badge">Max 200 Words</span>
+            <span className="notice-word-badge" style={{ background: '#F1F5F9', color: '#475569' }}>
+              Faculty Authorization
+            </span>
           </div>
 
           <form onSubmit={handlePublish} className="notice-form">
-            {/* Batch Select and Category Selection Row */}
-            <div className="notice-top-selectors">
-              {/* Batch Select */}
-              <div className="notice-field-group">
-                <label htmlFor="notice-batch-select" className="notice-field-label">
+            {/* Target Batch Selector (Multi-Select from Assigned Batches) */}
+            <div className="notice-field-group">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                <label className="notice-field-label" style={{ margin: 0 }}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                     <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
                     <circle cx="9" cy="7" r="4" />
                     <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
                     <path d="M16 3.13a4 4 0 0 1 0 7.75" />
                   </svg>
-                  <span>Select Target Batch</span>
+                  <span>Target Batches (Select One or More) <b>*</b></span>
                 </label>
-                <div className="notice-select-wrap">
-                  <select
-                    id="notice-batch-select"
-                    className="notice-select"
-                    value={selectedBatch}
-                    onChange={(e) => setSelectedBatch(e.target.value)}
+
+                {assignedBatches.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={selectAllBatches}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--teal-primary, #0D9488)',
+                      fontSize: 12.5,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      padding: 0
+                    }}
                   >
-                    <option value="All Batches">All Batches (General Broadcast)</option>
-                    {BATCHES.map((b) => (
-                      <option key={b} value={b}>{b}</option>
-                    ))}
-                  </select>
-                  <div className="notice-select-caret" aria-hidden="true">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                      <polyline points="6 9 12 15 18 9" />
-                    </svg>
-                  </div>
-                </div>
+                    {selectedBatchIds.length === assignedBatches.length ? 'Deselect All' : 'Select All'}
+                  </button>
+                )}
               </div>
 
-              {/* Category / Tag */}
-              <div className="notice-field-group">
-                <label htmlFor="notice-category-select" className="notice-field-label">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
-                    <line x1="7" y1="7" x2="7.01" y2="7" />
-                  </svg>
-                  <span>Notice Category</span>
-                </label>
-                <div className="notice-select-wrap">
-                  <select
-                    id="notice-category-select"
-                    className="notice-select"
-                    value={noticeCategory}
-                    onChange={(e) => setNoticeCategory(e.target.value)}
-                  >
-                    <option value="Academic">Academic / Syllabus</option>
-                    <option value="Exam">Class Test &amp; Exams</option>
-                    <option value="Urgent">Urgent Alert</option>
-                    <option value="Holiday">Holiday &amp; Recess</option>
-                    <option value="Workshop">Workshop &amp; Lab</option>
-                    <option value="General">General Notice</option>
-                  </select>
-                  <div className="notice-select-caret" aria-hidden="true">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                      <polyline points="6 9 12 15 18 9" />
-                    </svg>
-                  </div>
+              {assignedBatches.length === 0 ? (
+                <div style={{
+                  padding: '12px 14px',
+                  background: '#F8FAFC',
+                  borderRadius: 8,
+                  fontSize: 13,
+                  color: '#64748B',
+                  border: '1px solid #E2E8F0'
+                }}>
+                  No batches currently assigned to you. Notices can only be sent to batches where you are assigned.
                 </div>
-              </div>
+              ) : (
+                <div style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: 8,
+                  marginTop: 4
+                }}>
+                  {assignedBatches.map(b => {
+                    const isSelected = selectedBatchIds.includes(b.batch_id);
+                    return (
+                      <button
+                        key={b.batch_id}
+                        type="button"
+                        onClick={() => toggleBatchSelection(b.batch_id)}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          padding: '6px 14px',
+                          borderRadius: 20,
+                          fontSize: 13,
+                          fontWeight: 600,
+                          cursor: 'pointer',
+                          transition: 'all 0.18s ease',
+                          border: isSelected ? '1.5px solid var(--teal-primary, #0D9488)' : '1px solid #CBD5E1',
+                          background: isSelected ? '#F0FDFA' : '#FFFFFF',
+                          color: isSelected ? 'var(--teal-primary, #0D9488)' : '#334155'
+                        }}
+                      >
+                        <span style={{
+                          width: 14,
+                          height: 14,
+                          borderRadius: 4,
+                          border: isSelected ? '1px solid var(--teal-primary, #0D9488)' : '1px solid #94A3B8',
+                          background: isSelected ? 'var(--teal-primary, #0D9488)' : '#FFFFFF',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: '#FFFFFF',
+                          fontSize: 10
+                        }}>
+                          {isSelected && '✓'}
+                        </span>
+                        {b.batch_name}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             {/* Notice Title */}
             <div className="notice-field-group">
               <label htmlFor="notice-title-input" className="notice-field-label">
-                <span>Notice Subject / Title</span>
+                <span>Notice Title <b>*</b></span>
               </label>
               <input
                 id="notice-title-input"
                 type="text"
                 className="notice-input-title"
-                placeholder="e.g. Rescheduled Lab Session for Computer Networks"
+                placeholder="e.g. Extra Problem-Solving Class on Thermodynamics"
                 value={noticeTitle}
                 onChange={(e) => {
                   setNoticeTitle(e.target.value);
@@ -265,35 +334,22 @@ export default function Notice() {
               />
             </div>
 
-            {/* 200 Word Notice Box */}
+            {/* Notice Body */}
             <div className="notice-field-group">
-              <div className="notice-box-label-row">
-                <label htmlFor="notice-body-box" className="notice-field-label">
-                  <span>Notice Message Body</span>
-                </label>
-                <div className={`notice-word-counter ${wordCount > 200 ? 'over-limit' : ''} ${wordCount >= 180 && wordCount <= 200 ? 'near-limit' : ''}`}>
-                  <strong>{wordCount}</strong> / 200 words
-                </div>
-              </div>
-
+              <label htmlFor="notice-body-box" className="notice-field-label">
+                <span>Notice Body <b>*</b></span>
+              </label>
               <textarea
                 id="notice-body-box"
-                className={`notice-textarea ${wordCount > 200 ? 'has-error' : ''}`}
-                rows={6}
-                placeholder="Write the notice details here (maximum 200 words). Include timings, instructions, requirements, or agenda..."
+                className="notice-textarea"
+                rows={5}
+                placeholder="Write the notice details here. Include timings, instructions, requirements, or agenda..."
                 value={noticeBody}
                 onChange={(e) => {
                   setNoticeBody(e.target.value);
                   if (formError) setFormError('');
                 }}
               />
-
-              {wordCount > 200 && (
-                <p className="notice-err-msg">
-                  Notice body exceeds 200 words! Please trim by {wordCount - 200} words.
-                </p>
-              )}
-
               {formError && <p className="notice-err-msg">{formError}</p>}
             </div>
 
@@ -301,7 +357,14 @@ export default function Notice() {
             <div className="notice-actions-strip">
               <div className="notice-target-indicator">
                 <span>Publishing to: </span>
-                <span className="notice-target-badge">{selectedBatch}</span>
+                <span className="notice-target-badge">
+                  {selectedBatchIds.length === 0
+                    ? 'No batch selected'
+                    : assignedBatches
+                        .filter(b => selectedBatchIds.includes(b.batch_id))
+                        .map(b => b.batch_name)
+                        .join(', ')}
+                </span>
               </div>
 
               <div className="notice-btn-group">
@@ -320,9 +383,9 @@ export default function Notice() {
                 <button
                   type="submit"
                   className="notice-publish-btn"
-                  disabled={wordCount > 200 || !noticeTitle.trim() || !noticeBody.trim()}
+                  disabled={submitting || !noticeTitle.trim() || !noticeBody.trim() || selectedBatchIds.length === 0}
                 >
-                  <span>Publish Notice</span>
+                  <span>{submitting ? 'Publishing...' : 'Publish Notice'}</span>
                   <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4">
                     <line x1="22" y1="2" x2="11" y2="13" />
                     <polygon points="22 2 15 22 11 13 2 9 22 2" />
@@ -337,8 +400,8 @@ export default function Notice() {
         <section className="notice-history-section">
           <div className="notice-history-header">
             <div>
-              <h2 className="notice-history-title">Recent Broadcasts</h2>
-              <p className="notice-history-sub">Track published notices across student portals</p>
+              <h2 className="notice-history-title">Recent Notice Board</h2>
+              <p className="notice-history-sub">Center broadcasts and your published notices</p>
             </div>
 
             {/* Filter by Batch */}
@@ -350,14 +413,18 @@ export default function Notice() {
                 aria-label="Filter notices by batch"
               >
                 <option value="All">All Batches</option>
-                {BATCHES.map(b => (
-                  <option key={b} value={b}>{b}</option>
+                {assignedBatches.map(b => (
+                  <option key={b.batch_id} value={b.batch_name}>{b.batch_name}</option>
                 ))}
               </select>
             </div>
           </div>
 
-          {filteredList.length === 0 ? (
+          {loading ? (
+            <div style={{ padding: '36px', textAlign: 'center', color: '#64748B' }}>
+              Loading notices...
+            </div>
+          ) : filteredList.length === 0 ? (
             <div className="notice-empty-state">
               <div className="notice-empty-icon">
                 <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -366,40 +433,66 @@ export default function Notice() {
                 </svg>
               </div>
               <h4>No Notices Found</h4>
-              <p>No notices matching the selected filter.</p>
+              <p>There are currently no notices matching the selected filter.</p>
             </div>
           ) : (
             <div className="notice-cards-list">
-              {filteredList.map((item) => (
-                <article key={item.id} className="notice-feed-card">
-                  <div className="notice-feed-top">
-                    <div className="notice-pill-tags">
-                      <span className="notice-batch-tag">{item.batch}</span>
-                      <span className={`notice-cat-tag ${item.category.toLowerCase()}`}>{item.category}</span>
+              {filteredList.map((item) => {
+                const isFromAdmin = item.sender_role === 'ADMIN';
+                const senderLabel = isFromAdmin
+                  ? `Sent by ${item.sender_name || 'Admin'} – Admin`
+                  : `Sent by ${item.sender_name || 'Teacher'} – Teacher`;
+
+                const targetLabel = item.target_audience === 'BATCH'
+                  ? (item.batch_names && item.batch_names.length > 0 ? item.batch_names.join(', ') : 'Assigned Batch')
+                  : (item.target_audience === 'ALL' ? 'Teachers & Students' : 'Teachers Only');
+
+                return (
+                  <article key={item.id} className="notice-feed-card">
+                    <div className="notice-feed-top">
+                      <div className="notice-pill-tags">
+                        <span className="notice-batch-tag">{targetLabel}</span>
+                        {isFromAdmin && (
+                          <span style={{
+                            fontSize: 11.5,
+                            fontWeight: 700,
+                            padding: '3px 8px',
+                            borderRadius: 12,
+                            background: '#FEF3C7',
+                            color: '#92400E'
+                          }}>
+                            OFFICIAL ADMIN NOTICE
+                          </span>
+                        )}
+                      </div>
+                      <span className="notice-date-stamp">{formatDate(item.created_at)}</span>
                     </div>
-                    <span className="notice-date-stamp">{item.date}</span>
-                  </div>
 
-                  <h3 className="notice-feed-title">{item.title}</h3>
-                  <p className="notice-feed-body">{item.content}</p>
+                    <h3 className="notice-feed-title">{item.title}</h3>
+                    <p className="notice-feed-body">{item.body}</p>
 
-                  <div className="notice-feed-footer">
-                    <span className="notice-author-sign">Faculty of DigiTute</span>
-                    <button
-                      type="button"
-                      className="notice-del-btn"
-                      onClick={() => handleDeleteNotice(item.id)}
-                      title="Delete this notice"
-                    >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <polyline points="3 6 5 6 21 6" />
-                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                      </svg>
-                      <span>Delete</span>
-                    </button>
-                  </div>
-                </article>
-              ))}
+                    <div className="notice-feed-footer">
+                      <span className="notice-author-sign" style={{ fontWeight: 600, color: isFromAdmin ? '#92400E' : '#334155' }}>
+                        {senderLabel}
+                      </span>
+                      {item.is_mine && (
+                        <button
+                          type="button"
+                          className="notice-del-btn"
+                          onClick={() => handleDeleteNotice(item.id)}
+                          title="Delete this notice"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <polyline points="3 6 5 6 21 6" />
+                            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                          </svg>
+                          <span>Delete</span>
+                        </button>
+                      )}
+                    </div>
+                  </article>
+                );
+              })}
             </div>
           )}
         </section>

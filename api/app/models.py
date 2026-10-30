@@ -371,3 +371,32 @@ class ExamUpdate(BaseModel):
     results: Optional[list[ExamStudentResult]] = None
 
 
+
+
+# ==============================================================================
+# 10. NOTICE BOARD MODELS (schema.sql Table 12)
+# ==============================================================================
+class TeacherNoticeCreate(BaseModel):
+    title: str = Field(..., min_length=1, description="Notice headline or subject")
+    body: str = Field(..., min_length=1, description="Notice detailed message text")
+    batch_ids: list[str] = Field(..., min_length=1, description="List of assigned batch UUIDs")
+
+class AdminNoticeCreate(BaseModel):
+    title: str = Field(..., min_length=1, description="Notice headline or subject")
+    body: str = Field(..., min_length=1, description="Notice detailed message text")
+    target_audience: Literal["STUDENTS_ONLY", "TEACHERS_ONLY", "ALL"] = Field(
+        ..., description="Institute-wide target audience"
+    )
+
+class NoticeResponse(BaseModel):
+    id: str
+    title: str
+    body: str
+    target_audience: str
+    batch_ids: list[str] = []
+    batch_names: list[str] = []
+    sender_name: str
+    sender_role: str
+    sender_avatar: Optional[str] = None
+    created_at: datetime
+    is_mine: bool = False

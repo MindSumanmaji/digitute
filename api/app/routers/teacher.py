@@ -13,7 +13,8 @@ from app.models import (
     SyllabusSaveRequest,
     SyllabusToggleChapterRequest,
     ExamCreate,
-    ExamUpdate
+    ExamUpdate,
+    TeacherNoticeCreate
 )
 from datetime import date, datetime, timezone
 from typing import Any, Optional
@@ -1789,5 +1790,172 @@ def delete_teacher_exam(
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
+# ==============================================================================
+# 11. NOTICE BOARD ENDPOINTS (schema.sql Table 12)
+# ==============================================================================
+def get_teacher_assigned_batch_ids(supabase, teacher_id: str, teacher_name: str) -> set[str]:
+    assigned = set()
+    t_name_lower = (teacher_name or "").strip().lower()
+
+    # 1. Batches where this teacher is assigned in subjects
+    batches_res = supabase.table("batches").select("id, subjects").eq("is_active", True).execute()
+    for b in (batches_res.data or []):
+        for s in (b.get("subjects") or []):
+            s_t_id = s.get("teacher_id")
+            s_t_name = (s.get("teacher") or "").strip().lower()
+            if s_t_id == teacher_id or (s_t_name and s_t_name == t_name_lower):
+                assigned.add(b["id"])
+                break
+
+    # 2. Batches where this teacher has recurring routines
+    routines_res = supabase.table("class_routines").select("batch_id").eq("teacher_id", teacher_id).eq("is_active", True).execute()
+    for r in (routines_res.data or []):
+        if r.get("batch_id"):
+            assigned.add(r["batch_id"])
+
+    return assigned
+
+@router.post("/notices", summary="Publish Notice to Assigned Batches")
+def create_teacher_notice(
+    data: TeacherNoticeCreate,
+    current_user: dict = Depends(get_current_user)
+):
+    try:
+        supabase = get_supabase_client()
+        teacher_id = current_user.get("id")
+        teacher_name = current_user.get("full_name", "")
+        role = current_user.get("role")
+
+        title = data.title.strip()
+        body = data.body.strip()
+        batch_ids = data.batch_ids
+
+        if not title:
+            raise HTTPException(status_code=400, detail="Notice title cannot be empty.")
+        if not body:
+            raise HTTPException(status_code=400, detail="Notice body cannot be empty.")
+        if not batch_ids:
+            raise HTTPException(status_code=400, detail="At least one target batch must be selected.")
+
+        # Backend Authorization: Enforce that teacher can ONLY send to their assigned batches
+        if role != "ADMIN":
+            assigned_ids = get_teacher_assigned_batch_ids(supabase, teacher_id, teacher_name)
+            unauthorized_batches = [b for b in batch_ids if b not in assigned_ids]
+            if unauthorized_batches:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"Authorization failed: You are not assigned to batch(es): {unauthorized_batches}. You can only publish notices to your own assigned batches."
+                )
+
+        payload = {
+            "title": title,
+            "body": body,
+            "created_by": teacher_id,
+            "target_audience": "BATCH",
+            "batch_ids": batch_ids,
+            "is_active": True
+        }
+
+        res = supabase.table("notices").insert(payload).execute()
+        if not res.data:
+            raise HTTPException(status_code=500, detail="Failed to save notice to database.")
+
+        new_notice = res.data[0]
+
+        # Enrich with batch names
+        batches_res = supabase.table("batches").select("id, name").in_("id", batch_ids).execute()
+        batch_map = {b["id"]: b["name"] for b in (batches_res.data or [])}
+        new_notice["batch_names"] = [batch_map.get(b_id, "Batch") for b_id in batch_ids]
+        new_notice["sender_name"] = teacher_name
+        new_notice["sender_role"] = role
+        new_notice["is_mine"] = True
+
+        return new_notice
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/notices", summary="List Notices for Teacher Board")
+def list_teacher_notices(current_user: dict = Depends(get_current_user)):
+    try:
+        supabase = get_supabase_client()
+        teacher_id = current_user.get("id")
+
+        # Fetch active notices with creator profile
+        res = supabase.table("notices").select(
+            "*, users(id, full_name, role, avatar_url)"
+        ).eq("is_active", True).order("created_at", desc=True).execute()
+
+        notices = res.data or []
+
+        # Batches map for name lookup
+        b_res = supabase.table("batches").select("id, name").execute()
+        batch_map = {b["id"]: b["name"] for b in (b_res.data or [])}
+
+        # Teacher sees:
+        # 1. All teacher-published notices (target_audience == 'BATCH')
+        # 2. Admin-published notices intended for teachers (target_audience IN ('TEACHERS_ONLY', 'ALL'))
+        filtered = []
+        for n in notices:
+            aud = n.get("target_audience")
+            u = n.get("users") or {}
+            u_role = u.get("role") or ""
+
+            # Only show if teacher notice OR admin notice for teachers
+            if aud == "BATCH" or aud in ("TEACHERS_ONLY", "ALL"):
+                b_ids = n.get("batch_ids") or []
+                filtered.append({
+                    "id": n.get("id"),
+                    "title": n.get("title"),
+                    "body": n.get("body"),
+                    "target_audience": aud,
+                    "batch_ids": b_ids,
+                    "batch_names": [batch_map.get(bid, "Batch") for bid in b_ids if bid in batch_map],
+                    "sender_id": n.get("created_by"),
+                    "sender_name": u.get("full_name") or ("Admin" if u_role == "ADMIN" else "Teacher"),
+                    "sender_role": u_role or ("ADMIN" if aud != "BATCH" else "TEACHER"),
+                    "sender_avatar": u.get("avatar_url"),
+                    "created_at": n.get("created_at"),
+                    "is_mine": (str(n.get("created_by")) == str(teacher_id))
+                })
+
+        return filtered
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/notices/{notice_id}", summary="Delete Teacher's Own Notice")
+def delete_teacher_notice(notice_id: str, current_user: dict = Depends(get_current_user)):
+    try:
+        supabase = get_supabase_client()
+        teacher_id = current_user.get("id")
+        role = current_user.get("role")
+
+        existing = supabase.table("notices").select("*").eq("id", notice_id).execute()
+        if not existing.data:
+            raise HTTPException(status_code=404, detail="Notice not found.")
+
+        n = existing.data[0]
+        # Only creator or Admin can delete
+        if role != "ADMIN" and str(n.get("created_by")) != str(teacher_id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only delete notices that you created."
+            )
+
+        # Soft delete
+        supabase.table("notices").update({"is_active": False}).eq("id", notice_id).execute()
+        return {"message": "Notice deleted successfully."}
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 
