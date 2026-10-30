@@ -1,4 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
+import { apiRequest } from '../../api';
+import ChangeProfilePictureModal from './ChangeProfilePictureModal';
 
 export function Settings({ onNavigate, onBackToLanding, user }) {
   // ── Teacher Profile Data ──
@@ -6,10 +8,9 @@ export function Settings({ onNavigate, onBackToLanding, user }) {
     if (user && user.full_name) {
       return {
         name: user.full_name,
-        username: user.email ? `@${user.email.split('@')[0]}` : '@sudipta',
-        phone: user.phone || '+91 98765 43210',
-        email: user.email || 'sudipta.teacher@digitute.edu',
-        avatarUrl: user.avatar_url || ''
+        phone: user.phone || '9734354179',
+        email: user.email || 'rd@gmail.com',
+        avatarUrl: user.avatar_url || '/teacher-sudipta.png'
       };
     }
     try {
@@ -18,40 +19,40 @@ export function Settings({ onNavigate, onBackToLanding, user }) {
         const u = JSON.parse(userStr);
         if (u.role === 'TEACHER' || u.full_name) {
           return {
-            name: u.full_name || 'Sudipta Sir',
-            username: u.email ? `@${u.email.split('@')[0]}` : '@sudipta',
-            phone: u.phone || '+91 98765 43210',
-            email: u.email || 'sudipta.teacher@digitute.edu',
-            avatarUrl: u.avatar_url || ''
+            name: u.full_name || 'Sudipta Mondal',
+            phone: u.phone || '9734354179',
+            email: u.email || 'rd@gmail.com',
+            avatarUrl: u.avatar_url || '/teacher-sudipta.png'
           };
         }
       }
       const saved = localStorage.getItem('digitute_teacher_profile');
       if (saved) {
         const parsed = JSON.parse(saved);
-        // Reset avatarUrl to teacher-sudipta.png as requested by user
-        parsed.avatarUrl = '/teacher-sudipta.png';
-        localStorage.setItem('digitute_teacher_profile', JSON.stringify(parsed));
-        return parsed;
+        return {
+          name: parsed.name || 'Sudipta Mondal',
+          phone: parsed.phone || '9734354179',
+          email: parsed.email || 'rd@gmail.com',
+          avatarUrl: parsed.avatarUrl || '/teacher-sudipta.png'
+        };
       }
     } catch { /* ignore */ }
     return {
       name: 'Sudipta Mondal',
-      username: '@sudipta',
-      phone: '9734417711',
-      email: 'Sudipta@digi.com',
+      phone: '9734354179',
+      email: 'rd@gmail.com',
       avatarUrl: '/teacher-sudipta.png'
     };
   };
 
   const [teacherProfile, setTeacherProfile] = useState(getInitialTeacherProfile);
 
+  // Sync profile when user prop changes
   useEffect(() => {
     if (user) {
       setTeacherProfile(prev => ({
         ...prev,
         name: user.full_name || prev.name,
-        username: user.email ? `@${user.email.split('@')[0]}` : prev.username,
         phone: user.phone || prev.phone,
         email: user.email || prev.email,
         avatarUrl: user.avatar_url || prev.avatarUrl
@@ -59,20 +60,61 @@ export function Settings({ onNavigate, onBackToLanding, user }) {
     }
   }, [user]);
 
-  // Ensure /teacher-sudipta.png is synced on mount
+  // Fetch real-time profile from database on mount & listen to profile update events
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem('digitute_teacher_profile');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed.avatarUrl !== '/teacher-sudipta.png') {
-          parsed.avatarUrl = '/teacher-sudipta.png';
-          localStorage.setItem('digitute_teacher_profile', JSON.stringify(parsed));
-          setTeacherProfile(parsed);
-          window.dispatchEvent(new Event('digitute-profile-updated'));
+    let mounted = true;
+    const fetchLatestProfile = async () => {
+      try {
+        const res = await apiRequest('/api/teacher/profile');
+        if (res && mounted) {
+          setTeacherProfile(prev => {
+            const updated = {
+              ...prev,
+              name: res.full_name || prev.name,
+              email: res.email || prev.email,
+              phone: res.phone || prev.phone,
+              avatarUrl: res.avatar_url !== undefined && res.avatar_url !== null ? res.avatar_url : prev.avatarUrl
+            };
+            try {
+              localStorage.setItem('digitute_teacher_profile', JSON.stringify(updated));
+              const userStr = localStorage.getItem('digitute_user');
+              if (userStr) {
+                const u = JSON.parse(userStr);
+                if (res.email) u.email = res.email;
+                if (res.phone) u.phone = res.phone;
+                if (res.avatar_url !== undefined) u.avatar_url = res.avatar_url;
+                if (res.full_name) u.full_name = res.full_name;
+                localStorage.setItem('digitute_user', JSON.stringify(u));
+              }
+            } catch { /* ignore */ }
+            return updated;
+          });
         }
+      } catch (err) {
+        console.warn('Could not fetch teacher profile from API:', err);
       }
-    } catch { /* ignore */ }
+    };
+
+    fetchLatestProfile();
+
+    const handleProfileUpdate = () => {
+      try {
+        const saved = localStorage.getItem('digitute_teacher_profile');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          setTeacherProfile(prev => ({ ...prev, ...parsed }));
+        }
+      } catch { /* ignore */ }
+    };
+
+    window.addEventListener('digitute-profile-updated', handleProfileUpdate);
+    window.addEventListener('storage', handleProfileUpdate);
+
+    return () => {
+      mounted = false;
+      window.removeEventListener('digitute-profile-updated', handleProfileUpdate);
+      window.removeEventListener('storage', handleProfileUpdate);
+    };
   }, []);
 
   const [pushEnabled, setPushEnabled] = useState(() => {
@@ -81,14 +123,14 @@ export function Settings({ onNavigate, onBackToLanding, user }) {
   });
 
   // ── Modals State ──
-  // null | 'changePhoto' | 'changeUsername' | 'changePassword' | 'privacy' | 'terms' | 'logoutConfirm'
+  // null | 'changePhoto' | 'changeEmail' | 'changeMobile' | 'changePassword' | 'privacy' | 'terms'
   const [activeModal, setActiveModal] = useState(null);
 
   // ── Toast Notification ──
   const [toast, setToast] = useState(null);
   const showToast = (msg) => {
     setToast(msg);
-    setTimeout(() => setToast(null), 3000);
+    setTimeout(() => setToast(null), 3200);
   };
 
   const updateProfile = (fields) => {
@@ -96,6 +138,15 @@ export function Settings({ onNavigate, onBackToLanding, user }) {
     setTeacherProfile(updated);
     try {
       localStorage.setItem('digitute_teacher_profile', JSON.stringify(updated));
+      const rawUser = localStorage.getItem('digitute_user');
+      if (rawUser) {
+        const u = JSON.parse(rawUser);
+        if (fields.email) u.email = fields.email;
+        if (fields.phone) u.phone = fields.phone;
+        if (fields.avatarUrl !== undefined) u.avatar_url = fields.avatarUrl;
+        if (fields.name) u.full_name = fields.name;
+        localStorage.setItem('digitute_user', JSON.stringify(u));
+      }
       window.dispatchEvent(new Event('digitute-profile-updated'));
     } catch { /* ignore */ }
   };
@@ -113,13 +164,13 @@ export function Settings({ onNavigate, onBackToLanding, user }) {
     <div className="dt-refined-settings-page">
       <div className="dt-refined-settings-container">
 
-        {/* ── Top Header (No back button) ── */}
+        {/* ── Top Header ── */}
         <div className="dt-settings-top-bar">
           <h1 className="dt-settings-header-title">Settings</h1>
         </div>
 
         {/* ════════════════════════════════════════════════════════════════════
-           1. ACCOUNT (Change Photo, Username, Password)
+           1. ACCOUNT (Change Photo, Change Email, Change Mobile, Change Password)
            ════════════════════════════════════════════════════════════════════ */}
         <div className="dt-settings-group">
           <span className="dt-settings-group-label">ACCOUNT</span>
@@ -147,22 +198,44 @@ export function Settings({ onNavigate, onBackToLanding, user }) {
                 </svg>
               </div>
 
-              {/* Change Username */}
+              {/* Change Email (Replaces Change Username) */}
               <div
                 className="dt-refined-menu-item"
-                onClick={() => setActiveModal('changeUsername')}
+                onClick={() => setActiveModal('changeEmail')}
                 role="button"
                 tabIndex={0}
-                onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && setActiveModal('changeUsername')}
+                onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && setActiveModal('changeEmail')}
               >
                 <div className="dt-menu-item-left">
-                  <div className="dt-menu-icon-box indigo">
+                  <div className="dt-menu-icon-box red">
                     <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                      <circle cx="12" cy="7" r="4" />
+                      <rect x="2" y="4" width="20" height="16" rx="2" />
+                      <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
                     </svg>
                   </div>
-                  <span className="dt-menu-item-text">Change Username</span>
+                  <span className="dt-menu-item-text">Change Email</span>
+                </div>
+                <svg className="dt-menu-arrow" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="9 18 15 12 9 6" />
+                </svg>
+              </div>
+
+              {/* Change Mobile Number (Below Change Email) */}
+              <div
+                className="dt-refined-menu-item"
+                onClick={() => setActiveModal('changeMobile')}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && setActiveModal('changeMobile')}
+              >
+                <div className="dt-menu-item-left">
+                  <div className="dt-menu-icon-box green">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="5" y="2" width="14" height="20" rx="2" ry="2" />
+                      <line x1="12" y1="18" x2="12.01" y2="18" />
+                    </svg>
+                  </div>
+                  <span className="dt-menu-item-text">Change Mobile Number</span>
                 </div>
                 <svg className="dt-menu-arrow" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                   <polyline points="9 18 15 12 9 6" />
@@ -195,7 +268,7 @@ export function Settings({ onNavigate, onBackToLanding, user }) {
         </div>
 
         {/* ════════════════════════════════════════════════════════════════════
-           2. PREFERENCES (Push Notifications Only, Theme removed)
+           2. PREFERENCES (Push Notifications Only)
            ════════════════════════════════════════════════════════════════════ */}
         <div className="dt-settings-group">
           <span className="dt-settings-group-label">PREFERENCES</span>
@@ -283,35 +356,55 @@ export function Settings({ onNavigate, onBackToLanding, user }) {
           </div>
         </div>
 
-
-
       </div>
 
       {/* ── MODALS ── */}
-      {activeModal === 'changePhoto' && (
-        <ChangePhotoModal
-          currentAvatar={teacherProfile.avatarUrl}
+      {/* 1. Change Profile Picture Modal (Exact Student Twin Workflow with Supabase Storage) */}
+      <ChangeProfilePictureModal
+        isOpen={activeModal === 'changePhoto'}
+        onClose={() => setActiveModal(null)}
+        currentPhoto={teacherProfile.avatarUrl}
+        userName={teacherProfile.name}
+        onUploadSuccess={(url) => {
+          updateProfile({ avatarUrl: url });
+          showToast('Profile picture updated successfully!');
+        }}
+        onRemoveSuccess={() => {
+          updateProfile({ avatarUrl: '' });
+          showToast('Profile picture removed successfully');
+        }}
+        showToast={showToast}
+      />
+
+      {/* 2. Change Email Address Modal (Matching Sample Image 1) */}
+      {activeModal === 'changeEmail' && (
+        <ChangeEmailModal
+          currentEmail={teacherProfile.email}
           onClose={() => setActiveModal(null)}
-          onSave={(url) => {
-            updateProfile({ avatarUrl: url });
+          onSave={(newEmail) => {
+            updateProfile({ email: newEmail });
             setActiveModal(null);
-            showToast('Profile photo updated');
+            showToast('Email address updated successfully!');
           }}
+          showToast={showToast}
         />
       )}
 
-      {activeModal === 'changeUsername' && (
-        <ChangeUsernameModal
-          currentUsername={teacherProfile.username}
+      {/* 3. Change Mobile Number Modal (Matching Sample Image 2) */}
+      {activeModal === 'changeMobile' && (
+        <ChangeMobileModal
+          currentPhone={teacherProfile.phone}
           onClose={() => setActiveModal(null)}
-          onSave={(newUsername) => {
-            updateProfile({ username: newUsername });
+          onSave={(newPhone) => {
+            updateProfile({ phone: newPhone });
             setActiveModal(null);
-            showToast('Username updated');
+            showToast('Mobile number updated successfully!');
           }}
+          showToast={showToast}
         />
       )}
 
+      {/* 4. Change Password Modal */}
       {activeModal === 'changePassword' && (
         <ChangePasswordModal
           onClose={() => setActiveModal(null)}
@@ -322,20 +415,22 @@ export function Settings({ onNavigate, onBackToLanding, user }) {
         />
       )}
 
+      {/* 5. Privacy Policy Modal */}
       {activeModal === 'privacy' && (
         <PrivacyPolicyModal onClose={() => setActiveModal(null)} />
       )}
 
+      {/* 6. Terms Modal */}
       {activeModal === 'terms' && (
         <TermsModal onClose={() => setActiveModal(null)} />
       )}
 
-      
-
-
       {/* Toast Feedback */}
       {toast && (
-        <div className="dt-toast-notification">
+        <div className="dt-refined-toast">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#10B981" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
           <span>{toast}</span>
         </div>
       )}
@@ -343,511 +438,108 @@ export function Settings({ onNavigate, onBackToLanding, user }) {
   );
 }
 
-function ChangePhotoModal({ currentAvatar, onClose, onSave }) {
-  const [step, setStep] = useState('select'); // 'select' | 'crop' | 'preview'
-  const [rawImage, setRawImage] = useState(null);
-  const [croppedDataUrl, setCroppedDataUrl] = useState(null);
-  const [imageSize, setImageSize] = useState({ width: 0, height: 0 });
-  const [baseScale, setBaseScale] = useState(1);
-  const [zoom, setZoom] = useState(1);
-  const [pan, setPan] = useState({ x: 0, y: 0 });
-  const [isDragging, setIsDragging] = useState(false);
-
-  const fileInputRef = useRef(null);
-  const containerRef = useRef(null);
-  const imgRef = useRef(null);
-  const dragStart = useRef({ x: 0, y: 0, pan: { x: 0, y: 0 } });
-  const touchState = useRef({ startX: 0, startY: 0, initialPan: { x: 0, y: 0 }, initialDist: 0, initialZoom: 1 });
-
-  // Fixed container dimensions & crop circle diameter
-  const C_WIDTH = 320;
-  const C_HEIGHT = 320;
-  const C_DIAMETER = 246; // circle diameter inside container
-
-  const clampPan = (px, py, curZoom, curBaseScale = baseScale, curImgSize = imageSize) => {
-    if (!curImgSize.width || !curImgSize.height) return { x: 0, y: 0 };
-    const curScale = curBaseScale * curZoom;
-    const dw = curImgSize.width * curScale;
-    const dh = curImgSize.height * curScale;
-    const maxPx = Math.max(0, (dw - C_DIAMETER) / 2);
-    const maxPy = Math.max(0, (dh - C_DIAMETER) / 2);
-    return {
-      x: Math.max(-maxPx, Math.min(maxPx, px)),
-      y: Math.max(-maxPy, Math.min(maxPy, py))
-    };
-  };
-
-  const handleFileChange = (e) => {
-    const file = e.target.files && e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      setRawImage(ev.target.result);
-      setStep('crop');
-      setZoom(1);
-      setPan({ x: 0, y: 0 });
-    };
-    reader.readAsDataURL(file);
-    e.target.value = '';
-  };
-
-  const handleImageLoaded = (e) => {
-    const img = e.target;
-    const nw = img.naturalWidth;
-    const nh = img.naturalHeight;
-    setImageSize({ width: nw, height: nh });
-    const bScale = Math.max(C_DIAMETER / nw, C_DIAMETER / nh);
-    setBaseScale(bScale);
-    setZoom(1);
-    setPan({ x: 0, y: 0 });
-  };
-
-  // Immediate check for cached image dimensions
-  useEffect(() => {
-    if (imgRef.current && imgRef.current.complete && imgRef.current.naturalWidth && !imageSize.width) {
-      const nw = imgRef.current.naturalWidth;
-      const nh = imgRef.current.naturalHeight;
-      setImageSize({ width: nw, height: nh });
-      const bScale = Math.max(C_DIAMETER / nw, C_DIAMETER / nh);
-      setBaseScale(bScale);
-      setZoom(1);
-      setPan({ x: 0, y: 0 });
-    }
-  }, [rawImage, step, imageSize.width]);
-
-  // Zoom handlers
-  const handleZoomChange = (newZoom) => {
-    const clampedZoom = Math.max(1, Math.min(3, Number(newZoom)));
-    setZoom(clampedZoom);
-    setPan(prev => clampPan(prev.x, prev.y, clampedZoom));
-  };
-
-  const handleZoomDelta = (delta) => {
-    handleZoomChange(+(zoom + delta).toFixed(2));
-  };
-
-  // Mouse drag handlers
-  const handleMouseDown = (e) => {
-    e.preventDefault();
-    setIsDragging(true);
-    dragStart.current = {
-      x: e.clientX,
-      y: e.clientY,
-      pan: { ...pan }
-    };
-  };
-
-  useEffect(() => {
-    if (!isDragging) return;
-    const onMouseMove = (e) => {
-      const dx = e.clientX - dragStart.current.x;
-      const dy = e.clientY - dragStart.current.y;
-      const next = clampPan(dragStart.current.pan.x + dx, dragStart.current.pan.y + dy, zoom);
-      setPan(next);
-    };
-    const onMouseUp = () => {
-      setIsDragging(false);
-    };
-    window.addEventListener('mousemove', onMouseMove);
-    window.addEventListener('mouseup', onMouseUp);
-    return () => {
-      window.removeEventListener('mousemove', onMouseMove);
-      window.removeEventListener('mouseup', onMouseUp);
-    };
-  }, [isDragging, zoom, baseScale, imageSize]);
-
-  // Touch drag and pinch handlers
-  const handleTouchStart = (e) => {
-    if (e.touches.length === 1) {
-      touchState.current.startX = e.touches[0].clientX;
-      touchState.current.startY = e.touches[0].clientY;
-      touchState.current.initialPan = { ...pan };
-      touchState.current.initialDist = 0;
-    } else if (e.touches.length === 2) {
-      const dist = Math.hypot(
-        e.touches[0].clientX - e.touches[1].clientX,
-        e.touches[0].clientY - e.touches[1].clientY
-      );
-      touchState.current.initialDist = dist;
-      touchState.current.initialZoom = zoom;
-    }
-  };
-
-  const handleTouchMove = (e) => {
-    if (e.touches.length === 1 && touchState.current.initialDist === 0) {
-      const dx = e.touches[0].clientX - touchState.current.startX;
-      const dy = e.touches[0].clientY - touchState.current.startY;
-      const next = clampPan(touchState.current.initialPan.x + dx, touchState.current.initialPan.y + dy, zoom);
-      setPan(next);
-    } else if (e.touches.length === 2 && touchState.current.initialDist > 0) {
-      const curDist = Math.hypot(
-        e.touches[0].clientX - e.touches[1].clientX,
-        e.touches[0].clientY - e.touches[1].clientY
-      );
-      const factor = curDist / touchState.current.initialDist;
-      const nz = Math.max(1, Math.min(3, +(touchState.current.initialZoom * factor).toFixed(2)));
-      setZoom(nz);
-      setPan(p => clampPan(p.x, p.y, nz));
-    }
-  };
-
-  const handleTouchEnd = () => {
-    touchState.current.initialDist = 0;
-  };
-
-  // Wheel zoom handler with passive: false
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el || step !== 'crop') return;
-    const onWheel = (e) => {
-      e.preventDefault();
-      const delta = e.deltaY < 0 ? 0.1 : -0.1;
-      setZoom(prev => {
-        const nz = Math.max(1, Math.min(3, +(prev + delta).toFixed(2)));
-        setPan(p => clampPan(p.x, p.y, nz));
-        return nz;
-      });
-    };
-    el.addEventListener('wheel', onWheel, { passive: false });
-    return () => el.removeEventListener('wheel', onWheel);
-  }, [step, baseScale, imageSize]);
-
-  // Crop & generate preview
-  const handleCropAndPreview = () => {
-    const img = imgRef.current;
-    if (!img || !imageSize.width || !imageSize.height) return;
-
-    const curScale = baseScale * zoom;
-    const dw = imageSize.width * curScale;
-    const dh = imageSize.height * curScale;
-
-    const clamped = clampPan(pan.x, pan.y, zoom);
-
-    // Calculate source rect
-    const sxInDisplayed = (dw - C_DIAMETER) / 2 - clamped.x;
-    const syInDisplayed = (dh - C_DIAMETER) / 2 - clamped.y;
-
-    const sourceX = sxInDisplayed / curScale;
-    const sourceY = syInDisplayed / curScale;
-    const sourceSize = C_DIAMETER / curScale;
-
-    const canvas = document.createElement('canvas');
-    const outputSize = 512;
-    canvas.width = outputSize;
-    canvas.height = outputSize;
-    const ctx = canvas.getContext('2d');
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
-
-    ctx.drawImage(
-      img,
-      Math.max(0, sourceX),
-      Math.max(0, sourceY),
-      Math.min(imageSize.width - sourceX, sourceSize),
-      Math.min(imageSize.height - sourceY, sourceSize),
-      0,
-      0,
-      outputSize,
-      outputSize
-    );
-
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
-    setCroppedDataUrl(dataUrl);
-    setStep('preview');
-  };
-
-  // Upload cropped image
-  const handleUpload = () => {
-    if (croppedDataUrl) {
-      onSave(croppedDataUrl);
-    }
-  };
-
-  // Calculations for displayed image in crop box
-  const curScale = baseScale * zoom;
-  const dw = imageSize.width ? imageSize.width * curScale : 0;
-  const dh = imageSize.height ? imageSize.height * curScale : 0;
-  const imgLeft = (C_WIDTH - dw) / 2 + pan.x;
-  const imgTop = (C_HEIGHT - dh) / 2 + pan.y;
-
-  // Step 1: Crop Screen (Matching Sample Image 1)
-  if (step === 'crop') {
-    return (
-      <div className="dt-crop-overlay-backdrop" onClick={onClose}>
-        <div className="dt-crop-modal-card" onClick={(e) => e.stopPropagation()}>
-          {/* Header with back arrow */}
-          <div className="dt-crop-header">
-            <button
-              type="button"
-              className="dt-crop-icon-btn"
-              onClick={() => setStep('select')}
-              aria-label="Back"
-            >
-              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#1E293B" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="19" y1="12" x2="5" y2="12" />
-                <polyline points="12 19 5 12 12 5" />
-              </svg>
-            </button>
-            <h2 className="dt-crop-title">Crop Photo</h2>
-            <div style={{ width: 42 }} />
-          </div>
-
-          <p className="dt-crop-subtitle">Drag to reposition • Pinch to zoom</p>
-
-          {/* Viewport container */}
-          <div
-            className="dt-crop-viewport"
-            ref={containerRef}
-            onMouseDown={handleMouseDown}
-            onTouchStart={handleTouchStart}
-            onTouchMove={handleTouchMove}
-            onTouchEnd={handleTouchEnd}
-            style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
-          >
-            {rawImage && (
-              <img
-                ref={imgRef}
-                src={rawImage}
-                alt="Source"
-                className="dt-crop-image"
-                onLoad={handleImageLoaded}
-                draggable={false}
-                style={{
-                  width: dw ? `${dw}px` : 'auto',
-                  height: dh ? `${dh}px` : 'auto',
-                  left: `${imgLeft}px`,
-                  top: `${imgTop}px`
-                }}
-              />
-            )}
-
-            {/* Circular crop guide & shadow mask overlay */}
-            <div className="dt-crop-circle-guide" />
-          </div>
-
-          {/* Zoom slider row */}
-          <div className="dt-crop-zoom-row">
-            <button
-              type="button"
-              className="dt-crop-zoom-btn"
-              onClick={() => handleZoomDelta(-0.15)}
-              aria-label="Zoom out"
-            >
-              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#64748B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="11" cy="11" r="8" />
-                <line x1="21" y1="21" x2="16.65" y2="16.65" />
-                <line x1="8" y1="11" x2="14" y2="11" />
-              </svg>
-            </button>
-
-            <input
-              type="range"
-              min="1"
-              max="3"
-              step="0.01"
-              value={zoom}
-              onChange={(e) => handleZoomChange(e.target.value)}
-              className="dt-crop-zoom-slider"
-              aria-label="Zoom control"
-            />
-
-            <button
-              type="button"
-              className="dt-crop-zoom-btn"
-              onClick={() => handleZoomDelta(0.15)}
-              aria-label="Zoom in"
-            >
-              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#64748B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="11" cy="11" r="8" />
-                <line x1="21" y1="21" x2="16.65" y2="16.65" />
-                <line x1="11" y1="8" x2="11" y2="14" />
-                <line x1="8" y1="11" x2="14" y2="11" />
-              </svg>
-            </button>
-          </div>
-
-          {/* Crop & Preview button */}
-          <button
-            type="button"
-            className="dt-crop-preview-action-btn"
-            onClick={handleCropAndPreview}
-          >
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M6 2v14a2 2 0 0 0 2 2h14" />
-              <path d="M18 22V8a2 2 0 0 0-2-2H2" />
-            </svg>
-            Crop & Preview
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // Step 2: Preview Screen (Matching Sample Image 2)
-  if (step === 'preview') {
-    return (
-      <div className="dt-crop-overlay-backdrop" onClick={onClose}>
-        <div className="dt-crop-modal-card" onClick={(e) => e.stopPropagation()}>
-          {/* Header */}
-          <h2 className="dt-preview-title">Preview</h2>
-
-          {/* Cropped circular avatar */}
-          <div className="dt-preview-avatar-wrap">
-            <img
-              src={croppedDataUrl}
-              alt="Cropped profile preview"
-              className="dt-preview-avatar-img"
-            />
-          </div>
-
-          <p className="dt-preview-subtitle">This is how your photo will look</p>
-
-          {/* Action buttons row */}
-          <div className="dt-preview-btn-row">
-            <button
-              type="button"
-              className="dt-preview-recrop-btn"
-              onClick={() => setStep('crop')}
-            >
-              Re-crop
-            </button>
-
-            <button
-              type="button"
-              className="dt-preview-upload-btn"
-              onClick={handleUpload}
-            >
-              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                <polyline points="17 8 12 3 7 8" />
-                <line x1="12" y1="3" x2="12" y2="15" />
-              </svg>
-              Upload
-            </button>
-          </div>
-
-          {/* Cancel link button */}
-          <button
-            type="button"
-            className="dt-preview-cancel-btn"
-            onClick={onClose}
-          >
-            Cancel
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // Step 0: Initial select screen
-  return (
-    <div className="dt-crop-overlay-backdrop" onClick={onClose}>
-      <div className="dt-crop-modal-card" onClick={(e) => e.stopPropagation()}>
-        {/* Header */}
-        <div className="dt-crop-header" style={{ marginBottom: 12 }}>
-          <div style={{ width: 32 }} />
-          <h2 className="dt-crop-title" style={{ fontSize: 19 }}>Change Profile Picture</h2>
-          <button
-            type="button"
-            className="dt-modal-close-btn"
-            onClick={onClose}
-            aria-label="Close"
-          >
-            ✕
-          </button>
-        </div>
-
-        {/* Current Avatar in Center */}
-        <div className="dt-preview-avatar-wrap" style={{ width: 160, height: 160, margin: '12px auto 12px' }}>
-          {currentAvatar ? (
-            <img src={currentAvatar} alt="Current profile" className="dt-preview-avatar-img" />
-          ) : (
-            <div className="dt-photo-current-placeholder">
-              <svg viewBox="0 0 24 24" width="44" height="44" fill="none" stroke="#CBD5E1" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                <circle cx="12" cy="7" r="4" />
-              </svg>
-            </div>
-          )}
-        </div>
-
-        <p className="dt-preview-subtitle" style={{ margin: '0 0 22px' }}>Current Profile Photo</p>
-
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          className="dt-photo-file-input"
-          onChange={handleFileChange}
-        />
-
-        <button
-          type="button"
-          className="dt-photo-upload-btn"
-          onClick={() => fileInputRef.current && fileInputRef.current.click()}
-          style={{ marginBottom: 12 }}
-        >
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-            <polyline points="17 8 12 3 7 8" />
-            <line x1="12" y1="3" x2="12" y2="15" />
-          </svg>
-          Upload Photo
-        </button>
-
-        <button
-          type="button"
-          className="dt-preview-cancel-btn"
-          onClick={onClose}
-        >
-          Cancel
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function ChangeUsernameModal({ currentUsername, onClose, onSave }) {
-  const [uname, setUname] = useState('');
+// ==============================================================================
+// CHANGE EMAIL ADDRESS MODAL (Exact match of Sample Image)
+// ==============================================================================
+function ChangeEmailModal({ currentEmail, onClose, onSave, showToast }) {
+  const [newEmail, setNewEmail] = useState('');
   const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!uname.trim()) {
-      setError('Username cannot be empty');
+    const trimmed = (newEmail || '').trim().toLowerCase();
+
+    if (!trimmed) {
+      setError('Please enter a valid email address');
       return;
     }
-    const clean = uname.startsWith('@') ? uname : `@${uname.trim()}`;
-    onSave(clean);
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(trimmed)) {
+      setError('Please enter a valid email format');
+      return;
+    }
+
+    const curr = (currentEmail || '').trim().toLowerCase();
+    if (trimmed === curr) {
+      setError('New email is identical to your current email');
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      setError('');
+      const res = await apiRequest('/api/teacher/email', {
+        method: 'PUT',
+        body: JSON.stringify({ email: trimmed })
+      });
+
+      if (res && res.success) {
+        onSave(res.email || trimmed);
+      } else {
+        throw new Error(res?.detail || 'Failed to update email address.');
+      }
+    } catch (err) {
+      const msg = err?.message || 'Failed to update email. Please try again.';
+      setError(msg);
+      if (showToast) showToast(msg);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
-    <div className="dt-modal-overlay" onClick={onClose}>
-      <div className="dt-modal-sheet" onClick={(e) => e.stopPropagation()}>
-        <div className="dt-modal-header">
-          <h3 className="dt-modal-title">Change Username</h3>
-          <button type="button" className="dt-modal-close-btn" onClick={onClose} aria-label="Close">✕</button>
-        </div>
-        <form onSubmit={handleSubmit} className="dt-modal-form">
-          {error && <div className="dt-form-alert error">{error}</div>}
-          <div className="dt-form-group">
-            <label className="dt-form-label">Username Handle</label>
-            <input
-              type="text"
-              className="dt-form-input"
-              value={uname}
+    <div className="sp-dialog-backdrop" onClick={onClose}>
+      <div className="sp-dialog-box" onClick={(e) => e.stopPropagation()}>
+        <h4 className="sp-dialog-title" style={{ fontSize: '20px', fontWeight: '750', color: '#0f172a', marginBottom: '8px' }}>Change Email Address</h4>
+        <p className="sp-dialog-desc" style={{ marginBottom: '22px' }}>
+          Current Email: <strong>{currentEmail || 'Not set'}</strong><br/>
+          Enter your new email address below.
+        </p>
+
+        {error && (
+          <div className="sp-avatar-modal-error-banner" style={{ margin: '0 0 14px 0', fontSize: '0.82rem', color: '#DC2626' }}>
+            <span>⚠️</span> {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit}>
+          <div style={{ marginBottom: '22px' }}>
+            <label style={{ display: 'block', fontSize: '14px', fontWeight: '700', color: '#334155', marginBottom: '8px' }}>
+              New Email Address
+            </label>
+            <input 
+              type="email"
+              className="sp-dialog-input"
+              style={{ marginBottom: '0' }}
+              value={newEmail}
               onChange={(e) => {
-                setUname(e.target.value);
+                setNewEmail(e.target.value);
                 setError('');
               }}
-              placeholder="Enter new username"
+              placeholder="new.email@example.com"
               autoFocus
-              required
+              disabled={isSubmitting}
             />
           </div>
-          <div className="dt-modal-actions">
-            <button type="button" className="dt-btn dt-btn-secondary" onClick={onClose}>Cancel</button>
-            <button type="submit" className="dt-btn dt-btn-primary">Save Username</button>
+
+          <div className="sp-dialog-actions">
+            <button 
+              type="button"
+              className="sp-dialog-cancel-btn" 
+              onClick={onClose}
+              disabled={isSubmitting}
+            >
+              Cancel
+            </button>
+            <button 
+              type="submit"
+              className="sp-dialog-confirm-btn" 
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? 'Updating...' : 'Update Email'}
+            </button>
           </div>
         </form>
       </div>
@@ -855,6 +547,113 @@ function ChangeUsernameModal({ currentUsername, onClose, onSave }) {
   );
 }
 
+// ==============================================================================
+// CHANGE MOBILE NUMBER MODAL (Exact match of Sample Image)
+// ==============================================================================
+function ChangeMobileModal({ currentPhone, onClose, onSave, showToast }) {
+  const [newPhone, setNewPhone] = useState('');
+  const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    const trimmed = (newPhone || '').trim();
+    const digits = trimmed.replace(/[^0-9]/g, '');
+
+    if (digits.length < 10) {
+      setError('Please enter a valid 10-digit mobile number');
+      return;
+    }
+
+    const currentDigits = (currentPhone || '').replace(/[^0-9]/g, '');
+    if (digits === currentDigits) {
+      setError('New mobile number is identical to your current number');
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      setError('');
+      const res = await apiRequest('/api/teacher/phone', {
+        method: 'PUT',
+        body: JSON.stringify({ phone: trimmed })
+      });
+
+      if (res && res.success) {
+        onSave(res.phone || trimmed);
+      } else {
+        throw new Error(res?.detail || 'Failed to update mobile number.');
+      }
+    } catch (err) {
+      const msg = err?.message || 'Failed to update mobile number. Please try again.';
+      setError(msg);
+      if (showToast) showToast(msg);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="sp-dialog-backdrop" onClick={onClose}>
+      <div className="sp-dialog-box" onClick={(e) => e.stopPropagation()}>
+        <h4 className="sp-dialog-title" style={{ fontSize: '20px', fontWeight: '750', color: '#0f172a', marginBottom: '8px' }}>Change Mobile Number</h4>
+        <p className="sp-dialog-desc" style={{ marginBottom: '22px' }}>
+          Current Number: <strong>{currentPhone || 'Not set'}</strong><br/>
+          Enter your new 10-digit mobile number below.
+        </p>
+
+        {error && (
+          <div className="sp-avatar-modal-error-banner" style={{ margin: '0 0 14px 0', fontSize: '0.82rem', color: '#DC2626' }}>
+            <span>⚠️</span> {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit}>
+          <div style={{ marginBottom: '22px' }}>
+            <label style={{ display: 'block', fontSize: '14px', fontWeight: '700', color: '#334155', marginBottom: '8px' }}>
+              New Mobile Number
+            </label>
+            <input 
+              type="tel"
+              className="sp-dialog-input"
+              style={{ marginBottom: '0' }}
+              value={newPhone}
+              onChange={(e) => {
+                setNewPhone(e.target.value);
+                setError('');
+              }}
+              placeholder="e.g. 9830111222"
+              autoFocus
+              disabled={isSubmitting}
+            />
+          </div>
+
+          <div className="sp-dialog-actions">
+            <button 
+              type="button"
+              className="sp-dialog-cancel-btn" 
+              onClick={onClose}
+              disabled={isSubmitting}
+            >
+              Cancel
+            </button>
+            <button 
+              type="submit"
+              className="sp-dialog-confirm-btn" 
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? 'Updating...' : 'Update Number'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ==============================================================================
+// CHANGE PASSWORD MODAL
+// ==============================================================================
 function ChangePasswordModal({ onClose, onSuccess }) {
   const [newPass, setNewPass] = useState('');
   const [confirmPass, setConfirmPass] = useState('');
@@ -916,6 +715,9 @@ function ChangePasswordModal({ onClose, onSuccess }) {
   );
 }
 
+// ==============================================================================
+// PRIVACY POLICY MODAL
+// ==============================================================================
 function PrivacyPolicyModal({ onClose }) {
   return (
     <div className="dt-modal-overlay" onClick={onClose}>
@@ -946,6 +748,9 @@ function PrivacyPolicyModal({ onClose }) {
   );
 }
 
+// ==============================================================================
+// TERMS & CONDITIONS MODAL
+// ==============================================================================
 function TermsModal({ onClose }) {
   return (
     <div className="dt-modal-overlay" onClick={onClose}>
@@ -964,30 +769,6 @@ function TermsModal({ onClose }) {
         </div>
         <div className="dt-modal-actions">
           <button type="button" className="dt-btn dt-btn-primary" onClick={onClose}>I Understand</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function LogoutDialog({ onClose, onConfirm }) {
-  return (
-    <div className="dt-modal-overlay" onClick={onClose}>
-      <div className="dt-modal-sheet dt-modal-sheet-dialog" onClick={(e) => e.stopPropagation()}>
-        <div className="dt-dialog-icon red">
-          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#DC2626" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-            <polyline points="16 17 21 12 16 7" />
-            <line x1="21" y1="12" x2="9" y2="12" />
-          </svg>
-        </div>
-        <div className="dt-dialog-content">
-          <h3 className="dt-dialog-title">Log Out</h3>
-          <p className="dt-dialog-message">Are you sure you want to log out of your DigiTute teacher account?</p>
-        </div>
-        <div className="dt-dialog-actions">
-          <button type="button" className="dt-btn dt-btn-secondary" onClick={onClose}>Cancel</button>
-          <button type="button" className="dt-btn dt-btn-destructive" onClick={onConfirm}>Log Out</button>
         </div>
       </div>
     </div>

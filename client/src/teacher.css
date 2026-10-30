@@ -17063,7 +17063,8 @@
     box-sizing: border-box;
     padding: 20px 14px 96px;
     display: flex;
-    justify-content: center;
+    flex-direction: column;
+    align-items: center;
   }
 
   @media (min-width: 640px) {
@@ -19157,4 +19158,172 @@
   background: #F8FAFC;
   border-color: #94A3B8;
   color: #0F172A;
+}
+/* Added for Teacher Settings Dialogs */
+.dt-menu-icon-box.red {
+  background: #FEF2F2;
+  color: #DC2626;
+}
+
+.dt-menu-icon-box.green {
+  background: #ECFDF5;
+  color: #059669;
+}
+
+/* Exact twin of Student Panel Dialogs (Matching User's Sample Image) */
+.sp-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: 1050;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  animation: spFadeIn 0.15s ease;
+}
+
+.sp-dialog-box {
+  background: #ffffff;
+  border-radius: 22px;
+  padding: 24px;
+  width: 100%;
+  max-width: 420px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+  animation: spScaleIn 0.18s ease;
+  box-sizing: border-box;
+}
+
+.sp-dialog-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 8px 0;
+  line-height: 1.3;
+}
+
+.sp-dialog-desc {
+  font-size: 13px;
+  color: #64748b;
+  margin: 0 0 16px 0;
+  line-height: 1.5;
+}
+
+.sp-dialog-desc strong {
+  color: #0f172a;
+  font-weight: 600;
+}
+
+.sp-dialog-input {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 12px;
+  font-size: 14px;
+  color: #0f172a;
+  outline: none !important;
+  background: #ffffff;
+  box-sizing: border-box;
+  margin-bottom: 20px;
+  transition: border-color 0.15s ease;
+}
+
+.sp-dialog-input:focus {
+  border-color: #2563eb !important;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1) !important;
+  outline: none !important;
+}
+
+.sp-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  align-items: center;
+}
+
+button.sp-dialog-cancel-btn,
+.sp-dialog-cancel-btn {
+  background: #f1f5f9 !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #475569 !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  padding: 8px 16px !important;
+  border-radius: 10px !important;
+  cursor: pointer !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  line-height: normal !important;
+  transition: all 0.15s ease !important;
+}
+
+button.sp-dialog-cancel-btn:hover,
+.sp-dialog-cancel-btn:hover {
+  background: #e2e8f0 !important;
+  color: #1e293b !important;
+}
+
+button.sp-dialog-confirm-btn,
+.sp-dialog-confirm-btn {
+  background: #2563eb !important;
+  border: none !important;
+  color: #ffffff !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  padding: 8px 18px !important;
+  border-radius: 10px !important;
+  cursor: pointer !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25) !important;
+  line-height: normal !important;
+  transition: all 0.15s ease !important;
+}
+
+button.sp-dialog-confirm-btn:hover:not(:disabled),
+.sp-dialog-confirm-btn:hover:not(:disabled) {
+  background: #1d4ed8 !important;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35) !important;
+}
+
+button.sp-dialog-confirm-btn:disabled,
+.sp-dialog-confirm-btn:disabled {
+  opacity: 0.65 !important;
+  cursor: not-allowed !important;
+}
+
+@keyframes spFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes spScaleIn {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* Floating Toast Notification for Teacher Settings */
+.dt-toast-notification,
+.dt-refined-toast {
+  position: fixed !important;
+  bottom: calc(var(--bottom-nav-height, 68px) + 24px) !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  background: #0F172A !important;
+  color: #FFFFFF !important;
+  padding: 10px 20px !important;
+  border-radius: 9999px !important;
+  font-size: 13.5px !important;
+  font-weight: 500 !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.25) !important;
+  z-index: 9999 !important;
+  white-space: nowrap !important;
+  pointer-events: none !important;
+  animation: dt-toast-up 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
 }

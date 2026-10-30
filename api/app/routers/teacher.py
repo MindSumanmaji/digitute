@@ -1959,3 +1959,191 @@ def delete_teacher_notice(notice_id: str, current_user: dict = Depends(get_curre
 
 
 
+
+
+# ==============================================================================
+# TEACHER PROFILE & SETTINGS MANAGEMENT (Avatar, Email, Phone)
+# ==============================================================================
+@router.post("/avatar", summary="Upload & Update Teacher Profile Avatar")
+async def upload_teacher_avatar(
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user)
+):
+    try:
+        supabase = get_supabase_client()
+        teacher_id = current_user.get("id")
+
+        ALLOWED_TYPES = {"image/jpeg", "image/jpg", "image/png", "image/webp"}
+        if file.content_type and file.content_type.lower() not in ALLOWED_TYPES:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Only JPG, JPEG, PNG, or WebP images are allowed."
+            )
+
+        contents = await file.read()
+        if not contents or len(contents) == 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Uploaded image is empty."
+            )
+
+        storage_path = f"avatars/{teacher_id}/avatar.webp"
+        content_type = file.content_type or "image/webp"
+
+        supabase.storage.from_("digitute").upload(
+            path=storage_path,
+            file=contents,
+            file_options={"content-type": content_type, "upsert": "true"}
+        )
+
+        signed_res = supabase.storage.from_("digitute").create_signed_url(storage_path, 86400 * 365)
+        avatar_url = signed_res.get("signedURL") or signed_res.get("signedUrl")
+
+        if not avatar_url:
+            raise HTTPException(status_code=500, detail="Failed to generate secure URL for avatar.")
+
+        db_res = supabase.table("users").update({
+            "avatar_url": avatar_url
+        }).eq("id", teacher_id).execute()
+
+        if not db_res.data:
+            try:
+                supabase.storage.from_("digitute").remove([storage_path])
+            except Exception:
+                pass
+            raise HTTPException(status_code=500, detail="Failed to update teacher profile record.")
+
+        return {
+            "success": True,
+            "avatar_url": avatar_url,
+            "storage_path": storage_path,
+            "message": "Profile picture updated successfully!"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/avatar", summary="Remove Teacher Profile Avatar")
+def remove_teacher_avatar(current_user: dict = Depends(get_current_user)):
+    try:
+        supabase = get_supabase_client()
+        teacher_id = current_user.get("id")
+        storage_path = f"avatars/{teacher_id}/avatar.webp"
+
+        try:
+            supabase.storage.from_("digitute").remove([storage_path])
+        except Exception:
+            pass
+
+        db_res = supabase.table("users").update({
+            "avatar_url": None
+        }).eq("id", teacher_id).execute()
+
+        return {
+            "success": True,
+            "avatar_url": None,
+            "message": "Profile picture removed successfully!"
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.put("/email", summary="Update Teacher Email Address")
+def update_teacher_email(
+    payload: dict,
+    current_user: dict = Depends(get_current_user)
+):
+    try:
+        supabase = get_supabase_client()
+        teacher_id = current_user.get("id")
+
+        new_email = (payload.get("email") or "").strip().lower()
+
+        if not new_email:
+            raise HTTPException(status_code=400, detail="New email is required.")
+
+        email_regex = r"^[^@\s]+@[^@\s]+\.[^@\s]+$"
+        if not re.match(email_regex, new_email):
+            raise HTTPException(status_code=400, detail="Invalid email format. Please provide a valid address.")
+
+        current_email = (current_user.get("email") or "").strip().lower()
+        if new_email == current_email:
+            raise HTTPException(status_code=400, detail="New email is identical to your current email.")
+
+        dup_check = supabase.table("users").select("id").ilike("email", new_email).neq("id", teacher_id).execute()
+        if dup_check.data and len(dup_check.data) > 0:
+            raise HTTPException(status_code=409, detail="This email address is already in use by another account.")
+
+        db_res = supabase.table("users").update({
+            "email": new_email
+        }).eq("id", teacher_id).execute()
+
+        if not db_res.data:
+            raise HTTPException(status_code=500, detail="Failed to update email in database.")
+
+        return {
+            "success": True,
+            "email": new_email,
+            "message": "Email address updated successfully!"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.put("/phone", summary="Update Teacher Mobile / Phone Number")
+def update_teacher_phone(
+    payload: dict,
+    current_user: dict = Depends(get_current_user)
+):
+    try:
+        supabase = get_supabase_client()
+        teacher_id = current_user.get("id")
+
+        new_phone = (payload.get("phone") or "").strip()
+
+        if not new_phone:
+            raise HTTPException(status_code=400, detail="Mobile number is required.")
+
+        digits = re.sub(r"[^0-9]", "", new_phone)
+        if len(digits) < 10:
+            raise HTTPException(status_code=400, detail="Please enter a valid 10-digit mobile number.")
+
+        current_phone = (current_user.get("phone") or "").strip()
+        current_digits = re.sub(r"[^0-9]", "", current_phone)
+        if digits == current_digits:
+            raise HTTPException(status_code=400, detail="New mobile number is identical to your current number.")
+
+        formatted_phone = f"+91 {digits[-10:]}" if len(digits) == 10 else new_phone
+
+        db_res = supabase.table("users").update({
+            "phone": formatted_phone
+        }).eq("id", teacher_id).execute()
+
+        if not db_res.data:
+            raise HTTPException(status_code=500, detail="Failed to update mobile number in database.")
+
+        return {
+            "success": True,
+            "phone": formatted_phone,
+            "message": "Mobile number updated successfully!"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/profile", summary="Get Current Teacher Profile")
+def get_teacher_profile(current_user: dict = Depends(get_current_user)):
+    try:
+        supabase = get_supabase_client()
+        teacher_id = current_user.get("id")
+        res = supabase.table("users").select("id, full_name, email, phone, avatar_url, role, specialization, created_at").eq("id", teacher_id).execute()
+        if res.data and len(res.data) > 0:
+            return res.data[0]
+        return current_user
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

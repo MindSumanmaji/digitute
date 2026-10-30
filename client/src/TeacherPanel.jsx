@@ -78,6 +78,22 @@ export function TeacherPanel({ onBackToLanding }) {
     }
   });
 
+  // Listen to profile updates (e.g. avatar upload, email, name)
+  useEffect(() => {
+    const handleProfileUpdate = () => {
+      try {
+        const stored = localStorage.getItem('digitute_user');
+        if (stored) setCurrentUser(JSON.parse(stored));
+      } catch (e) {}
+    };
+    window.addEventListener('digitute-profile-updated', handleProfileUpdate);
+    window.addEventListener('storage', handleProfileUpdate);
+    return () => {
+      window.removeEventListener('digitute-profile-updated', handleProfileUpdate);
+      window.removeEventListener('storage', handleProfileUpdate);
+    };
+  }, []);
+
   // Auth Guard
   useEffect(() => {
     const token = localStorage.getItem('digitute_token');

@@ -10,49 +10,40 @@ export function Header({
   user
 }) {
   const getStoredTeacher = () => {
-    if (user && user.full_name) {
-      return {
-        name: user.full_name,
-        username: user.email ? `@${user.email.split('@')[0]}` : '@sudipta',
-        avatarUrl: user.avatar_url || '',
-        role: user.specialization ? `${user.specialization} Faculty` : 'Faculty of DigiTute'
-      };
-    }
+    let name = user?.full_name || 'Sudipta Mondal';
+    let username = user?.email ? `@${user.email.split('@')[0]}` : '@sudipta';
+    let role = user?.specialization ? `${user.specialization} Faculty` : 'Teacher';
+    let avatarUrl = user?.avatar_url || '';
+
     try {
       const userStr = localStorage.getItem('digitute_user');
       if (userStr) {
         const u = JSON.parse(userStr);
-        if (u.role === 'TEACHER' || u.full_name) {
-          return {
-            name: u.full_name || 'Sudipta Sir',
-            username: u.email ? `@${u.email.split('@')[0]}` : '@sudipta',
-            avatarUrl: u.avatar_url || '',
-            role: u.specialization ? `${u.specialization} Faculty` : 'Faculty of DigiTute'
-          };
-        }
+        if (u.full_name) name = u.full_name;
+        if (u.email) username = `@${u.email.split('@')[0]}`;
+        if (u.specialization) role = `${u.specialization} Faculty`;
+        if (u.avatar_url) avatarUrl = u.avatar_url;
       }
       const saved = localStorage.getItem('digitute_teacher_profile');
       if (saved) {
         const parsed = JSON.parse(saved);
-        return {
-          name: parsed.name || 'Sudipta Mondal',
-          username: parsed.username || '@sudipta',
-          avatarUrl: parsed.avatarUrl || '/teacher-sudipta.png',
-          role: parsed.role || 'Teacher'
-        };
+        if (parsed.name) name = parsed.name;
+        if (parsed.avatarUrl) avatarUrl = parsed.avatarUrl;
+        if (parsed.role) role = parsed.role;
       }
     } catch { /* ignore */ }
+
     return {
-      name: 'Sudipta Mondal',
-      username: '@sudipta',
-      avatarUrl: '/teacher-sudipta.png',
-      role: 'Teacher'
+      name,
+      username,
+      avatarUrl: avatarUrl || '/teacher-sudipta.png',
+      role
     };
   };
 
   const [teacher, setTeacher] = useState(getStoredTeacher);
 
-  // Sync teacher info when user prop changes or profile is updated in Settings
+  // Sync teacher info when user prop changes or profile is updated anywhere
   useEffect(() => {
     setTeacher(getStoredTeacher());
   }, [user]);
@@ -192,12 +183,12 @@ export function Header({
               tabIndex={-1}
             >
               <img
-                src="/teacher-sudipta.png"
+                src={teacher.avatarUrl || '/teacher-sudipta.png'}
                 alt="Teacher Profile"
                 className="dt-header-avatar-img"
                 onError={(e) => {
                   e.target.onerror = null;
-                  e.target.src = '/student-avatar.jpg';
+                  e.target.src = '/teacher-sudipta.png';
                 }}
               />
             </button>
