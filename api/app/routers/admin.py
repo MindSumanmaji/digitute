@@ -14,7 +14,8 @@ from app.models import (
     BatchInvoiceDemandRequest,
     SingleInvoiceDemandRequest,
     AdminNoticeCreate,
-    AdminRejectCashRequest
+    AdminRejectCashRequest,
+    DistributionCreateRequest
 )
 from datetime import date, datetime
 from typing import Any, Optional
@@ -2021,3 +2022,267 @@ def delete_admin_notice(notice_id: str, current_user: dict = Depends(get_current
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ==============================================================================
+# 13. BATCH FEE DISTRIBUTIONS (schema.sql Table 13)
+# Exactly 1 record per batch per period (or 1 record for ONE_TIME batch)
+# ==============================================================================
+
+@router.get("/distributions/preview", summary="Preview Batch Faculty Payment Distribution")
+def preview_batch_distribution(
+    batch_id: str,
+    billing_month: Optional[int] = None,
+    billing_year: Optional[int] = None,
+    distribution_month: Optional[int] = None,
+    distribution_year: Optional[int] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    try:
+        supabase = get_supabase_client()
+        today = date.today()
+        m = int(distribution_month or billing_month or today.month)
+        y = int(distribution_year or billing_year or today.year)
+
+        # 1. Fetch batch
+        b_res = supabase.table("batches").select("*").eq("id", batch_id).execute()
+        if not b_res.data:
+            raise HTTPException(status_code=404, detail="Course batch not found.")
+        batch = b_res.data[0]
+        batch_name = batch.get("name") or "Batch"
+
+        # 2. Fetch paid invoices for this batch where payment occurred (updated_at) in this month and year
+        start_date = f"{y:04d}-{m:02d}-01T00:00:00"
+        if m == 12:
+            end_date = f"{y + 1:04d}-01-01T00:00:00"
+        else:
+            end_date = f"{y:04d}-{m + 1:02d}-01T00:00:00"
+
+        inv_q = supabase.table("invoices").select("payable_amount, amount_paid, status, updated_at")\
+            .eq("batch_id", batch_id)\
+            .gte("updated_at", start_date)\
+            .lt("updated_at", end_date)
+        
+        inv_res = inv_q.execute()
+        invoices = inv_res.data or []
+
+        total_collected = sum(float(inv.get("amount_paid") or 0.0) for inv in invoices)
+        total_demanded = sum(float(inv.get("payable_amount") or 0.0) for inv in invoices)
+
+        # 3. Check if already distributed in distributions table
+        try:
+            dist_res = supabase.table("distributions").select("*").eq("batch_id", batch_id)\
+                .eq("distribution_month", m).eq("distribution_year", y).execute()
+        except Exception:
+            dist_res = supabase.table("distributions").select("*").eq("batch_id", batch_id)\
+                .eq("billing_month", m).eq("billing_year", y).execute()
+        
+        existing = dist_res.data[0] if (dist_res.data and len(dist_res.data) > 0) else None
+        actual_distributed = float(existing.get("total_distributed") or 0.0) if existing else 0.0
+
+        # 4. Map teachers and compute payout amounts from batch.subjects
+        subjects = batch.get("subjects") or []
+        teachers_distribution = []
+        total_distributed = 0.0
+
+        # Teacher name cache
+        t_res = supabase.table("users").select("id, full_name").eq("role", "TEACHER").execute()
+        teacher_name_map = {u["id"]: u["full_name"] for u in (t_res.data or []) if u.get("id")}
+        name_to_id = {u["full_name"].strip().lower(): u["id"] for u in (t_res.data or []) if u.get("full_name")}
+
+        for s in subjects:
+            t_id = s.get("teacher_id") or s.get("teacherId") or ""
+            t_name = s.get("teacher_name") or s.get("teacher") or teacher_name_map.get(t_id)
+            if not t_id and t_name and t_name.strip().lower() in name_to_id:
+                t_id = name_to_id[t_name.strip().lower()]
+            if not t_name and t_id in teacher_name_map:
+                t_name = teacher_name_map[t_id]
+            if not t_name:
+                t_name = f"Faculty ({s.get('name')})" if s.get("name") else "Faculty"
+
+            raw_share = s.get("share_percent") if s.get("share_percent") is not None else s.get("sharePercent")
+            try:
+                share_pct = float(raw_share) if raw_share is not None else 0.0
+            except (ValueError, TypeError):
+                share_pct = 0.0
+
+            payout_amt = round(total_collected * (share_pct / 100.0), 2)
+            total_distributed += payout_amt
+
+            teachers_distribution.append({
+                "teacher_id": t_id,
+                "teacher_name": t_name,
+                "subject": s.get("name") or "Subject",
+                "share_percent": share_pct,
+                "payout_amount": payout_amt
+            })
+
+        return {
+            "batch_id": batch_id,
+            "batch_name": batch_name,
+            "distribution_month": m,
+            "distribution_year": y,
+            "billing_month": m,
+            "billing_year": y,
+            "total_collected": total_collected,
+            "total_demanded": total_demanded,
+            "total_distributed": actual_distributed if existing else 0.0,
+            "calculated_total_distributed": round(total_distributed, 2),
+            "invoices_count": len(invoices),
+            "already_distributed": bool(existing),
+            "existing_distribution": existing,
+            "teachers_distribution": (existing.get("teachers_distribution") if (existing and existing.get("teachers_distribution")) else teachers_distribution),
+            "teachers_preview": teachers_distribution
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/distributions/create", summary="Distribute Batch Fees to Assigned Faculty")
+def create_batch_distribution(
+    req: DistributionCreateRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    try:
+        supabase = get_supabase_client()
+        today = date.today()
+        m = int(req.distribution_month or req.billing_month or today.month)
+        y = int(req.distribution_year or req.billing_year or today.year)
+
+        # 1. Fetch batch
+        b_res = supabase.table("batches").select("*").eq("id", req.batch_id).execute()
+        if not b_res.data:
+            raise HTTPException(status_code=404, detail="Course batch not found.")
+        batch = b_res.data[0]
+        batch_name = batch.get("name") or "Batch"
+
+        # 2. Query collected fees based on updated_at in the selected month & year
+        start_date = f"{y:04d}-{m:02d}-01T00:00:00"
+        if m == 12:
+            end_date = f"{y + 1:04d}-01-01T00:00:00"
+        else:
+            end_date = f"{y:04d}-{m + 1:02d}-01T00:00:00"
+
+        inv_q = supabase.table("invoices").select("amount_paid, updated_at")\
+            .eq("batch_id", req.batch_id)\
+            .gte("updated_at", start_date)\
+            .lt("updated_at", end_date)
+        
+        inv_res = inv_q.execute()
+        invoices = inv_res.data or []
+        total_collected = sum(float(inv.get("amount_paid") or 0.0) for inv in invoices)
+
+        # 3. Calculate teachers distribution
+        subjects = batch.get("subjects") or []
+        t_res = supabase.table("users").select("id, full_name").eq("role", "TEACHER").execute()
+        teacher_name_map = {u["id"]: u["full_name"] for u in (t_res.data or []) if u.get("id")}
+        name_to_id = {u["full_name"].strip().lower(): u["id"] for u in (t_res.data or []) if u.get("full_name")}
+
+        teachers_distribution = []
+        total_distributed = 0.0
+
+        for s in subjects:
+            t_id = s.get("teacher_id") or s.get("teacherId") or ""
+            t_name = s.get("teacher_name") or s.get("teacher") or teacher_name_map.get(t_id)
+            if not t_id and t_name and t_name.strip().lower() in name_to_id:
+                t_id = name_to_id[t_name.strip().lower()]
+            if not t_name and t_id in teacher_name_map:
+                t_name = teacher_name_map[t_id]
+            if not t_name:
+                t_name = f"Faculty ({s.get('name')})" if s.get("name") else "Faculty"
+
+            raw_share = s.get("share_percent") if s.get("share_percent") is not None else s.get("sharePercent")
+            try:
+                share_pct = float(raw_share) if raw_share is not None else 0.0
+            except (ValueError, TypeError):
+                share_pct = 0.0
+
+            payout_amt = round(total_collected * (share_pct / 100.0), 2)
+            total_distributed += payout_amt
+
+            teachers_distribution.append({
+                "teacher_id": t_id,
+                "teacher_name": t_name,
+                "subject": s.get("name") or "Subject",
+                "share_percent": share_pct,
+                "payout_amount": payout_amt
+            })
+
+        # 4. Check if record already exists for this batch & period
+        try:
+            dist_res = supabase.table("distributions").select("id").eq("batch_id", req.batch_id)\
+                .eq("distribution_month", m).eq("distribution_year", y).execute()
+        except Exception:
+            dist_res = supabase.table("distributions").select("id").eq("batch_id", req.batch_id)\
+                .eq("billing_month", m).eq("billing_year", y).execute()
+
+        existing = dist_res.data[0] if (dist_res.data and len(dist_res.data) > 0) else None
+
+        payload = {
+            "batch_id": req.batch_id,
+            "batch_name": batch_name,
+            "distribution_month": m,
+            "distribution_year": y,
+            "total_collected": total_collected,
+            "total_distributed": round(total_distributed, 2),
+            "teachers_distribution": teachers_distribution
+        }
+
+        try:
+            if existing:
+                update_res = supabase.table("distributions").update(payload).eq("id", existing["id"]).execute()
+                dist_record = update_res.data[0] if update_res.data else payload
+            else:
+                insert_res = supabase.table("distributions").insert(payload).execute()
+                dist_record = insert_res.data[0] if insert_res.data else payload
+        except Exception:
+            # Fallback for old schema column names
+            fb_payload = {**payload, "billing_month": m, "billing_year": y}
+            fb_payload.pop("distribution_month", None)
+            fb_payload.pop("distribution_year", None)
+            if existing:
+                update_res = supabase.table("distributions").update(fb_payload).eq("id", existing["id"]).execute()
+                dist_record = update_res.data[0] if update_res.data else fb_payload
+            else:
+                insert_res = supabase.table("distributions").insert(fb_payload).execute()
+                dist_record = insert_res.data[0] if insert_res.data else fb_payload
+
+        msg = f"Distribution saved for {batch_name}. Total ₹{total_distributed:,.2f} allocated."
+        return {
+            "message": msg,
+            "distribution": dist_record
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/distributions", summary="List All Batch Fee Distributions")
+def list_batch_distributions(
+    batch_id: Optional[str] = None,
+    billing_month: Optional[int] = None,
+    billing_year: Optional[int] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    try:
+        supabase = get_supabase_client()
+        query = supabase.table("distributions").select("*").order("created_at", desc=True)
+
+        if batch_id and batch_id != "ALL":
+            query = query.eq("batch_id", batch_id)
+        if billing_month:
+            query = query.eq("billing_month", int(billing_month))
+        if billing_year:
+            query = query.eq("billing_year", int(billing_year))
+
+        res = query.execute()
+        return res.data or []
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+

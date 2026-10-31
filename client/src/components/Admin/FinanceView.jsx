@@ -57,7 +57,17 @@ export default function FinanceView({
   const [selectedMonth, setSelectedMonth] = useState('ALL');
   const [selectedYear, setSelectedYear] = useState('ALL');
   const [selectedStatus, setSelectedStatus] = useState('ALL');
-  const [activeTab, setActiveTab] = useState('demands'); // 'demands' | 'batches' | 'queue'
+  const [activeTab, setActiveTab] = useState('demands'); // 'demands' | 'batches' | 'queue' | 'distribution'
+
+  // Fee Distribution State
+  const [distBatch, setDistBatch] = useState('');
+  const [distMonth, setDistMonth] = useState(() => String(new Date().getMonth() + 1));
+  const [distYear, setDistYear] = useState(() => String(new Date().getFullYear()));
+  const [distPreview, setDistPreview] = useState(null);
+  const [distPreviewLoading, setDistPreviewLoading] = useState(false);
+  const [distributing, setDistributing] = useState(false);
+  const [pastDistributions, setPastDistributions] = useState([]);
+  const [pastDistLoading, setPastDistLoading] = useState(false);
 
   const selectedBatchObj = useMemo(() => {
     if (!selectedBatch || selectedBatch === 'ALL') return null;
@@ -195,6 +205,92 @@ export default function FinanceView({
     fetchInvoices();
     fetchQueue();
   }, [fetchInvoices, fetchQueue]);
+
+  // Load Past Fee Distributions
+  const fetchPastDistributions = useCallback(async () => {
+    try {
+      setPastDistLoading(true);
+      const res = await apiRequest('/api/admin/distributions');
+      setPastDistributions(res || []);
+    } catch (err) {
+      console.warn('Failed to load past distributions:', err.message);
+    } finally {
+      setPastDistLoading(false);
+    }
+  }, []);
+
+  // Preview Fee Distribution for Batch & Period
+  const fetchDistPreview = useCallback(async () => {
+    if (!distBatch) {
+      setDistPreview(null);
+      return;
+    }
+    const bObj = batches.find(b => b.id === distBatch);
+    const isOneTime = bObj?.fee_type === 'ONE_TIME';
+    if (!isOneTime && (!distMonth || !distYear)) {
+      setDistPreview(null);
+      return;
+    }
+    try {
+      setDistPreviewLoading(true);
+      let url = `/api/admin/distributions/preview?batch_id=${distBatch}`;
+      if (!isOneTime) {
+        url += `&billing_month=${distMonth}&billing_year=${distYear}`;
+      }
+      const data = await apiRequest(url);
+      setDistPreview(data);
+    } catch (err) {
+      console.warn('Failed to preview distribution:', err.message);
+      showToast('Preview Error', err.message || 'Could not calculate fee distribution.');
+    } finally {
+      setDistPreviewLoading(false);
+    }
+  }, [distBatch, distMonth, distYear, batches, showToast]);
+
+  useEffect(() => {
+    if (activeTab === 'distribution') {
+      fetchPastDistributions();
+    }
+  }, [activeTab, fetchPastDistributions]);
+
+  useEffect(() => {
+    if (distBatch) {
+      fetchDistPreview();
+    } else {
+      setDistPreview(null);
+    }
+  }, [distBatch, distMonth, distYear, fetchDistPreview]);
+
+  // Execute Distribution (Single-Click)
+  const handleExecuteDistribution = async () => {
+    if (!distBatch) return;
+    const bObj = batches.find(b => b.id === distBatch);
+    const isOneTime = bObj?.fee_type === 'ONE_TIME';
+    if (!isOneTime && (!distMonth || !distYear)) {
+      showToast('Validation Error', 'Please select month and year for monthly batches.');
+      return;
+    }
+
+    try {
+      setDistributing(true);
+      const payload = {
+        batch_id: distBatch,
+        billing_month: isOneTime ? null : Number(distMonth),
+        billing_year: isOneTime ? null : Number(distYear)
+      };
+      const res = await apiRequest('/api/admin/distributions/create', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+      showToast('Fee Distributed', res.message || 'Batch fee distributed to teachers successfully.');
+      fetchDistPreview();
+      fetchPastDistributions();
+    } catch (err) {
+      showToast('Distribution Failed', err.message || 'Could not distribute batch fees.');
+    } finally {
+      setDistributing(false);
+    }
+  };
 
   // Copy invoice number helper
   const handleCopy = (text) => {
@@ -550,6 +646,14 @@ export default function FinanceView({
           >
             {queueCount}
           </span>
+        </button>
+
+        <button
+          className={`sub-tab ${activeTab === 'distribution' ? 'active' : ''}`}
+          onClick={() => setActiveTab('distribution')}
+        >
+          <CreditCard size={15} />
+          <span>Fee Distribution</span>
         </button>
       </div>
 
@@ -1091,6 +1195,226 @@ export default function FinanceView({
                 </table>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* TAB 4: FEE REVENUE DISTRIBUTION */}
+      {activeTab === 'distribution' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginTop: 12 }}>
+          {/* Top Selection Bar */}
+          <div className="data-table-card" style={{ padding: '18px 22px' }}>
+            <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
+              <div style={{ minWidth: 260, flex: 2 }}>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: 'var(--text-2)', marginBottom: 6 }}>
+                  Select Batch
+                </label>
+                <select
+                  value={distBatch}
+                  onChange={(e) => {
+                    const bId = e.target.value;
+                    setDistBatch(bId);
+                  }}
+                  className="subtle-select"
+                  style={{ width: '100%', padding: '9px 12px', fontSize: 13.5, borderRadius: 8 }}
+                >
+                  <option value="">-- Select Batch --</option>
+                  {batches.map(b => (
+                    <option key={b.id} value={b.id}>
+                      {b.name} ({b.fee_type === 'ONE_TIME' ? 'One-Time Course' : 'Monthly Fee'})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ minWidth: 150, flex: 1 }}>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: 'var(--text-2)', marginBottom: 6 }}>
+                  Billing Month
+                </label>
+                <select
+                  value={distMonth}
+                  onChange={(e) => setDistMonth(e.target.value)}
+                  className="subtle-select"
+                  style={{ width: '100%', padding: '9px 12px', fontSize: 13.5, borderRadius: 8 }}
+                >
+                  <option value="1">January</option>
+                  <option value="2">February</option>
+                  <option value="3">March</option>
+                  <option value="4">April</option>
+                  <option value="5">May</option>
+                  <option value="6">June</option>
+                  <option value="7">July</option>
+                  <option value="8">August</option>
+                  <option value="9">September</option>
+                  <option value="10">October</option>
+                  <option value="11">November</option>
+                  <option value="12">December</option>
+                </select>
+              </div>
+
+              <div style={{ minWidth: 120, flex: 1 }}>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: 'var(--text-2)', marginBottom: 6 }}>
+                  Year
+                </label>
+                <select
+                  value={distYear}
+                  onChange={(e) => setDistYear(e.target.value)}
+                  className="subtle-select"
+                  style={{ width: '100%', padding: '9px 12px', fontSize: 13.5, borderRadius: 8 }}
+                >
+                  <option value="2024">2024</option>
+                  <option value="2025">2025</option>
+                  <option value="2026">2026</option>
+                  <option value="2027">2027</option>
+                  <option value="2028">2028</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Distribution Preview Box */}
+            {!distBatch ? (
+              <div style={{ marginTop: 22, padding: '36px 20px', textAlign: 'center', background: '#f8fafc', borderRadius: 10, border: '1px dashed #cbd5e1' }}>
+                <CreditCard size={36} style={{ color: '#94a3b8', margin: '0 auto 10px', opacity: 0.7 }} />
+                <div style={{ fontSize: 14.5, fontWeight: 700, color: '#334155' }}>
+                  Please select a Batch, Month, and Year
+                </div>
+                <div style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>
+                  Choose a batch from above to inspect completed payments, view teacher share breakdowns, and execute distribution.
+                </div>
+              </div>
+            ) : distPreviewLoading ? (
+              <div style={{ padding: '42px 0', textAlign: 'center', color: 'var(--text-3)' }}>
+                <RefreshCw size={26} style={{ animation: 'spin 1s linear infinite', marginBottom: 10, color: '#0d9488' }} />
+                <div style={{ fontSize: 13.5, fontWeight: 600 }}>Calculating revenue shares from invoices...</div>
+              </div>
+            ) : distPreview ? (
+              <div style={{ marginTop: 20, borderTop: '1px solid var(--border)', paddingTop: 18 }}>
+                {/* Action Button */}
+                {!distPreview.already_distributed && (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', marginBottom: 16 }}>
+                    <button
+                      type="button"
+                      onClick={handleExecuteDistribution}
+                      disabled={distributing || distPreview.total_collected === 0}
+                      style={{
+                        background: '#059669',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: 8,
+                        padding: '9px 24px',
+                        fontSize: 13.5,
+                        fontWeight: 700,
+                        cursor: (distributing || distPreview.total_collected === 0) ? 'not-allowed' : 'pointer',
+                        opacity: (distributing || distPreview.total_collected === 0) ? 0.6 : 1,
+                        boxShadow: '0 2px 4px rgba(0,0,0,0.08)'
+                      }}
+                    >
+                      {distributing ? 'Distributing...' : 'Distribute'}
+                    </button>
+                  </div>
+                )}
+
+                {/* Metrics */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16, marginBottom: 18 }}>
+                  <div style={{ background: '#f8fafc', padding: '16px 20px', borderRadius: 10, border: '1px solid #e2e8f0' }}>
+                    <div style={{ fontSize: 12.5, color: '#64748b', fontWeight: 600 }}>Total Fee Collected</div>
+                    <div style={{ fontSize: 26, fontWeight: 800, color: '#0f172a', marginTop: 4 }}>
+                      {formatINR(distPreview.total_collected)}
+                    </div>
+                  </div>
+
+                  <div style={{
+                    background: distPreview.already_distributed ? '#ecfdf5' : '#f8fafc',
+                    padding: '16px 20px',
+                    borderRadius: 10,
+                    border: distPreview.already_distributed ? '1px solid #a7f3d0' : '1px solid #e2e8f0'
+                  }}>
+                    <div style={{ fontSize: 12.5, color: distPreview.already_distributed ? '#047857' : '#64748b', fontWeight: 600 }}>
+                      Total Distributed
+                    </div>
+                    <div style={{
+                      fontSize: 26,
+                      fontWeight: 800,
+                      color: distPreview.already_distributed ? '#059669' : '#0f172a',
+                      marginTop: 4
+                    }}>
+                      {formatINR(distPreview.already_distributed ? (distPreview.existing_distribution?.total_distributed ?? distPreview.total_distributed) : 0)}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Teachers Share Table */}
+                <div style={{ width: '100%', overflowX: 'auto', border: '1px solid #e2e8f0', borderRadius: 8 }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                    <thead>
+                      <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                        <th style={{ padding: '11px 16px', fontSize: 11.5, fontWeight: 700, color: '#64748b' }}>TEACHER</th>
+                        <th style={{ padding: '11px 16px', fontSize: 11.5, fontWeight: 700, color: '#64748b' }}>SUBJECT</th>
+                        <th style={{ padding: '11px 16px', fontSize: 11.5, fontWeight: 700, color: '#64748b' }}>REVENUE SHARE %</th>
+                        <th style={{ padding: '11px 16px', fontSize: 11.5, fontWeight: 700, color: '#64748b', textAlign: 'right' }}>PAYOUT AMOUNT</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(() => {
+                        const teachersList = distPreview.teachers_distribution || distPreview.teachers_preview || [];
+                        if (teachersList.length === 0) {
+                          return (
+                            <tr>
+                              <td colSpan={4} style={{ padding: 24, textAlign: 'center', color: '#64748b', fontSize: 13 }}>
+                                No teachers or revenue share percentages configured for this batch.
+                              </td>
+                            </tr>
+                          );
+                        }
+                        return teachersList.map((t, idx) => (
+                          <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                            <td style={{ padding: '12px 16px', fontWeight: 700, color: '#0f172a', fontSize: 13.5 }}>
+                              {t.teacher_name}
+                            </td>
+                            <td style={{ padding: '12px 16px', color: '#334155', fontSize: 13 }}>
+                              <span style={{ background: '#f1f5f9', padding: '3px 8px', borderRadius: 6, fontWeight: 600 }}>
+                                {t.subject}
+                              </span>
+                            </td>
+                            <td style={{ padding: '12px 16px', fontWeight: 700, color: '#0284c7', fontSize: 13.5 }}>
+                              {t.share_percent}%
+                            </td>
+                            <td style={{ padding: '12px 16px', fontWeight: 800, color: '#059669', textAlign: 'right', fontSize: 14 }}>
+                              {formatINR(t.payout_amount)}
+                            </td>
+                          </tr>
+                        ));
+                      })()}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Distribution Timestamp shown at bottom right if distributed */}
+                {distPreview.already_distributed && distPreview.existing_distribution?.created_at && (
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'flex-end',
+                    alignItems: 'center',
+                    gap: 6,
+                    marginTop: 12,
+                    fontSize: 12.5,
+                    color: '#64748b'
+                  }}>
+                    <span>Distributed on:</span>
+                    <strong style={{ color: '#0f172a' }}>
+                      {new Date(distPreview.existing_distribution.created_at).toLocaleString('en-IN', {
+                        day: '2-digit',
+                        month: 'short',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        hour12: true
+                      })}
+                    </strong>
+                  </div>
+                )}
+              </div>
+            ) : null}
           </div>
         </div>
       )}

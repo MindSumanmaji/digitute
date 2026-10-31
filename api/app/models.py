@@ -409,3 +409,22 @@ class NoticeResponse(BaseModel):
     sender_avatar: Optional[str] = None
     created_at: datetime
     is_mine: bool = False
+
+
+# ==============================================================================
+# 11. BATCH FEE DISTRIBUTION MODELS (schema.sql Table 13)
+# ==============================================================================
+class DistributionCreateRequest(BaseModel):
+    batch_id: str = Field(..., description="Target batch UUID")
+    distribution_month: Optional[int] = Field(None, ge=1, le=12, description="Distribution month (1-12)")
+    distribution_year: Optional[int] = Field(None, ge=2020, description="Distribution year")
+    billing_month: Optional[int] = Field(None, ge=1, le=12, description="Alias for distribution_month")
+    billing_year: Optional[int] = Field(None, ge=2020, description="Alias for distribution_year")
+
+class TeacherShareItem(BaseModel):
+    teacher_id: str
+    teacher_name: str
+    subject: str
+    share_percent: float
+    payout_amount: float
+

@@ -445,3 +445,44 @@ CREATE INDEX idx_notices_target_audience ON notices(target_audience);
 CREATE INDEX idx_notices_batch_ids ON notices USING GIN (batch_ids);
 CREATE INDEX idx_notices_created_at ON notices(created_at DESC);
 CREATE INDEX idx_notices_active ON notices(is_active) WHERE is_active = TRUE;
+
+-- ==============================================================================
+-- 13. DISTRIBUTIONS (Batch-wise Faculty Revenue Share & Payout Ledger)
+-- Exactly 1 record per batch per distribution period (month & year)
+-- ==============================================================================
+CREATE TABLE distributions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    
+    batch_id UUID NOT NULL REFERENCES batches(id) ON DELETE CASCADE,
+    batch_name VARCHAR(200) NOT NULL,
+    
+    -- Distribution Period (Collection month & year)
+    distribution_month SMALLINT NOT NULL CHECK (distribution_month BETWEEN 1 AND 12),
+    distribution_year SMALLINT NOT NULL CHECK (distribution_year >= 2020),
+    
+    -- Collection & Payout Totals
+    total_collected NUMERIC(12, 2) NOT NULL DEFAULT 0.00,          -- Total student fees collected for this batch in this month
+    total_distributed NUMERIC(12, 2) NOT NULL DEFAULT 0.00,        -- Sum of all faculty payouts distributed
+    
+    -- All Teachers' Distribution Details in JSONB:
+    -- [
+    --   {
+    --     "teacher_id": "uuid",
+    --     "teacher_name": "Santosh Nandi",
+    --     "subject": "Physics",
+    --     "share_percent": 35.0,
+    --     "payout_amount": 10500.00
+    --   }
+    -- ]
+    teachers_distribution JSONB NOT NULL DEFAULT '[]'::jsonb,
+    
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Unique Constraint: 1 batch + 1 distribution period = exactly 1 record
+CREATE UNIQUE INDEX idx_unique_batch_dist_period 
+ON distributions (batch_id, distribution_year, distribution_month);
+
+-- Query Indexes
+CREATE INDEX idx_dist_batch ON distributions(batch_id);
+CREATE INDEX idx_dist_created ON distributions(created_at DESC);

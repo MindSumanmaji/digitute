@@ -2367,3 +2367,238 @@ def get_teacher_cash_ledger(current_user: dict = Depends(get_current_user)):
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/earnings", summary="Get Faculty Distributed Earnings & Share Ledger")
+def get_teacher_earnings(current_user: dict = Depends(get_current_user)):
+    try:
+        supabase = get_supabase_client()
+        teacher_id = current_user.get("id")
+        teacher_name = (current_user.get("full_name") or "").strip().lower()
+
+        # Query all records from distributions table
+        dist_res = supabase.table("distributions").select("*").order("created_at", desc=True).execute()
+        all_dists = dist_res.data or []
+
+        teacher_records = []
+        total_earnings = 0.0
+        current_month_earnings = 0.0
+
+        today = date.today()
+        current_month = today.month
+        current_year = today.year
+
+        for d in all_dists:
+            t_dist_list = d.get("teachers_distribution") or []
+            # Find entry for this teacher by teacher_id or teacher_name
+            entry = next((
+                t for t in t_dist_list
+                if t.get("teacher_id") == teacher_id
+                or (t.get("teacher_name") and t.get("teacher_name").strip().lower() == teacher_name)
+            ), None)
+
+            if entry:
+                payout = float(entry.get("payout_amount") or 0.0)
+                total_earnings += payout
+
+                b_month = d.get("billing_month")
+                b_year = d.get("billing_year")
+                is_this_month = (b_month == current_month and b_year == current_year)
+                if is_this_month:
+                    current_month_earnings += payout
+
+                teacher_records.append({
+                    "id": d["id"],
+                    "distribution_id": d["id"],
+                    "batch_id": d.get("batch_id"),
+                    "batch_name": d.get("batch_name") or "Course Batch",
+                    "subject": entry.get("subject") or "Subject",
+                    "distribution_type": d.get("distribution_type") or "MONTHLY",
+                    "billing_month": b_month,
+                    "billing_year": b_year,
+                    "share_percent": float(entry.get("share_percent") or 0.0),
+                    "batch_total_collected": float(d.get("total_collected") or 0.0),
+                    "payout_amount": payout,
+                    "distributed_at": d.get("created_at")
+                })
+
+        # Count active batches this teacher is mapped to
+        b_res = supabase.table("batches").select("id, name, subjects").eq("is_active", True).execute()
+        active_batches = []
+        for b in (b_res.data or []):
+            for s in (b.get("subjects") or []):
+                s_tid = s.get("teacherId") or s.get("teacher_id")
+                s_tname = (s.get("teacher") or s.get("teacher_name") or "").strip().lower()
+                if s_tid == teacher_id or (s_tname and s_tname == teacher_name):
+                    active_batches.append(b["id"])
+                    break
+
+        return {
+            "summary": {
+                "total_earnings": round(total_earnings, 2),
+                "current_month_earnings": round(current_month_earnings, 2),
+                "active_batches_count": len(set(active_batches)),
+                "distributions_count": len(teacher_records)
+            },
+            "records": teacher_records
+        }
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/batches", summary="Get Batches Assigned to Teacher")
+def get_teacher_batches(current_user: dict = Depends(get_current_user)):
+    try:
+        supabase = get_supabase_client()
+        teacher_id = current_user.get("id")
+        teacher_name = (current_user.get("full_name") or "").strip().lower()
+
+        b_res = supabase.table("batches").select("id, name, fee_type, subjects").eq("is_active", True).execute()
+        batches = b_res.data or []
+
+        if current_user.get("role") == "ADMIN":
+            return batches
+
+        assigned = []
+        for b in batches:
+            is_assigned = False
+            for s in (b.get("subjects") or []):
+                s_tid = s.get("teacherId") or s.get("teacher_id")
+                s_tname = (s.get("teacher") or s.get("teacher_name") or "").strip().lower()
+                if s_tid == teacher_id or (s_tname and s_tname == teacher_name):
+                    is_assigned = True
+                    break
+            if is_assigned:
+                assigned.append(b)
+        return assigned
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/distribution-preview", summary="Get Distribution Preview & Earnings for Teacher")
+def get_teacher_distribution_preview(
+    batch_id: str,
+    billing_month: Optional[int] = None,
+    billing_year: Optional[int] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    try:
+        supabase = get_supabase_client()
+        teacher_id = current_user.get("id")
+        teacher_name = (current_user.get("full_name") or "").strip().lower()
+
+        today = date.today()
+        m = int(billing_month) if billing_month else today.month
+        y = int(billing_year) if billing_year else today.year
+
+        # 1. Fetch batch
+        b_res = supabase.table("batches").select("*").eq("id", batch_id).execute()
+        if not b_res.data:
+            raise HTTPException(status_code=404, detail="Batch not found")
+        batch = b_res.data[0]
+        batch_name = batch.get("name") or "Batch"
+
+        # 2. Query collected fees based on updated_at in the selected month & year
+        start_date = f"{y:04d}-{m:02d}-01T00:00:00"
+        if m == 12:
+            end_date = f"{y + 1:04d}-01-01T00:00:00"
+        else:
+            end_date = f"{y:04d}-{m + 1:02d}-01T00:00:00"
+
+        inv_q = supabase.table("invoices").select("payable_amount, amount_paid, status, updated_at")\
+            .eq("batch_id", batch_id)\
+            .gte("updated_at", start_date)\
+            .lt("updated_at", end_date)
+        
+        inv_res = inv_q.execute()
+        invoices = inv_res.data or []
+        total_collected = sum(float(inv.get("amount_paid") or 0.0) for inv in invoices)
+
+        # 3. Check distributions table
+        try:
+            dist_q = supabase.table("distributions").select("*").eq("batch_id", batch_id)\
+                .eq("distribution_month", m).eq("distribution_year", y)
+            dist_res = dist_q.execute()
+        except Exception:
+            dist_q = supabase.table("distributions").select("*").eq("batch_id", batch_id)\
+                .eq("billing_month", m).eq("billing_year", y)
+            dist_res = dist_q.execute()
+        existing = dist_res.data[0] if (dist_res.data and len(dist_res.data) > 0) else None
+        already_distributed = bool(existing)
+
+        # 4. Teachers distribution list
+        if already_distributed and existing.get("teachers_distribution"):
+            teachers_distribution = existing.get("teachers_distribution") or []
+            total_distributed = float(existing.get("total_distributed") or 0.0)
+            distributed_at = existing.get("created_at")
+        else:
+            # Calculated preview
+            subjects = batch.get("subjects") or []
+            t_res = supabase.table("users").select("id, full_name").eq("role", "TEACHER").execute()
+            teacher_name_map = {u["id"]: u["full_name"] for u in (t_res.data or []) if u.get("id")}
+            name_to_id = {u["full_name"].strip().lower(): u["id"] for u in (t_res.data or []) if u.get("full_name")}
+
+            teachers_distribution = []
+            total_distributed = 0.0
+            distributed_at = None
+
+            for s in subjects:
+                t_id = s.get("teacher_id") or s.get("teacherId") or ""
+                t_name = s.get("teacher_name") or s.get("teacher") or teacher_name_map.get(t_id)
+                if not t_id and t_name and t_name.strip().lower() in name_to_id:
+                    t_id = name_to_id[t_name.strip().lower()]
+                if not t_name and t_id in teacher_name_map:
+                    t_name = teacher_name_map[t_id]
+                if not t_name:
+                    t_name = f"Faculty ({s.get('name')})" if s.get("name") else "Faculty"
+
+                raw_share = s.get("share_percent") if s.get("share_percent") is not None else s.get("sharePercent")
+                try:
+                    share_pct = float(raw_share) if raw_share is not None else 0.0
+                except (ValueError, TypeError):
+                    share_pct = 0.0
+
+                payout_amt = round(total_collected * (share_pct / 100.0), 2)
+
+                teachers_distribution.append({
+                    "teacher_id": t_id,
+                    "teacher_name": t_name,
+                    "subject": s.get("name") or "Subject",
+                    "share_percent": share_pct,
+                    "payout_amount": payout_amt
+                })
+
+        # 5. Calculate My Earnings for logged-in teacher
+        my_entry = next((
+            t for t in teachers_distribution
+            if t.get("teacher_id") == teacher_id
+            or (t.get("teacher_name") and t.get("teacher_name").strip().lower() == teacher_name)
+        ), None)
+
+        if already_distributed:
+            my_earnings = float(my_entry.get("payout_amount") or 0.0) if my_entry else 0.0
+            actual_total_distributed = total_distributed
+        else:
+            my_earnings = 0.0
+            actual_total_distributed = 0.0
+
+        return {
+            "batch_id": batch_id,
+            "batch_name": batch_name,
+            "billing_month": m,
+            "billing_year": y,
+            "total_collected": total_collected,
+            "invoices_count": len(invoices),
+            "total_distributed": actual_total_distributed,
+            "my_earnings": my_earnings,
+            "already_distributed": already_distributed,
+            "distributed_at": distributed_at,
+            "teachers_distribution": teachers_distribution,
+            "current_teacher_id": teacher_id
+        }
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+

@@ -32,10 +32,18 @@ const Finance = ({ onNavigate, activeSubSection = 'collect' }) => {
   const [toastMessage, setToastMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [allInvoicesLoading, setAllInvoicesLoading] = useState(false);
+  const [earningsLoading, setEarningsLoading] = useState(false);
 
   const [duesList, setDuesList] = useState([]);
   const [batchesList, setBatchesList] = useState([]);
   const [allInvoicesList, setAllInvoicesList] = useState([]);
+
+  // Teacher Distribution States
+  const [distBatch, setDistBatch] = useState('');
+  const [distMonth, setDistMonth] = useState(() => String(new Date().getMonth() + 1));
+  const [distYear, setDistYear] = useState(() => String(new Date().getFullYear()));
+  const [distData, setDistData] = useState(null);
+  const [distLoading, setDistLoading] = useState(false);
 
   const showToast = (msg) => {
     setToastMessage(msg);
@@ -82,6 +90,37 @@ const Finance = ({ onNavigate, activeSubSection = 'collect' }) => {
     }
   }, [batchesList.length]);
 
+  // 3. Fetch Batches for Teacher
+  const fetchTeacherBatches = useCallback(async () => {
+    try {
+      const bData = await apiRequest('/api/teacher/batches');
+      if (Array.isArray(bData) && bData.length) {
+        setBatchesList(bData);
+        setDistBatch((prev) => prev || bData[0].id);
+      }
+    } catch (err) {
+      console.warn('Failed to load teacher batches:', err.message);
+    }
+  }, []);
+
+  // 4. Fetch Distribution Preview & Earnings for Teacher
+  const fetchDistributionPreview = useCallback(async () => {
+    if (!distBatch) {
+      setDistData(null);
+      return;
+    }
+    try {
+      setDistLoading(true);
+      const url = `/api/teacher/distribution-preview?batch_id=${distBatch}&billing_month=${distMonth}&billing_year=${distYear}`;
+      const data = await apiRequest(url);
+      setDistData(data);
+    } catch (err) {
+      console.warn('Failed to load distribution preview:', err.message);
+    } finally {
+      setDistLoading(false);
+    }
+  }, [distBatch, distMonth, distYear]);
+
   useEffect(() => {
     fetchDues();
   }, [fetchDues]);
@@ -89,8 +128,16 @@ const Finance = ({ onNavigate, activeSubSection = 'collect' }) => {
   useEffect(() => {
     if (mainSubTab === 'all-payments') {
       fetchAllInvoices();
+    } else if (mainSubTab === 'earnings') {
+      fetchTeacherBatches();
     }
-  }, [mainSubTab, fetchAllInvoices]);
+  }, [mainSubTab, fetchAllInvoices, fetchTeacherBatches]);
+
+  useEffect(() => {
+    if (mainSubTab === 'earnings' && distBatch) {
+      fetchDistributionPreview();
+    }
+  }, [mainSubTab, distBatch, distMonth, distYear, fetchDistributionPreview]);
 
   // 1-Click Collect Cash Handler
   const handleDirectCollectCash = async (item) => {
@@ -875,40 +922,263 @@ const Finance = ({ onNavigate, activeSubSection = 'collect' }) => {
         )}
 
         {/* ============================================================== */}
-        {/* SUB-TAB 3: MY EARNINGS (Placeholder as requested)              */}
+        {/* SUB-TAB 3: MY EARNINGS / FEE DISTRIBUTION                      */}
         {/* ============================================================== */}
         {mainSubTab === 'earnings' && (
           <div style={{
             background: '#ffffff',
             borderRadius: 14,
             border: '1px solid #e2e8f0',
-            padding: '48px 24px',
-            textAlign: 'center',
-            boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)'
+            padding: '20px 24px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
           }}>
-            <div style={{
-              width: 56,
-              height: 56,
-              borderRadius: '50%',
-              background: '#f0fdf4',
-              color: '#16a34a',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              margin: '0 auto 16px'
-            }}>
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="12" r="10" />
-                <path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8" />
-                <path d="M12 6v2m0 8v2" />
-              </svg>
+            {/* 1) 3 Filters: Select Batch, Billing Month, Year */}
+            <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
+              <div style={{ minWidth: 260, flex: 2 }}>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#475569', marginBottom: 6 }}>
+                  Select Batch
+                </label>
+                <select
+                  value={distBatch}
+                  onChange={(e) => setDistBatch(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '9px 12px',
+                    fontSize: 13.5,
+                    borderRadius: 8,
+                    border: '1px solid #cbd5e1',
+                    background: '#ffffff',
+                    color: '#0f172a',
+                    outline: 'none'
+                  }}
+                >
+                  <option value="">-- Select Batch --</option>
+                  {batchesList.map(b => (
+                    <option key={b.id} value={b.id}>
+                      {b.name} ({b.fee_type === 'ONE_TIME' ? 'One-Time Course' : 'Monthly Fee'})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={{ minWidth: 150, flex: 1 }}>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#475569', marginBottom: 6 }}>
+                  Billing Month
+                </label>
+                <select
+                  value={distMonth}
+                  onChange={(e) => setDistMonth(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '9px 12px',
+                    fontSize: 13.5,
+                    borderRadius: 8,
+                    border: '1px solid #cbd5e1',
+                    background: '#ffffff',
+                    color: '#0f172a',
+                    outline: 'none'
+                  }}
+                >
+                  <option value="1">January</option>
+                  <option value="2">February</option>
+                  <option value="3">March</option>
+                  <option value="4">April</option>
+                  <option value="5">May</option>
+                  <option value="6">June</option>
+                  <option value="7">July</option>
+                  <option value="8">August</option>
+                  <option value="9">September</option>
+                  <option value="10">October</option>
+                  <option value="11">November</option>
+                  <option value="12">December</option>
+                </select>
+              </div>
+
+              <div style={{ minWidth: 120, flex: 1 }}>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#475569', marginBottom: 6 }}>
+                  Year
+                </label>
+                <select
+                  value={distYear}
+                  onChange={(e) => setDistYear(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '9px 12px',
+                    fontSize: 13.5,
+                    borderRadius: 8,
+                    border: '1px solid #cbd5e1',
+                    background: '#ffffff',
+                    color: '#0f172a',
+                    outline: 'none'
+                  }}
+                >
+                  <option value="2024">2024</option>
+                  <option value="2025">2025</option>
+                  <option value="2026">2026</option>
+                  <option value="2027">2027</option>
+                  <option value="2028">2028</option>
+                </select>
+              </div>
             </div>
-            <h3 style={{ fontSize: 17, fontWeight: 700, color: '#0f172a', margin: '0 0 6px' }}>
-              Faculty Earnings &amp; Payroll
-            </h3>
-            <p style={{ fontSize: 13.5, color: '#64748b', maxWidth: 420, margin: '0 auto' }}>
-              Your payout history, lecture stipend summaries, and monthly salary slips will appear here once connected by the institution.
-            </p>
+
+            {/* Content: Cards & Table */}
+            {!distBatch ? (
+              <div style={{ marginTop: 24, padding: '36px 20px', textAlign: 'center', background: '#f8fafc', borderRadius: 10, border: '1px dashed #cbd5e1' }}>
+                <div style={{ fontSize: 14.5, fontWeight: 700, color: '#334155' }}>
+                  Please select a Batch
+                </div>
+                <div style={{ fontSize: 13, color: '#64748b', marginTop: 4 }}>
+                  Choose an assigned batch from above to view batch fee collections and your revenue share breakdown.
+                </div>
+              </div>
+            ) : distLoading ? (
+              <div style={{ padding: '48px 0', textAlign: 'center', color: '#64748b' }}>
+                <div style={{ fontSize: 13.5, fontWeight: 600 }}>Loading revenue shares &amp; collection...</div>
+              </div>
+            ) : distData ? (
+              <div style={{ marginTop: 22, borderTop: '1px solid #e2e8f0', paddingTop: 20 }}>
+                {/* 2) 3 Cards: Total Collected, Total Distributed, My Earnings */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16, marginBottom: 20 }}>
+                  {/* Card 1: Total Fee Collected */}
+                  <div style={{ background: '#f8fafc', padding: '16px 20px', borderRadius: 10, border: '1px solid #e2e8f0' }}>
+                    <div style={{ fontSize: 12.5, color: '#64748b', fontWeight: 600 }}>Total Fee Collected</div>
+                    <div style={{ fontSize: 26, fontWeight: 800, color: '#0f172a', marginTop: 4 }}>
+                      {formatINR(distData.total_collected)}
+                    </div>
+                  </div>
+
+                  {/* Card 2: Total Distributed */}
+                  <div style={{
+                    background: distData.already_distributed ? '#ecfdf5' : '#f8fafc',
+                    padding: '16px 20px',
+                    borderRadius: 10,
+                    border: distData.already_distributed ? '1px solid #a7f3d0' : '1px solid #e2e8f0'
+                  }}>
+                    <div style={{ fontSize: 12.5, color: distData.already_distributed ? '#047857' : '#64748b', fontWeight: 600 }}>
+                      Total Distributed
+                    </div>
+                    <div style={{
+                      fontSize: 26,
+                      fontWeight: 800,
+                      color: distData.already_distributed ? '#059669' : '#0f172a',
+                      marginTop: 4
+                    }}>
+                      {formatINR(distData.already_distributed ? distData.total_distributed : 0)}
+                    </div>
+                  </div>
+
+                  {/* Card 3: My Earnings */}
+                  <div style={{
+                    background: distData.already_distributed ? '#eff6ff' : '#f8fafc',
+                    padding: '16px 20px',
+                    borderRadius: 10,
+                    border: distData.already_distributed ? '1px solid #bfdbfe' : '1px solid #e2e8f0'
+                  }}>
+                    <div style={{ fontSize: 12.5, color: distData.already_distributed ? '#1d4ed8' : '#64748b', fontWeight: 600 }}>
+                      My Earnings
+                    </div>
+                    <div style={{
+                      fontSize: 26,
+                      fontWeight: 800,
+                      color: distData.already_distributed ? '#2563eb' : '#0f172a',
+                      marginTop: 4
+                    }}>
+                      {formatINR(distData.already_distributed ? distData.my_earnings : 0)}
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3) Table: TEACHER | SUBJECT | REVENUE SHARE % | PAYOUT AMOUNT */}
+                <div style={{ width: '100%', overflowX: 'auto', border: '1px solid #e2e8f0', borderRadius: 8 }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                    <thead>
+                      <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                        <th style={{ padding: '11px 16px', fontSize: 11.5, fontWeight: 700, color: '#64748b' }}>TEACHER</th>
+                        <th style={{ padding: '11px 16px', fontSize: 11.5, fontWeight: 700, color: '#64748b' }}>SUBJECT</th>
+                        <th style={{ padding: '11px 16px', fontSize: 11.5, fontWeight: 700, color: '#64748b' }}>REVENUE SHARE %</th>
+                        <th style={{ padding: '11px 16px', fontSize: 11.5, fontWeight: 700, color: '#64748b', textAlign: 'right' }}>PAYOUT AMOUNT</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(() => {
+                        const teachersList = distData.teachers_distribution || [];
+                        if (teachersList.length === 0) {
+                          return (
+                            <tr>
+                              <td colSpan={4} style={{ padding: 24, textAlign: 'center', color: '#64748b', fontSize: 13 }}>
+                                No teachers or revenue share percentages configured for this batch.
+                              </td>
+                            </tr>
+                          );
+                        }
+                        return teachersList.map((t, idx) => {
+                          const isMe = t.teacher_id === distData.current_teacher_id;
+                          return (
+                            <tr key={idx} style={{
+                              borderBottom: '1px solid #f1f5f9',
+                              background: isMe ? '#f0fdf4' : 'transparent'
+                            }}>
+                              <td style={{ padding: '12px 16px', fontWeight: 700, color: '#0f172a', fontSize: 13.5 }}>
+                                {t.teacher_name}
+                                {isMe && (
+                                  <span style={{
+                                    marginLeft: 8,
+                                    fontSize: 11,
+                                    padding: '2px 6px',
+                                    borderRadius: 4,
+                                    background: '#bbf7d0',
+                                    color: '#166534',
+                                    fontWeight: 700
+                                  }}>
+                                    You
+                                  </span>
+                                )}
+                              </td>
+                              <td style={{ padding: '12px 16px', color: '#334155', fontSize: 13 }}>
+                                <span style={{ background: isMe ? '#dcfce7' : '#f1f5f9', padding: '3px 8px', borderRadius: 6, fontWeight: 600 }}>
+                                  {t.subject}
+                                </span>
+                              </td>
+                              <td style={{ padding: '12px 16px', fontWeight: 700, color: '#0284c7', fontSize: 13.5 }}>
+                                {t.share_percent}%
+                              </td>
+                              <td style={{ padding: '12px 16px', fontWeight: 800, color: '#059669', textAlign: 'right', fontSize: 14 }}>
+                                {formatINR(t.payout_amount)}
+                              </td>
+                            </tr>
+                          );
+                        });
+                      })()}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* 4) Timestamp at bottom right if distributed */}
+                {distData.already_distributed && distData.distributed_at && (
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'flex-end',
+                    alignItems: 'center',
+                    gap: 6,
+                    marginTop: 12,
+                    fontSize: 12.5,
+                    color: '#64748b'
+                  }}>
+                    <span>Distributed on:</span>
+                    <strong style={{ color: '#0f172a' }}>
+                      {new Date(distData.distributed_at).toLocaleString('en-IN', {
+                        day: '2-digit',
+                        month: 'short',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        hour12: true
+                      })}
+                    </strong>
+                  </div>
+                )}
+              </div>
+            ) : null}
           </div>
         )}
 
