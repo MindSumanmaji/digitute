@@ -62,7 +62,33 @@ export default function DashboardTab({ setActiveTab, user }) {
   }, []);
 
   const hours = time.getHours();
-  const greeting = hours < 12 ? 'Good Morning 🌅' : hours < 17 ? 'Good Afternoon ☀️' : 'Good Evening ☀️';
+  const greetingText = hours < 12 ? 'Good Morning' : hours < 17 ? 'Good Afternoon' : 'Good Evening';
+  const greetingEmoji = hours < 12 ? '🌅' : hours < 17 ? '☀️' : '🌙';
+  const greeting = `${greetingText} ${greetingEmoji}`;
+
+  // Smooth Typewriter Greeting Animation
+  const [typedGreetingText, setTypedGreetingText] = useState('');
+  const [showCursor, setShowCursor] = useState(true);
+
+  useEffect(() => {
+    let idx = 0;
+    setTypedGreetingText('');
+    setShowCursor(true);
+
+    const interval = setInterval(() => {
+      idx++;
+      if (idx <= greetingText.length) {
+        setTypedGreetingText(greetingText.slice(0, idx));
+      } else {
+        clearInterval(interval);
+        setTimeout(() => {
+          setShowCursor(false);
+        }, 600);
+      }
+    }, 70);
+
+    return () => clearInterval(interval);
+  }, [greetingText]);
 
   const timeString = time.toLocaleTimeString('en-IN', {
     hour: '2-digit',
@@ -70,6 +96,7 @@ export default function DashboardTab({ setActiveTab, user }) {
     second: '2-digit',
     hour12: true
   });
+  const formattedTimeLower = timeString.toLowerCase();
 
   const dateString = time.toLocaleDateString('en-GB', {
     weekday: 'short',
@@ -263,7 +290,8 @@ export default function DashboardTab({ setActiveTab, user }) {
   return (
     <div className="sp-view-container sp-dash-exact-page">
       {/* 1. TOP ROW: WELCOME BANNER & NIGHT SUNSET LIVE TIME WIDGET */}
-      <div className="sp-dash-top-hero-row">
+      {/* Desktop View (Preserves Original 2-Card Layout on Desktop) */}
+      <div className="sp-dash-top-hero-row sp-dash-desktop-hero-row">
         <div className="sp-dash-exact-welcome-card">
           <div className="sp-dash-welcome-watermark">
             <svg viewBox="0 0 500 160" preserveAspectRatio="none" className="sp-dash-watermark-svg">
@@ -275,7 +303,13 @@ export default function DashboardTab({ setActiveTab, user }) {
 
           <div className="sp-dash-welcome-content">
             <div className="sp-dash-welcome-text-col">
-              <span className="sp-dash-welcome-greeting">{greeting}</span>
+              <span className="sp-dash-welcome-greeting">
+                {typedGreetingText || '\u00A0'}
+                {showCursor && <span className="sp-typing-cursor">|</span>}
+                <span className={`sp-dash-greeting-emoji-anim ${typedGreetingText.length >= greetingText.length ? 'sp-emoji-pop' : 'sp-emoji-hidden'}`}>
+                  &nbsp;{greetingEmoji}
+                </span>
+              </span>
               <h1 className="sp-dash-welcome-title">{displayName}</h1>
               <p className="sp-dash-welcome-subtitle">{batchSubtitle}</p>
             </div>
@@ -339,6 +373,91 @@ export default function DashboardTab({ setActiveTab, user }) {
             <div className="sp-dash-night-date">{dateString}</div>
             <div className="sp-dash-night-tz">IST (UTC+5:30)</div>
           </div>
+        </div>
+      </div>
+
+      {/* Mobile View: Unified Hero Card (Matches Reference Screenshot Exactly) */}
+      <div className="sp-dash-mobile-hero-card">
+        {/* Soft wavy bottom watermark */}
+        <div className="sp-dash-mhc-watermark">
+          <svg viewBox="0 0 400 60" preserveAspectRatio="none" className="sp-dash-mhc-watermark-svg">
+            <path d="M0 60 L0 35 Q 70 15 140 32 T 280 20 T 400 38 L 400 60 Z" fill="#e0e7ff" opacity="0.65" />
+            <path d="M60 60 L60 28 Q 150 12 240 28 T 400 15 L 400 60 Z" fill="#c7d2fe" opacity="0.45" />
+            <path d="M140 60 L140 22 Q 230 8 320 22 T 400 12 L 400 60 Z" fill="#a5b4fc" opacity="0.25" />
+          </svg>
+        </div>
+
+        {/* Top 2-Column Row */}
+        <div className="sp-dash-mhc-top-row">
+          {/* Left Column: Vertical Bar + Greeting + Name + Batch Badge */}
+          <div className="sp-dash-mhc-left-col">
+            <div className="sp-dash-mhc-accent-bar" />
+            <div className="sp-dash-mhc-text-block">
+              <div className="sp-dash-mhc-greeting-wrap">
+                <span className="sp-dash-mhc-greeting-text">
+                  {typedGreetingText || '\u00A0'}
+                  {showCursor && <span className="sp-typing-cursor">|</span>}
+                </span>
+                <span className={`sp-dash-mhc-greeting-emoji ${typedGreetingText.length >= greetingText.length ? 'sp-emoji-pop' : 'sp-emoji-hidden'}`}>
+                  {greetingEmoji}
+                </span>
+              </div>
+              <h2 className={`sp-dash-mhc-student-name ${displayName?.length > 20 ? "sp-name-very-long" : displayName?.length > 13 ? "sp-name-long" : ""}`} title={displayName}>{displayName}</h2>
+              <div className="sp-dash-mhc-batch-badge">
+                <svg className="sp-dash-mhc-batch-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M22 10v6M2 10l10-5 10 5-10 5z"/>
+                  <path d="M6 12v5c3 3 9 3 12 0v-5"/>
+                </svg>
+                <span>{batchSubtitle}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Right Column: Dark Night Live Time Box */}
+          <div className="sp-dash-mhc-night-box">
+            <div className="sp-dash-mhc-night-art">
+              <svg viewBox="0 0 160 100" className="sp-dash-mhc-night-art-svg" preserveAspectRatio="xMidYMid meet">
+                <defs>
+                  <radialGradient id="mobileSunGlow" cx="50%" cy="50%" r="50%">
+                    <stop offset="0%" stopColor="#ffb088" />
+                    <stop offset="55%" stopColor="#f97316" stopOpacity="0.9" />
+                    <stop offset="100%" stopColor="#db2777" stopOpacity="0" />
+                  </radialGradient>
+                  <linearGradient id="mobileMountFar" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="0%" stopColor="#312e81" />
+                    <stop offset="100%" stopColor="#1e1b4b" />
+                  </linearGradient>
+                  <linearGradient id="mobileMountNear" x1="0%" y1="0%" x2="0%" y2="100%">
+                    <stop offset="0%" stopColor="#0f172a" />
+                    <stop offset="100%" stopColor="#020617" />
+                  </linearGradient>
+                </defs>
+                <circle cx="125" cy="55" r="26" fill="url(#mobileSunGlow)" />
+                <path d="M40 100 Q 85 45 125 65 T 160 100 Z" fill="url(#mobileMountFar)" />
+                <path d="M15 100 Q 65 62 110 78 T 160 100 Z" fill="url(#mobileMountNear)" />
+                <polygon points="110,75 113,84 107,84" fill="#020617" />
+                <polygon points="122,72 125,82 119,82" fill="#020617" />
+                <polygon points="135,68 139,80 131,80" fill="#020617" />
+                <polygon points="146,66 150,78 142,78" fill="#020617" />
+              </svg>
+            </div>
+
+            <div className="sp-dash-mhc-live-tag">
+              <span className="sp-dash-mhc-live-dot" />
+              <span className="sp-dash-mhc-live-label">LIVE TIME</span>
+            </div>
+            <div className="sp-dash-mhc-clock">{formattedTimeLower}</div>
+            <div className="sp-dash-mhc-date">{dateString}</div>
+            <div className="sp-dash-mhc-tz">IST (UTC+5:30)</div>
+          </div>
+        </div>
+
+        {/* Bottom Full-Width Quote */}
+        <div className="sp-dash-mhc-quote-row">
+          <span className="sp-dash-mhc-quote-mark">❝</span>
+          <p className="sp-dash-mhc-quote-text">
+            Discipline today builds the freedom you want tomorrow.
+          </p>
         </div>
       </div>
 
