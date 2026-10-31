@@ -152,7 +152,7 @@ export function StudentInfo({ onBack }) {
   }, [comboStudents, searchQuery, statusFilter]);
 
   const statusCounts = useMemo(() => {
-    const counts = { All: comboStudents.length, Excellent: 0, Good: 0, Average: 0, 'Below Average': 0 };
+    const counts = { All: comboStudents.length, Excellent: 0, Good: 0, Average: 0, 'Below Average': 0, 'No Classes': 0 };
     comboStudents.forEach((s) => {
       if (counts[s.attendance] !== undefined) counts[s.attendance]++;
     });
@@ -170,7 +170,8 @@ export function StudentInfo({ onBack }) {
       Excellent: 'att-badge-excellent',
       Good: 'att-badge-good',
       Average: 'att-badge-average',
-      'Below Average': 'att-badge-below-average'
+      'Below Average': 'att-badge-below-average',
+      'No Classes': 'att-badge-default'
     };
     return map[status] || 'att-badge-default';
   };
@@ -320,7 +321,7 @@ export function StudentInfo({ onBack }) {
             <input
               type="text"
               className="si-search-input"
-              placeholder="Search by name, contact or roll no…"
+              placeholder="Search by student name or contact number…"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
@@ -417,7 +418,7 @@ export function StudentInfo({ onBack }) {
                             <div className="si-student-avatar" aria-hidden="true">{getInitials(student.name)}</div>
                             <div className="si-student-info">
                               <span className="si-student-name">{student.name}</span>
-                              <span className="si-student-roll">{student.roll} · {selectedBatchName}</span>
+                              <span className="si-student-roll">{selectedBatchName}</span>
                             </div>
                           </div>
                         </td>
@@ -452,13 +453,15 @@ export function StudentInfo({ onBack }) {
                           <div className={`si-badge ${getAttendanceClass(student.attendance)}`}>
                             <span className="si-badge-dot" aria-hidden="true" />
                             <span className="si-badge-label">{student.attendance}</span>
-                            <span className="si-badge-pct">({student.attendancePct}%)</span>
+                            {student.attendancePct !== null && student.attendancePct !== undefined ? (
+                              <span className="si-badge-pct">({student.attendancePct}%)</span>
+                            ) : null}
                           </div>
                         </td>
                         <td className="col-grade">
                           {(() => {
-                            const perf = getStudentOverallPerformance(student.id, selectedBatchName, student.grade);
-                            const displayGrade = perf.overallGrade;
+                            const displayGrade = student.grade || 'N/A';
+                            const examCount = student.exams_count || 0;
                             return (
                               <button
                                 type="button"
@@ -469,9 +472,9 @@ export function StudentInfo({ onBack }) {
                                 <div className={`si-badge ${getGradeClass(displayGrade)}`}>
                                   <span className="si-grade-label">{displayGrade}</span>
                                 </div>
-                                {perf.hasExams && (
-                                  <span className="si-perf-records-badge" title={`Updated from ${perf.totalExamsCount} Exam(s)`}>
-                                    {perf.totalExamsCount} Exam{perf.totalExamsCount > 1 ? 's' : ''}
+                                {examCount > 0 && (
+                                  <span className="si-perf-records-badge" title={`Updated from ${examCount} Exam(s)`}>
+                                    {examCount} Exam{examCount > 1 ? 's' : ''}
                                   </span>
                                 )}
                               </button>
@@ -515,8 +518,7 @@ export function StudentInfo({ onBack }) {
               {/* MOBILE CARDS */}
               <div className="si-mobile-cards-list">
                 {filteredStudents.map((student, idx) => {
-                  const perf = getStudentOverallPerformance(student.id, selectedBatchName, student.grade);
-                  const displayGrade = perf.overallGrade;
+                  const displayGrade = student.grade || 'N/A';
 
                   return (
                     <div
@@ -532,7 +534,7 @@ export function StudentInfo({ onBack }) {
                               <h4 className="si-student-name">{student.name}</h4>
                               <span className="si-mcard-idx">#{idx + 1}</span>
                             </div>
-                            <span className="si-student-roll">{student.roll} · {selectedBatchName}</span>
+                            <span className="si-student-roll">{selectedBatchName}</span>
                           </div>
                         </div>
                       </div>
@@ -560,7 +562,9 @@ export function StudentInfo({ onBack }) {
                           <div className={`si-badge ${getAttendanceClass(student.attendance)}`}>
                             <span className="si-badge-dot" aria-hidden="true" />
                             <span className="si-badge-label">{student.attendance}</span>
-                            <span className="si-badge-pct">({student.attendancePct}%)</span>
+                            {student.attendancePct !== null && student.attendancePct !== undefined ? (
+                              <span className="si-badge-pct">({student.attendancePct}%)</span>
+                            ) : null}
                           </div>
                         </div>
                         <div className="si-mcard-stat-box right">
@@ -571,12 +575,12 @@ export function StudentInfo({ onBack }) {
                             onClick={() => setSelectedPerformanceStudent(student)}
                             title="View Exam Performance Records"
                           >
-                            <div className={`si-badge ${getGradeClass(displayGrade)}`}>
-                              <span className="si-grade-label">{displayGrade}</span>
+                            <div className={`si-badge ${getGradeClass(student.grade || 'N/A')}`}>
+                              <span className="si-grade-label">{student.grade || 'N/A'}</span>
                             </div>
-                            {perf.hasExams && (
+                            {(student.exams_count || 0) > 0 && (
                               <span className="si-perf-records-badge">
-                                {perf.totalExamsCount} Exam{perf.totalExamsCount > 1 ? 's' : ''}
+                                {student.exams_count} Exam{student.exams_count > 1 ? 's' : ''}
                               </span>
                             )}
                           </button>

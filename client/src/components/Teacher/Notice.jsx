@@ -134,11 +134,16 @@ export default function Notice() {
 
   const filteredList = useMemo(() => {
     return publishedNotices.filter(n => {
-      // Filter by Batch
+      // Filter by Batch (supports matching by batch_id or batch_name, and keeps center admin broadcasts visible)
       let matchBatch = true;
       if (filterBatch !== 'All') {
-        const bNames = n.batch_names || [];
-        matchBatch = bNames.includes(filterBatch) || n.target_audience !== 'BATCH';
+        const bNames = (n.batch_names || []).map((x) => String(x).toLowerCase());
+        const bIds = (n.batch_ids || []).map((x) => String(x));
+        const cleanFilter = filterBatch.toLowerCase();
+        
+        const isMatched = bNames.includes(cleanFilter) || bIds.includes(filterBatch);
+        // Admin broadcast circulars for all teachers or all center remain visible
+        matchBatch = isMatched || n.target_audience === 'TEACHERS_ONLY' || n.target_audience === 'ALL';
       }
 
       // Filter by Search Query

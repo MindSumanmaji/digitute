@@ -13,9 +13,17 @@ export default function TopHeader({
   setMobileSidebarOpen,
   onOpenMobileProfile,
   user,
+  notices = [],
+  readNoticeIds = [],
+  onNoticeClick,
+  onClearAllNotices,
 }) {
   const displayName = user?.full_name || 'Suman Maji';
   const avatarUrl = user?.avatar_url || user?.photo;
+
+  // Unread notices calculation
+  const unreadNotices = notices.filter(n => !readNoticeIds.includes(n.id));
+  const hasUnread = unreadNotices.length > 0;
 
   const getInitials = (name) => {
     if (!name) return 'S';
@@ -77,15 +85,30 @@ export default function TopHeader({
             className="sp-bell-btn" 
             onClick={() => setNotificationOpen(!notificationOpen)}
             aria-label="Notifications"
+            style={{
+              color: hasUnread ? '#EF4444' : 'currentColor',
+              borderColor: hasUnread ? '#FCA5A5' : '',
+              background: hasUnread ? '#FEF2F2' : '',
+            }}
           >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
               <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
             </svg>
-            <span className="sp-bell-badge-dot" />
+            {hasUnread && <span className="sp-bell-badge-dot" />}
           </button>
 
-          {notificationOpen && <NotificationPanel />}
+          {notificationOpen && (
+            <NotificationPanel
+              notices={unreadNotices}
+              unreadCount={unreadNotices.length}
+              onNoticeClick={(notice) => {
+                setNotificationOpen(false);
+                if (onNoticeClick) onNoticeClick(notice);
+              }}
+              onClearAll={onClearAllNotices}
+            />
+          )}
         </div>
 
         {/* Student Profile Pill: Desktop only shows photo or initials avatar */}

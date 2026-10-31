@@ -1238,7 +1238,7 @@ export function ExamEvaluation({ onBack, onNavigateToStudentInfo }) {
                     <input
                       type="text"
                       className="ee-search-input"
-                      placeholder="Search student by name or roll..."
+                      placeholder="Search student by name..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                     />
@@ -1286,9 +1286,6 @@ export function ExamEvaluation({ onBack, onNavigateToStudentInfo }) {
                                 </div>
                                 <div className="ee-student-info">
                                   <span className="ee-name">{student.name}</span>
-                                  {student.roll && (
-                                    <span className="ee-roll">{student.roll}</span>
-                                  )}
                                 </div>
                               </div>
                             </td>

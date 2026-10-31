@@ -912,7 +912,7 @@ export default function DoubtCorner({ onBack, initialBatch = null, initialSubjec
                   <div className="dc-chip-info">
                     <span className="dc-chip-name">{activeSolvingStudent.studentName}</span>
                     <span className="dc-chip-sub">
-                      Roll: {activeSolvingStudent.rollNumber} &bull; {activeSolvingStudent.batch}
+                      {activeSolvingStudent.batch}
                     </span>
                   </div>
                 </div>
@@ -1144,7 +1144,7 @@ export default function DoubtCorner({ onBack, initialBatch = null, initialSubjec
                         <div className="dc-offline-avatar">{d.studentName ? d.studentName[0] : 'S'}</div>
                         <div>
                           <h4 className="dc-offline-sname">{d.studentName}</h4>
-                          <p className="dc-offline-sroll">Roll: {d.rollNumber} &bull; {d.batch}</p>
+                          <p className="dc-offline-sroll">{d.batch}</p>
                         </div>
                       </div>
 
@@ -1220,7 +1220,7 @@ export default function DoubtCorner({ onBack, initialBatch = null, initialSubjec
                           <div className="dc-solved-avatar">{d.studentName ? d.studentName[0] : 'S'}</div>
                           <div>
                             <h4 className="dc-solved-sname">{d.studentName}</h4>
-                            <p className="dc-solved-sroll">Roll: {d.rollNumber} &bull; {d.batch}</p>
+                            <p className="dc-solved-sroll">{d.batch}</p>
                           </div>
                         </div>
                         <div className="dc-solved-meta-right">

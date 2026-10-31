@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import realisticEducationSvg from '../../assets/digitute_realistic_education_resized.svg';
-import { getLiveBatchDoubtStats } from '../../data/doubtData';
+// Live database doubt queries via /api/teacher/batch-summary
 import { apiRequest } from '../../api';
 
 /* ──────────────────────────────────────────────────────────────────────────
@@ -72,35 +72,22 @@ const Dashboard = ({ onNavigate, user }) => {
     return 'Teacher';
   })();
 
-  // Live date + time (updates every minute automatically)
+  // Live date + time (sharp real-time updates every second)
   const [liveDateTime, setLiveDateTime] = useState(() => getLiveDateTime());
 
   useEffect(() => {
-    // Sync to the top of the next minute so updates feel sharp
-    const msToNextMinute = (60 - new Date().getSeconds()) * 1000;
-    let interval;
-    const timeout = setTimeout(() => {
+    // Update live time every second to stay completely in sync
+    const interval = setInterval(() => {
       setLiveDateTime(getLiveDateTime());
-      interval = setInterval(() => setLiveDateTime(getLiveDateTime()), 60_000);
-    }, msToNextMinute);
+    }, 1000);
 
-    return () => {
-      clearTimeout(timeout);
-      if (interval) clearInterval(interval);
-    };
+    return () => clearInterval(interval);
   }, []);
 
-  const { timeStr } = liveDateTime;
+  const { dateStr, timeStr } = liveDateTime;
 
-  // Formatted selected date
-  const formattedSelectedDate = useMemo(() => {
-    try {
-      const d = new Date(todayDateStr + 'T00:00:00');
-      return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-    } catch {
-      return todayDateStr;
-    }
-  }, [todayDateStr]);
+  // Real-time formatted date matching live clock
+  const formattedSelectedDate = dateStr;
 
   // Animation values for smooth number counter & progress advancement
   const [animatedSolved, setAnimatedSolved] = useState(0);
@@ -373,12 +360,16 @@ const Dashboard = ({ onNavigate, user }) => {
     return () => window.removeEventListener('digitute_doubts_updated', handleSync);
   }, []);
 
-  // Compute live doubt stats for the selected batch and subject from Doubt Corner store
+  // Compute live doubt stats directly from the database batch summary
   const liveDoubtStats = useMemo(() => {
-    if (!selectedBatchName) return null;
-    return getLiveBatchDoubtStats(selectedBatchName, selectedSubject);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedBatchName, selectedSubject, batchSummary, dbSyllabusStats]);
+    if (!batchSummary?.doubts) return null;
+    return {
+      pending: batchSummary.doubts.pending ?? 0,
+      resolved: batchSummary.doubts.resolved ?? 0,
+      total: batchSummary.doubts.total ?? 0,
+      solvedPct: batchSummary.doubts.solved_pct ?? 100,
+    };
+  }, [batchSummary]);
 
   /* Smooth sequential animation when both batch & subject are chosen */
   useEffect(() => {
@@ -389,10 +380,9 @@ const Dashboard = ({ onNavigate, user }) => {
       return;
     }
 
-    // Compute targets from current data (avoid depending on liveDoubtStats to prevent infinite loop)
+    // Compute targets from current database batch summary
     const targetStudents = batchSummary ? batchSummary.students : 0;
-    const currentDoubtStats = selectedBatchName ? getLiveBatchDoubtStats(selectedBatchName, selectedSubject) : null;
-    const targetSolved = currentDoubtStats ? currentDoubtStats.solvedPct : (batchSummary?.doubts?.solved_pct ?? 100);
+    const targetSolved = batchSummary?.doubts?.solved_pct ?? 100;
     const targetSyllabus = syllabusStats.pct || 0;
 
     setAnimatedStudents(0);
@@ -438,7 +428,7 @@ const Dashboard = ({ onNavigate, user }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedBatch, selectedSubject, batchSummary, syllabusStats.pct, bothSelected]);
 
-  const targetPendingDoubts = liveDoubtStats ? liveDoubtStats.pending : (batchSummary?.doubts?.pending ?? 0);
+  const targetPendingDoubts = batchSummary?.doubts?.pending ?? 0;
 
   return (
     <div className="dashboard-wrapper">

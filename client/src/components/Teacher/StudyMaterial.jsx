@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import EducationIllustration from './EducationIllustration';
+import realisticEducationSvg from '../../assets/digitute_realistic_education_resized.svg';
 import { apiRequest } from '../../api';
 
 export function StudyMaterial() {
@@ -341,7 +341,13 @@ export function StudyMaterial() {
           </div>
 
           <div className="sm-hero-illustration" aria-hidden="true">
-            <EducationIllustration />
+            <div className="education-illustration-wrap">
+              <img
+                src={realisticEducationSvg}
+                alt="DigiTute educational illustration"
+                className="education-illustration-img"
+              />
+            </div>
           </div>
         </section>
 

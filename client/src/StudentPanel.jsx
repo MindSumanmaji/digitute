@@ -59,6 +59,66 @@ export default function StudentPanel({ onBackToLanding }) {
   const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
 
+  // Live Database Notices & Read tracking
+  const [notices, setNotices] = useState([]);
+  const [readNoticeIds, setReadNoticeIds] = useState(() => {
+    try {
+      const saved = localStorage.getItem('digitute_student_read_notices');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  // Fetch notices from live API
+  const fetchNotices = () => {
+    apiRequest('/api/student/notices')
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setNotices(data);
+        }
+      })
+      .catch((err) => {
+        console.warn('Student notices notification fetch error:', err.message);
+      });
+  };
+
+  useEffect(() => {
+    fetchNotices();
+  }, []);
+
+  const handleMarkNoticeAsRead = (notice) => {
+    if (!notice?.id) return;
+    setReadNoticeIds((prev) => {
+      if (prev.includes(notice.id)) return prev;
+      const updated = [...prev, notice.id];
+      try {
+        localStorage.setItem('digitute_student_read_notices', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+    setActiveTab('announcements');
+  };
+
+  const handleClearAllNotices = () => {
+    const allIds = notices.map((n) => n.id);
+    setReadNoticeIds(allIds);
+    try {
+      localStorage.setItem('digitute_student_read_notices', JSON.stringify(allIds));
+    } catch {}
+  };
+
+  // If student visits announcements tab, automatically mark all current notices as read
+  useEffect(() => {
+    if (activeTab === 'announcements' && notices.length > 0) {
+      const allIds = notices.map((n) => n.id);
+      setReadNoticeIds(allIds);
+      try {
+        localStorage.setItem('digitute_student_read_notices', JSON.stringify(allIds));
+      } catch {}
+    }
+  }, [activeTab, notices]);
+
   // Modals state
   const [payModalOpen, setPayModalOpen] = useState(false);
   const [paymentDone, setPaymentDone] = useState(false);
@@ -136,6 +196,10 @@ export default function StudentPanel({ onBackToLanding }) {
           mobileSidebarOpen={mobileSidebarOpen}
           setMobileSidebarOpen={setMobileSidebarOpen}
           user={currentUser}
+          notices={notices}
+          readNoticeIds={readNoticeIds}
+          onNoticeClick={handleMarkNoticeAsRead}
+          onClearAllNotices={handleClearAllNotices}
         />
 
         {/* TAB CONTENTS */}

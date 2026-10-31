@@ -1,14 +1,40 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import TeacherNotificationPanel from './TeacherNotificationPanel';
 
 export function Header({
   activePage = 'dashboard',
-  hasNotifications = true,
+  hasNotifications = false,
   onToggleSidebar,
   onNotificationClick,
   onProfileClick,
   onTabChange,
-  user
+  user,
+  notices = [],
+  readNoticeIds = [],
+  onNoticeClick,
+  onClearAllNotices,
 }) {
+  const [notificationOpen, setNotificationOpen] = useState(false);
+  const notifRef = useRef(null);
+
+  // Unread calculation
+  const unreadNotices = notices.filter((n) => !readNoticeIds.includes(n.id));
+  const hasUnread = unreadNotices.length > 0;
+
+  // Close popup when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (notifRef.current && !notifRef.current.contains(event.target)) {
+        setNotificationOpen(false);
+      }
+    }
+    if (notificationOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [notificationOpen]);
   const getStoredTeacher = () => {
     let name = user?.full_name || 'Sudipta Mondal';
     let username = user?.email ? `@${user.email.split('@')[0]}` : '@sudipta';
@@ -143,27 +169,50 @@ export function Header({
 
         {/* Right: Notification Bell & Profile Avatar */}
         <div className="dt-header-actions">
-          {/* Notifications Button */}
-          <button
-            type="button"
-            className="dt-header-icon-btn"
-            onClick={onNotificationClick}
-            aria-label="Notifications"
-            title="Notifications"
-          >
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="#1E293B"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
+          {/* Notifications Button & Dropdown */}
+          <div ref={notifRef} style={{ position: 'relative' }}>
+            <button
+              type="button"
+              className="dt-header-icon-btn"
+              onClick={() => setNotificationOpen((prev) => !prev)}
+              aria-label="Notifications"
+              title="Notifications"
+              style={{
+                color: hasUnread ? '#EF4444' : '#1E293B',
+                borderColor: hasUnread ? '#FCA5A5' : '',
+                background: hasUnread ? '#FEF2F2' : '',
+              }}
             >
-              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-              <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-            </svg>
-            {hasNotifications && <span className="dt-header-badge-dot" aria-label="New notifications" />}
-          </button>
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke={hasUnread ? '#EF4444' : '#1E293B'}
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+              </svg>
+              {hasUnread && <span className="dt-header-badge-dot" aria-label="New notifications" />}
+            </button>
+
+            {notificationOpen && (
+              <TeacherNotificationPanel
+                notices={unreadNotices}
+                unreadCount={unreadNotices.length}
+                onNoticeClick={(notice) => {
+                  setNotificationOpen(false);
+                  if (onNoticeClick) {
+                    onNoticeClick(notice);
+                  } else if (onTabChange) {
+                    onTabChange('notice');
+                  }
+                }}
+                onClearAll={onClearAllNotices}
+              />
+            )}
+          </div>
 
           {/* Profile Button with Teacher Photo */}
           <div

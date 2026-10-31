@@ -339,17 +339,17 @@ def get_batch_students(
             att_info = student_att.get(sid)
             if att_info and att_info["total"] > 0:
                 att_pct = round((att_info["present"] / att_info["total"]) * 100)
+                if att_pct >= 90:
+                    att_status = "Excellent"
+                elif att_pct >= 80:
+                    att_status = "Good"
+                elif att_pct >= 70:
+                    att_status = "Average"
+                else:
+                    att_status = "Below Average"
             else:
-                att_pct = 100
-
-            if att_pct >= 90:
-                att_status = "Excellent"
-            elif att_pct >= 80:
-                att_status = "Good"
-            elif att_pct >= 70:
-                att_status = "Average"
-            else:
-                att_status = "Below Average"
+                att_pct = None
+                att_status = "No Classes"
 
             # Calculate grade from actual exam scores
             scores = student_exam_scores.get(sid, [])
@@ -368,7 +368,7 @@ def get_batch_students(
                 else:
                     grade = "D"
             else:
-                grade = "A"
+                grade = "N/A"
 
             clean_phone = s.get("phone") or ""
             if clean_phone.startswith("+91"):
@@ -400,6 +400,91 @@ def get_batch_students(
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
+
+
+
+@router.get("/students/{student_id}/performance", summary="Get Live Exam Evaluation History for Student")
+def get_student_exam_performance(
+    student_id: str,
+    batch_id: Optional[str] = None,
+    subject: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    try:
+        supabase = get_supabase_client()
+        query = supabase.table("exams").select("id, title, total_marks, exam_date, subject, batch_id, results").eq("is_active", True)
+        if batch_id:
+            query = query.eq("batch_id", batch_id)
+        if subject:
+            query = query.ilike("subject", subject.strip())
+            
+        ex_res = query.order("exam_date", desc=True).execute()
+        exams = ex_res.data or []
+        
+        history = []
+        valid_scores = []
+        
+        for ex in exams:
+            results = ex.get("results") or []
+            total_m = float(ex.get("total_marks") or 100)
+            
+            for r in results:
+                if str(r.get("student_id")) == str(student_id):
+                    is_abs = bool(r.get("is_absent"))
+                    obtained = r.get("marks_obtained")
+                    pct = None
+                    grade = "N/A"
+                    if not is_abs and obtained is not None:
+                        try:
+                            obt = float(obtained)
+                            pct = round((obt / total_m) * 100) if total_m > 0 else 0
+                            valid_scores.append(pct)
+                            if pct >= 90: grade = "A+"
+                            elif pct >= 80: grade = "A"
+                            elif pct >= 70: grade = "B+"
+                            elif pct >= 60: grade = "B"
+                            elif pct >= 50: grade = "C"
+                            else: grade = "D"
+                        except (ValueError, TypeError):
+                            pass
+                            
+                    history.append({
+                        "examId": ex.get("id"),
+                        "examTitle": ex.get("title") or "Class Exam",
+                        "subject": ex.get("subject") or "General",
+                        "examDate": ex.get("exam_date") or "",
+                        "totalMarks": total_m,
+                        "obtainedMarks": obtained,
+                        "isAbsent": is_abs,
+                        "percentage": pct,
+                        "grade": grade
+                    })
+                    break
+
+        if valid_scores:
+            avg_pct = round(sum(valid_scores) / len(valid_scores))
+            if avg_pct >= 90: overall_grade = "A+"
+            elif avg_pct >= 80: overall_grade = "A"
+            elif avg_pct >= 70: overall_grade = "B+"
+            elif avg_pct >= 60: overall_grade = "B"
+            elif avg_pct >= 50: overall_grade = "C"
+            else: overall_grade = "D"
+        else:
+            avg_pct = None
+            overall_grade = "N/A"
+
+        return {
+            "hasExams": len(valid_scores) > 0,
+            "overallGrade": overall_grade,
+            "avgPercentage": avg_pct,
+            "totalExamsCount": len(history),
+            "evaluatedCount": len(valid_scores),
+            "absentCount": sum(1 for h in history if h.get("isAbsent")),
+            "history": history
+        }
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
 
 # ==============================================================================
 # 2. CLASS SESSIONS & ATTENDANCE

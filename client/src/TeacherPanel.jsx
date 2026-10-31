@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { apiRequest } from './api';
 import { Routes, Route, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import Header from './components/Teacher/Header';
 import Sidebar from './components/Teacher/Sidebar';
@@ -87,6 +88,65 @@ export function TeacherPanel({ onBackToLanding }) {
     }
   });
 
+  // Live Database Notices & Read tracking for Teacher
+  const [notices, setNotices] = useState([]);
+  const [readNoticeIds, setReadNoticeIds] = useState(() => {
+    try {
+      const saved = localStorage.getItem('digitute_teacher_read_notices');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const fetchNotices = () => {
+    apiRequest('/api/teacher/notices')
+      .then((data) => {
+        if (Array.isArray(data)) {
+          setNotices(data);
+        }
+      })
+      .catch((err) => {
+        console.warn('Teacher notices notification fetch error:', err.message);
+      });
+  };
+
+  useEffect(() => {
+    fetchNotices();
+  }, []);
+
+  const handleMarkNoticeAsRead = (notice) => {
+    if (!notice?.id) return;
+    setReadNoticeIds((prev) => {
+      if (prev.includes(notice.id)) return prev;
+      const updated = [...prev, notice.id];
+      try {
+        localStorage.setItem('digitute_teacher_read_notices', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+    handleTabChange('notice');
+  };
+
+  const handleClearAllNotices = () => {
+    const allIds = notices.map((n) => n.id);
+    setReadNoticeIds(allIds);
+    try {
+      localStorage.setItem('digitute_teacher_read_notices', JSON.stringify(allIds));
+    } catch {}
+  };
+
+  // If teacher visits notice tab, automatically mark notices as read
+  useEffect(() => {
+    if (activeTab === 'notice' && notices.length > 0) {
+      const allIds = notices.map((n) => n.id);
+      setReadNoticeIds(allIds);
+      try {
+        localStorage.setItem('digitute_teacher_read_notices', JSON.stringify(allIds));
+      } catch {}
+    }
+  }, [activeTab, notices]);
+
   // Listen to profile updates (e.g. avatar upload, email, name)
   useEffect(() => {
     const handleProfileUpdate = () => {
@@ -155,10 +215,13 @@ export function TeacherPanel({ onBackToLanding }) {
           onToggleSidebar={() => setIsSidebarOpen(prev => !prev)}
           onHomeClick={() => handleTabChange('dashboard')} 
           onLogoClick={() => handleTabChange('dashboard')}
-          onNotificationClick={() => handleTabChange('settings')}
           onProfileClick={() => handleTabChange('profile')}
           onTabChange={handleTabChange}
           user={currentUser}
+          notices={notices}
+          readNoticeIds={readNoticeIds}
+          onNoticeClick={handleMarkNoticeAsRead}
+          onClearAllNotices={handleClearAllNotices}
         />
 
         {/* Page Content */}

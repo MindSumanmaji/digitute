@@ -1,11 +1,61 @@
-import React from 'react';
-import { getStudentOverallPerformance, getGradeBadgeStyle } from '../../data/academicData';
+import React, { useState, useEffect } from 'react';
+import { apiRequest } from '../../api';
 
 export function AcademicPerformanceModal({ student, batch, onClose }) {
+  const [loading, setLoading] = useState(true);
+  const [performance, setPerformance] = useState(null);
+
+  useEffect(() => {
+    if (!student?.id) return;
+    let isMounted = true;
+    setLoading(true);
+
+    const params = new URLSearchParams();
+    if (student.batch_id) params.set('batch_id', student.batch_id);
+
+    apiRequest(`/api/teacher/students/${student.id}/performance?${params.toString()}`)
+      .then((data) => {
+        if (!isMounted) return;
+        setPerformance(data);
+      })
+      .catch((err) => {
+        console.warn('Failed to load live exam performance:', err);
+        if (!isMounted) return;
+        setPerformance({
+          hasExams: false,
+          overallGrade: student.grade || 'N/A',
+          avgPercentage: null,
+          totalExamsCount: 0,
+          evaluatedCount: 0,
+          absentCount: 0,
+          history: []
+        });
+      })
+      .finally(() => {
+        if (isMounted) setLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [student?.id, student?.batch_id, student?.grade]);
+
   if (!student) return null;
 
-  const performance = getStudentOverallPerformance(student.id, batch, student.grade);
-  const gradeStyle = getGradeBadgeStyle(performance.overallGrade);
+  const getGradeStyle = (grade) => {
+    switch (grade) {
+      case 'A+': return { color: '#047857', background: '#D1FAE5', borderColor: '#A7F3D0' };
+      case 'A':  return { color: '#1D4ED8', background: '#DBEAFE', borderColor: '#BFDBFE' };
+      case 'B+': return { color: '#0284C7', background: '#E0F2FE', borderColor: '#BAE6FD' };
+      case 'B':  return { color: '#4F46E5', background: '#EEF2FF', borderColor: '#E0E7FF' };
+      case 'C':  return { color: '#D97706', background: '#FEF3C7', borderColor: '#FDE68A' };
+      case 'D':  return { color: '#DC2626', background: '#FEE2E2', borderColor: '#FECACA' };
+      default:   return { color: '#64748B', background: '#F1F5F9', borderColor: '#E2E8F0' };
+    }
+  };
+
+  const overallGrade = performance?.overallGrade || student.grade || 'N/A';
+  const gradeStyle = getGradeStyle(overallGrade);
 
   return (
     <div className="si-perf-overlay" onClick={onClose} role="dialog" aria-modal="true">
@@ -14,11 +64,11 @@ export function AcademicPerformanceModal({ student, batch, onClose }) {
         <div className="si-perf-header">
           <div className="si-perf-student-meta">
             <div className="si-perf-avatar" aria-hidden="true">
-              {student.name.slice(0, 2).toUpperCase()}
+              {student.name ? student.name.slice(0, 2).toUpperCase() : 'ST'}
             </div>
             <div>
               <h3 className="si-perf-name">{student.name}</h3>
-              <span className="si-perf-roll">Roll: {student.roll} • {batch}</span>
+              <span className="si-perf-roll">{batch || student.batch_name}</span>
             </div>
           </div>
           <button
@@ -44,9 +94,9 @@ export function AcademicPerformanceModal({ student, batch, onClose }) {
                   borderColor: gradeStyle.borderColor,
                 }}
               >
-                {performance.overallGrade}
+                {overallGrade}
               </span>
-              {performance.avgPercentage !== null && (
+              {performance?.avgPercentage !== null && performance?.avgPercentage !== undefined && (
                 <span className="si-perf-avg-pct">
                   Average Score: <strong>{performance.avgPercentage}%</strong>
                 </span>
@@ -55,9 +105,9 @@ export function AcademicPerformanceModal({ student, batch, onClose }) {
           </div>
           <div className="si-perf-grade-right">
             <span className="si-perf-source-tag">
-              {performance.hasExams
+              {performance?.hasExams
                 ? `Computed from ${performance.evaluatedCount} Exam(s)`
-                : 'Baseline Initial Grade'}
+                : 'No Exam Records Yet'}
             </span>
           </div>
         </div>
@@ -73,11 +123,15 @@ export function AcademicPerformanceModal({ student, batch, onClose }) {
             <span>Exam Evaluation Records</span>
           </h4>
 
-          {performance.history && performance.history.length > 0 ? (
+          {loading ? (
+            <div style={{ padding: '32px', textAlign: 'center', color: '#64748B', fontSize: '13px' }}>
+              Fetching live exam records from database...
+            </div>
+          ) : performance?.history && performance.history.length > 0 ? (
             <div className="si-perf-exam-list">
               {performance.history.map((exam, idx) => {
                 const isAbs = exam.isAbsent;
-                const exGradeStyle = !isAbs ? getGradeBadgeStyle(exam.grade) : null;
+                const exGradeStyle = !isAbs ? getGradeStyle(exam.grade) : null;
 
                 return (
                   <div key={exam.examId || idx} className="si-perf-exam-card">
@@ -133,7 +187,11 @@ export function AcademicPerformanceModal({ student, batch, onClose }) {
             <span className="si-perf-att-label">Attendance Status</span>
             <div className="si-perf-att-val">
               <span className="si-perf-att-badge">{student.attendance}</span>
-              <span className="si-perf-att-pct">({student.attendancePct}% Recorded)</span>
+              {student.attendancePct !== null && student.attendancePct !== undefined ? (
+                <span className="si-perf-att-pct">({student.attendancePct}% Recorded)</span>
+              ) : (
+                <span className="si-perf-att-pct" style={{ color: '#94A3B8' }}>(No sessions held)</span>
+              )}
             </div>
           </div>
         </div>
