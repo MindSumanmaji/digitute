@@ -1,6 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { apiRequest } from '../../api';
-import { getStudentOverallPerformance } from '../../data/academicData';
 import AcademicPerformanceModal from './AcademicPerformanceModal';
 
 /* ══════════════════════════════════════════════════════════════════════════

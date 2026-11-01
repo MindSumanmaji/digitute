@@ -10,7 +10,6 @@ export function Attendance({ onBack, _onNavigate, initialBatch, initialSubject }
 
   // Scheduled sessions state
   const [sessions, setSessions] = useState([]);
-  const [loadingSessions, setLoadingSessions] = useState(false);
   const [selectedSessionId, setSelectedSessionId] = useState('');
   const [sessionDetails, setSessionDetails] = useState(null);
 

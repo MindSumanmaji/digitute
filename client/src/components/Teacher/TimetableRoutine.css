@@ -414,12 +414,6 @@
   color: #1E293B;
 }
 
-.tr-class-topic-meta {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: #64748B;
-}
 
 .tr-class-status-pill {
   display: inline-flex;
@@ -462,13 +456,6 @@
   color: #0F172A;
 }
 
-.tr-week-helper-hint {
-  font-size: 0.82rem;
-  color: #64748B;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
 
 .tr-week-boxes-grid {
   display: grid;
@@ -535,11 +522,6 @@
   opacity: 0.72;
 }
 
-.tr-week-box-top {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
 
 .tr-week-day-title {
   font-size: 0.92rem;
@@ -554,12 +536,6 @@
   color: #64748B;
 }
 
-.tr-week-box-middle {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 12px 0;
-}
 
 .tr-week-count-badge {
   display: inline-flex;
@@ -584,21 +560,6 @@
   border: 1px solid #E2E8F0;
 }
 
-.tr-week-box-bottom {
-  font-size: 0.74rem;
-  font-weight: 600;
-  color: #4F46E5;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  min-height: 18px;
-}
-
-.tr-week-day-box.disabled .tr-week-box-bottom {
-  color: #94A3B8;
-  font-weight: 500;
-}
 
 /* ==========================================================================
    3. THIS MONTH VIEW (CALENDAR WITH DOT INDICATORS)
@@ -960,13 +921,6 @@
   color: #334155;
 }
 
-.tr-modal-class-topic-row {
-  font-size: 0.82rem;
-  color: #64748B;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
 
 .tr-modal-footer {
   padding: 16px 24px;
@@ -1483,14 +1437,6 @@
   font-weight: 500;
 }
 
-.rsc-class-topic {
-  font-size: 0.75rem;
-  color: #94A3B8;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  margin-top: 2px;
-}
 
 .rsc-class-right-col {
   display: flex;
