@@ -56,6 +56,22 @@ const toLocalDateString = (d) => {
   return `${year}-${month}-${day}`;
 };
 
+// Helper: Format Date string to DD/MM/YYYY
+const formatDateDMY = (dateStr) => {
+  if (!dateStr) return '';
+  if (typeof dateStr === 'string' && dateStr.includes('-')) {
+    const [y, m, d] = dateStr.split('T')[0].split('-');
+    if (y && m && d) return `${d.padStart(2, '0')}/${m.padStart(2, '0')}/${y}`;
+  }
+  return dateStr;
+};
+
+// Helper: Ensure any ISO date in audit message (e.g. "Rescheduled to 2026-11-22 from...") is formatted as DD/MM/YYYY
+const formatAuditText = (text) => {
+  if (!text) return '';
+  return text.replace(/(\d{4})-(\d{2})-(\d{2})/g, '$3/$2/$1');
+};
+
 // Helper: Get Monday of the week for a given date
 const getMondayOfWeek = (d) => {
   const date = new Date(d);
@@ -206,7 +222,7 @@ export default function TimetableRoutine({ onNavigate, user }) {
   const getClassesForDate = useCallback(
     (targetDateStr, dayOfWeek) => {
       const matchedSessions = sessions.filter(
-        (s) => s.session_date === targetDateStr && s.status !== 'CANCELLED'
+        (s) => s.session_date === targetDateStr
       );
 
       if (matchedSessions.length > 0) {
@@ -219,7 +235,10 @@ export default function TimetableRoutine({ onNavigate, user }) {
             endTime: s.end_time,
             status: s.status || 'SCHEDULED',
             topic: s.topic_covered || null,
-            type: 'SESSION'
+            type: 'SESSION',
+            rescheduledFromId: s.rescheduled_from_id || null,
+            rescheduledFromDate: s.rescheduled_from_date || null,
+            cancellationReason: s.cancellation_reason || null
           }))
           .sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''));
       }
@@ -382,15 +401,19 @@ export default function TimetableRoutine({ onNavigate, user }) {
     }
 
     // Step 2: Overlay concrete sessions (they can override or add to routine dots)
-    // If a session is CANCELLED, remove the dot (override routine dot to false for own)
+    // If a session is CANCELLED or RESCHEDULED, remove the dot for own session on this date
     for (const s of allMonthSessions) {
       const ds = s.session_date;
       if (!ds) continue;
-      if (s.status === 'CANCELLED') {
-        // If cancelled and is own, don't show own dot for this date if no other own session
-        // (we handle this by just not adding — the routine dot may still show;
-        //  for accurate cancellation, skip this date's own dot from routine side)
-        if (s.is_own && map[ds]) map[ds].own = false;
+      if (s.status === 'CANCELLED' || s.status === 'RESCHEDULED') {
+        if (s.is_own && map[ds]) {
+          const hasOtherActiveOwn = allMonthSessions.some(
+            (other) => other.session_date === ds && other.id !== s.id && other.is_own && other.status !== 'CANCELLED' && other.status !== 'RESCHEDULED'
+          );
+          if (!hasOtherActiveOwn) {
+            map[ds].own = false;
+          }
+        }
         continue;
       }
       if (!map[ds]) map[ds] = { own: false, other: false };
@@ -431,9 +454,74 @@ export default function TimetableRoutine({ onNavigate, user }) {
     return [...blanks, ...days];
   }, [rescheduleMonth, todayDateStr, selectedRescheduleDate, calendarDotsMap]);
 
-  // Sorted own and other sessions for selected date
-  const ownSessions = useMemo(() => allDateSessions.filter((s) => s.is_own), [allDateSessions]);
-  const otherSessions = useMemo(() => allDateSessions.filter((s) => !s.is_own), [allDateSessions]);
+  // Combined concrete sessions + master routines for selected date (consistent with My Schedule)
+  const ownSessions = useMemo(() => {
+    const dateStr = toLocalDateString(selectedRescheduleDate);
+    const jsDay = selectedRescheduleDate.getDay();
+    const dayOfWeek = jsDay === 0 ? 7 : jsDay;
+
+    // 1. Check if concrete own sessions exist for this date
+    const concreteOwn = allDateSessions.filter((s) => s.is_own && s.session_date === dateStr);
+    if (concreteOwn.length > 0) {
+      return concreteOwn;
+    }
+
+    // 2. Fall back to master routines for this day of week
+    const routineOwn = allRoutines
+      .filter((r) => r.is_own && Number(r.day_of_week) === dayOfWeek && r.is_active !== false)
+      .map((r) => ({
+        id: r.id,
+        routine_id: r.id,
+        session_date: dateStr,
+        batch_id: r.batch_id,
+        batches: r.batches,
+        subject: r.subject,
+        start_time: r.start_time,
+        end_time: r.end_time,
+        status: 'SCHEDULED',
+        is_own: true,
+        type: 'ROUTINE',
+        topic_covered: null,
+        cancellation_reason: null,
+        rescheduled_from_id: null,
+        rescheduled_from_date: null
+      }));
+
+    return routineOwn;
+  }, [allDateSessions, allRoutines, selectedRescheduleDate]);
+
+  const otherSessions = useMemo(() => {
+    const dateStr = toLocalDateString(selectedRescheduleDate);
+    const jsDay = selectedRescheduleDate.getDay();
+    const dayOfWeek = jsDay === 0 ? 7 : jsDay;
+
+    const concreteOther = allDateSessions.filter((s) => !s.is_own && s.session_date === dateStr);
+    if (concreteOther.length > 0) {
+      return concreteOther;
+    }
+
+    const routineOther = allRoutines
+      .filter((r) => !r.is_own && Number(r.day_of_week) === dayOfWeek && r.is_active !== false)
+      .map((r) => ({
+        id: r.id,
+        routine_id: r.id,
+        session_date: dateStr,
+        batch_id: r.batch_id,
+        batches: r.batches,
+        subject: r.subject,
+        start_time: r.start_time,
+        end_time: r.end_time,
+        status: 'SCHEDULED',
+        is_own: false,
+        type: 'ROUTINE',
+        topic_covered: null,
+        cancellation_reason: null,
+        rescheduled_from_id: null,
+        rescheduled_from_date: null
+      }));
+
+    return routineOther;
+  }, [allDateSessions, allRoutines, selectedRescheduleDate]);
 
   const formattedSelectedRescheduleDate = useMemo(() => {
     return formatDateFull(selectedRescheduleDate);
@@ -497,8 +585,9 @@ export default function TimetableRoutine({ onNavigate, user }) {
     setSubmittingAction(true);
     try {
       const sessionId = manageSessionModal.id;
+      const sourceDate = manageSessionModal.session_date || toLocalDateString(selectedRescheduleDate);
       await apiRequest(
-        `/api/teacher/sessions/${sessionId}/reschedule?new_date=${rescheduleForm.newDate}&new_start_time=${rescheduleForm.startTime}:00&new_end_time=${rescheduleForm.endTime}:00`,
+        `/api/teacher/sessions/${sessionId}/reschedule?new_date=${rescheduleForm.newDate}&new_start_time=${rescheduleForm.startTime}:00&new_end_time=${rescheduleForm.endTime}:00&source_date=${sourceDate}`,
         { method: 'POST' }
       );
       setActionSuccess('Class rescheduled successfully!');
@@ -519,8 +608,9 @@ export default function TimetableRoutine({ onNavigate, user }) {
     setSubmittingAction(true);
     try {
       const sessionId = manageSessionModal.id;
+      const sourceDate = manageSessionModal.session_date || toLocalDateString(selectedRescheduleDate);
       await apiRequest(
-        `/api/teacher/sessions/${sessionId}/cancel?reason=${encodeURIComponent(cancelReason)}`,
+        `/api/teacher/sessions/${sessionId}/cancel?reason=${encodeURIComponent(cancelReason)}&source_date=${sourceDate}`,
         { method: 'POST' }
       );
       setActionSuccess('Class cancelled successfully!');
@@ -685,13 +775,22 @@ export default function TimetableRoutine({ onNavigate, user }) {
                                 <Clock size={15} />
                                 {formatTimeRange(cls.startTime, cls.endTime)}
                               </span>
-                              {cls.topic && (
-                                <span className="tr-class-topic-meta">
-                                  <BookOpen size={14} />
-                                  {cls.topic}
-                                </span>
-                              )}
                             </div>
+                            {cls.status === 'RESCHEDULED' && cls.cancellationReason && (
+                              <div className="tr-reschedule-audit-info">
+                                <span>{formatAuditText(cls.cancellationReason)}</span>
+                              </div>
+                            )}
+                            {cls.rescheduledFromDate && (
+                              <div className="tr-reschedule-audit-info blue">
+                                <span>Rescheduled from {formatDateDMY(cls.rescheduledFromDate)}</span>
+                              </div>
+                            )}
+                            {cls.status === 'CANCELLED' && cls.cancellationReason && (
+                              <div className="tr-cancel-audit-info">
+                                <span>Reason: {cls.cancellationReason}</span>
+                              </div>
+                            )}
                           </div>
                           <div className="tr-class-card-right">
                             <span className={`tr-class-status-pill ${cls.status?.toLowerCase() || 'scheduled'}`}>
@@ -920,32 +1019,55 @@ export default function TimetableRoutine({ onNavigate, user }) {
               {ownSessions.length === 0 ? (
                 <div className="rsc-no-class-note">No classes scheduled for you on this date.</div>
               ) : (
-                ownSessions.map((cls) => (
-                  <div key={cls.id} className="rsc-class-card own">
-                    <div className="rsc-class-time-col">
-                      <span className="rsc-class-time-start">{formatTime12h(cls.start_time)}</span>
-                      <span className="rsc-class-time-end">{formatTime12h(cls.end_time)}</span>
+                ownSessions.map((cls, idx) => (
+                  <div key={cls.id || idx} className="rsc-class-card own">
+                    <div className="rsc-class-main-row">
+                      <div className="rsc-class-time-col">
+                        <span className="rsc-class-time-start">{formatTime12h(cls.start_time)}</span>
+                        <span className="rsc-class-time-end">{formatTime12h(cls.end_time)}</span>
+                      </div>
+                      <div className="rsc-class-info-col">
+                        <span className="rsc-class-batch">{cls.batches?.name || cls.batch_name || 'Batch'}</span>
+                        <span className="rsc-class-subject">{cls.subject}</span>
+                      </div>
+                      <div className="rsc-class-right-col">
+                        {cls.status === 'RESCHEDULED' ? (
+                          <span className="rsc-badge rescheduled">Rescheduled</span>
+                        ) : cls.status === 'CANCELLED' ? (
+                          <span className="rsc-badge cancelled">Cancelled</span>
+                        ) : cls.status === 'COMPLETED' ? (
+                          <span className="rsc-badge completed">Completed</span>
+                        ) : (
+                          <>
+                            <span className="rsc-badge own">Your Class</span>
+                            <button
+                              type="button"
+                              className="rsc-reschedule-btn"
+                              onClick={() => openManageModal(cls)}
+                            >
+                              <Pencil size={13} />
+                              Reschedule
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </div>
-                    <div className="rsc-class-info-col">
-                      <span className="rsc-class-batch">{cls.batches?.name || 'Batch'}</span>
-                      <span className="rsc-class-subject">{cls.subject}</span>
-                      {cls.topic_covered && (
-                        <span className="rsc-class-topic">
-                          <BookOpen size={12} /> {cls.topic_covered}
-                        </span>
-                      )}
-                    </div>
-                    <div className="rsc-class-right-col">
-                      <span className="rsc-badge own">Your Class</span>
-                      <button
-                        type="button"
-                        className="rsc-reschedule-btn"
-                        onClick={() => openManageModal(cls)}
-                      >
-                        <Pencil size={13} />
-                        Reschedule
-                      </button>
-                    </div>
+
+                    {cls.status === 'RESCHEDULED' && cls.cancellation_reason && (
+                      <div className="rsc-card-audit-row orange">
+                        <span>{formatAuditText(cls.cancellation_reason)}</span>
+                      </div>
+                    )}
+                    {cls.rescheduled_from_date && (
+                      <div className="rsc-card-audit-row blue">
+                        <span>Rescheduled from {formatDateDMY(cls.rescheduled_from_date)}</span>
+                      </div>
+                    )}
+                    {cls.status === 'CANCELLED' && cls.cancellation_reason && (
+                      <div className="rsc-card-audit-row red">
+                        <span>Reason: {cls.cancellation_reason}</span>
+                      </div>
+                    )}
                   </div>
                 ))
               )}
@@ -960,23 +1082,20 @@ export default function TimetableRoutine({ onNavigate, user }) {
               {otherSessions.length === 0 ? (
                 <div className="rsc-no-class-note">No other teachers' classes on this date.</div>
               ) : (
-                otherSessions.map((cls) => (
-                  <div key={cls.id} className="rsc-class-card other">
-                    <div className="rsc-class-time-col">
-                      <span className="rsc-class-time-start">{formatTime12h(cls.start_time)}</span>
-                      <span className="rsc-class-time-end">{formatTime12h(cls.end_time)}</span>
-                    </div>
-                    <div className="rsc-class-info-col">
-                      <span className="rsc-class-batch">{cls.batches?.name || 'Class'}</span>
-                      <span className="rsc-class-subject">{cls.subject}</span>
-                      {cls.topic_covered && (
-                        <span className="rsc-class-topic">
-                          <BookOpen size={12} /> {cls.topic_covered}
-                        </span>
-                      )}
-                    </div>
-                    <div className="rsc-class-right-col">
-                      <span className="rsc-badge other">Other Teacher</span>
+                otherSessions.map((cls, idx) => (
+                  <div key={cls.id || idx} className="rsc-class-card other">
+                    <div className="rsc-class-main-row">
+                      <div className="rsc-class-time-col">
+                        <span className="rsc-class-time-start">{formatTime12h(cls.start_time)}</span>
+                        <span className="rsc-class-time-end">{formatTime12h(cls.end_time)}</span>
+                      </div>
+                      <div className="rsc-class-info-col">
+                        <span className="rsc-class-batch">{cls.batches?.name || cls.batch_name || 'Class'}</span>
+                        <span className="rsc-class-subject">{cls.subject}</span>
+                      </div>
+                      <div className="rsc-class-right-col">
+                        <span className="rsc-badge other">Other Teacher</span>
+                      </div>
                     </div>
                   </div>
                 ))
@@ -1028,10 +1147,19 @@ export default function TimetableRoutine({ onNavigate, user }) {
                     <Clock size={15} />
                     <span>Timing: {formatTimeRange(cls.startTime, cls.endTime)}</span>
                   </div>
-                  {cls.topic && (
-                    <div className="tr-modal-class-topic-row">
-                      <BookOpen size={14} />
-                      <span>Topic: {cls.topic}</span>
+                  {cls.status === 'RESCHEDULED' && cls.cancellationReason && (
+                    <div className="tr-reschedule-audit-info">
+                      <span>{formatAuditText(cls.cancellationReason)}</span>
+                    </div>
+                  )}
+                  {cls.rescheduledFromDate && (
+                    <div className="tr-reschedule-audit-info blue">
+                      <span>Rescheduled from {formatDateDMY(cls.rescheduledFromDate)}</span>
+                    </div>
+                  )}
+                  {cls.status === 'CANCELLED' && cls.cancellationReason && (
+                    <div className="tr-cancel-audit-info">
+                      <span>Reason: {cls.cancellationReason}</span>
                     </div>
                   )}
                 </div>

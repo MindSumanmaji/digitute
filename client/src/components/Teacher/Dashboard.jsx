@@ -193,7 +193,7 @@ const Dashboard = ({ onNavigate, user }) => {
 
     // Find any non-cancelled session happening right now
     const activeSession = sessions.find((s) => {
-      if (s.status === 'CANCELLED') return false;
+      if (s.status === 'CANCELLED' || s.status === 'RESCHEDULED') return false;
       const startMins = parseTimeToMinutes(s.start_time);
       const endMins = parseTimeToMinutes(s.end_time);
       if (startMins === null || endMins === null) return false;

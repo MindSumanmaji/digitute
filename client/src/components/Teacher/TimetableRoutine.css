@@ -1416,13 +1416,21 @@
 /* Class Cards */
 .rsc-class-card {
   display: flex;
-  align-items: flex-start;
-  gap: 12px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
   padding: 12px 14px;
   border-radius: 12px;
   border: 1px solid #E2E8F0;
   background: #FAFBFC;
   border-left-width: 4px;
+}
+
+.rsc-class-main-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
 }
 
 .rsc-class-card.own {
@@ -1964,4 +1972,72 @@
   font-weight: 600;
   color: #16a34a;
   margin: 0;
+}
+
+/* --------------------------------------------------------------------------
+   Rescheduled / Cancelled Status Badges & Audit Trails
+   -------------------------------------------------------------------------- */
+.tr-class-status-pill.rescheduled {
+  background: #FFF7ED;
+  color: #EA580C;
+}
+
+.rsc-badge.rescheduled {
+  background: #FFEDD5;
+  color: #C2410C;
+}
+
+.rsc-badge.cancelled {
+  background: #FEE2E2;
+  color: #B91C1C;
+}
+
+.rsc-badge.completed {
+  background: #DCFCE7;
+  color: #15803D;
+}
+
+.rsc-card-audit-row {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed #E2E8F0;
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.4;
+  width: 100%;
+  text-align: left;
+}
+
+.rsc-card-audit-row.orange {
+  color: #D97706;
+}
+
+.rsc-card-audit-row.blue {
+  color: #2563EB;
+}
+
+.rsc-card-audit-row.red {
+  color: #DC2626;
+}
+
+.tr-reschedule-audit-info,
+.tr-cancel-audit-info {
+  font-size: 0.8rem;
+  font-weight: 600;
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  line-height: 1.4;
+}
+
+.tr-reschedule-audit-info {
+  color: #D97706;
+}
+
+.tr-reschedule-audit-info.blue {
+  color: #2563EB;
+}
+
+.tr-cancel-audit-info {
+  color: #DC2626;
 }

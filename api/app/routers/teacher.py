@@ -23,6 +23,7 @@ import uuid
 import os
 import re
 import traceback
+import calendar
 
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50 MiB limit
 
@@ -503,7 +504,7 @@ def get_teacher_sessions(
         role = current_user.get("role")
         teacher_id = current_user.get("id")
         
-        query = supabase.table("class_sessions").select("*, batches(name)").neq("status", "CANCELLED")
+        query = supabase.table("class_sessions").select("*, batches(name)")
         
         if role == "TEACHER":
             query = query.eq("teacher_id", teacher_id)
@@ -511,7 +512,12 @@ def get_teacher_sessions(
         if session_date:
             query = query.eq("session_date", session_date)
         elif month:
-            query = query.gte("session_date", f"{month}-01").lte("session_date", f"{month}-31")
+            try:
+                y, m = [int(p) for p in month.split("-")[:2]]
+                _, last_day = calendar.monthrange(y, m)
+                query = query.gte("session_date", f"{month}-01").lte("session_date", f"{month}-{last_day:02d}")
+            except Exception:
+                query = query.gte("session_date", f"{month}-01").lte("session_date", f"{month}-28")
         else:
             if start_date:
                 query = query.gte("session_date", start_date)
@@ -537,9 +543,28 @@ def get_teacher_sessions(
                     att_counts[sid]["present"] += 1
                 elif a.get("status") == "ABSENT":
                     att_counts[sid]["absent"] += 1
+
+            parent_ids = [s["rescheduled_from_id"] for s in sessions if s.get("rescheduled_from_id")]
+            parent_map = {}
+            if parent_ids:
+                try:
+                    p_res = supabase.table("class_sessions").select("id, session_date, start_time, end_time").in_("id", parent_ids).execute()
+                    for p in p_res.data or []:
+                        parent_map[p["id"]] = p
+                except Exception:
+                    pass
                     
             for s in sessions:
                 s["attendance_summary"] = att_counts.get(s["id"], None)
+                if s.get("rescheduled_from_id") and s["rescheduled_from_id"] in parent_map:
+                    p = parent_map[s["rescheduled_from_id"]]
+                    s["rescheduled_from_date"] = p.get("session_date")
+                    s["rescheduled_from_start_time"] = p.get("start_time")
+                    s["rescheduled_from_end_time"] = p.get("end_time")
+                else:
+                    s["rescheduled_from_date"] = None
+                    s["rescheduled_from_start_time"] = None
+                    s["rescheduled_from_end_time"] = None
                 
         return sessions
     except Exception as e:
@@ -568,18 +593,51 @@ def get_all_sessions_for_reschedule(
         if session_date:
             query = query.eq("session_date", session_date)
         elif month:
-            query = query.gte("session_date", f"{month}-01").lte("session_date", f"{month}-31")
+            try:
+                y, m = [int(p) for p in month.split("-")[:2]]
+                _, last_day = calendar.monthrange(y, m)
+                query = query.gte("session_date", f"{month}-01").lte("session_date", f"{month}-{last_day:02d}")
+            except Exception:
+                query = query.gte("session_date", f"{month}-01").lte("session_date", f"{month}-28")
 
         res = query.order("session_date").order("start_time").execute()
         sessions = res.data or []
 
+        parent_ids = [s["rescheduled_from_id"] for s in sessions if s.get("rescheduled_from_id")]
+        parent_map = {}
+        if parent_ids:
+            try:
+                p_res = supabase.table("class_sessions").select("id, session_date, start_time, end_time").in_("id", parent_ids).execute()
+                for p in p_res.data or []:
+                    parent_map[p["id"]] = p
+            except Exception:
+                pass
+
         for s in sessions:
             s["is_own"] = (s.get("teacher_id") == teacher_id)
+            if s.get("rescheduled_from_id") and s["rescheduled_from_id"] in parent_map:
+                p = parent_map[s["rescheduled_from_id"]]
+                s["rescheduled_from_date"] = p.get("session_date")
+                s["rescheduled_from_start_time"] = p.get("start_time")
+                s["rescheduled_from_end_time"] = p.get("end_time")
+            else:
+                s["rescheduled_from_date"] = None
+                s["rescheduled_from_start_time"] = None
+                s["rescheduled_from_end_time"] = None
 
         return sessions
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+def _format_date_dmy(d_str: str) -> str:
+    try:
+        parts = d_str.strip().split("-")
+        if len(parts) == 3:
+            return f"{parts[2]}/{parts[1]}/{parts[0]}"
+    except Exception:
+        pass
+    return d_str
 
 @router.post("/sessions/{session_id}/reschedule", summary="Reschedule a class session to a new date/time")
 def reschedule_session(
@@ -587,34 +645,118 @@ def reschedule_session(
     new_date: str,
     new_start_time: str,
     new_end_time: str,
+    source_date: Optional[str] = None,
     current_user: dict = Depends(get_current_user)
 ):
-    """Reschedule a session: updates session_date, start_time, end_time, status=SCHEDULED."""
+    """Reschedule a session or master routine:
+    1. If session_id is a concrete class_session, updates its status to RESCHEDULED with cancellation_reason audit text, preserving original date.
+    2. If session_id is a master routine, creates a concrete class_session on source_date with status=RESCHEDULED.
+    3. Inserts a new concrete session on new_date with status=SCHEDULED and rescheduled_from_id pointing to original session.
+    """
     try:
         supabase = get_supabase_client()
         teacher_id = current_user.get("id")
         role = current_user.get("role")
+        now_iso = datetime.now(timezone.utc).isoformat()
+        clean_start = new_start_time[:5]
+        clean_end = new_end_time[:5]
 
-        # Verify session exists and belongs to this teacher (unless ADMIN)
-        sess_res = supabase.table("class_sessions").select("id, teacher_id, status").eq("id", session_id).execute()
-        if not sess_res.data:
-            raise HTTPException(status_code=404, detail="Session not found")
+        # Check if session exists in class_sessions
+        sess_res = supabase.table("class_sessions").select("*").eq("id", session_id).execute()
+        if sess_res.data:
+            current_session = sess_res.data[0]
+            if role == "TEACHER" and current_session.get("teacher_id") != teacher_id:
+                raise HTTPException(status_code=403, detail="You can only reschedule your own sessions")
 
-        sess = sess_res.data[0]
-        if role == "TEACHER" and sess.get("teacher_id") != teacher_id:
-            raise HTTPException(status_code=403, detail="You can only reschedule your own sessions")
+            if current_session.get("status") == "CANCELLED":
+                raise HTTPException(status_code=400, detail="Cannot reschedule a cancelled class session")
+            if current_session.get("status") == "COMPLETED":
+                raise HTTPException(status_code=400, detail="Cannot reschedule an already completed class session")
+            if current_session.get("status") == "RESCHEDULED":
+                raise HTTPException(status_code=400, detail="This session has already been rescheduled")
 
-        update_payload = {
-            "session_date": new_date,
-            "start_time": new_start_time,
-            "end_time": new_end_time,
-            "status": "SCHEDULED",
-            "updated_at": datetime.now(timezone.utc).isoformat()
-        }
-        result = supabase.table("class_sessions").update(update_payload).eq("id", session_id).execute()
-        updated = result.data[0] if result.data else {}
+            # Step 1: Audit trail - update current session to RESCHEDULED, preserving its session_date & times
+            supabase.table("class_sessions").update({
+                "status": "RESCHEDULED",
+                "cancellation_reason": f"Rescheduled to {_format_date_dmy(new_date)} from {clean_start} to {clean_end}",
+                "updated_at": now_iso
+            }).eq("id", session_id).execute()
 
-        return {"message": "Session rescheduled successfully", "session": updated}
+            # Step 2: Create new session linked via rescheduled_from_id
+            new_payload = {
+                "routine_id": current_session.get("routine_id"),
+                "batch_id": current_session["batch_id"],
+                "subject": current_session["subject"],
+                "teacher_id": current_session.get("teacher_id"),
+                "session_date": new_date,
+                "start_time": new_start_time,
+                "end_time": new_end_time,
+                "status": "SCHEDULED",
+                "rescheduled_from_id": session_id,
+                "topic_covered": current_session.get("topic_covered"),
+                "created_at": now_iso,
+                "updated_at": now_iso
+            }
+            new_res = supabase.table("class_sessions").insert(new_payload).execute()
+            new_session = new_res.data[0] if new_res.data else new_payload
+
+            return {
+                "message": f"Session rescheduled successfully to {new_date}",
+                "original_session_id": session_id,
+                "session": new_session
+            }
+        else:
+            # Fallback: check if session_id is a master routine slot
+            rout_res = supabase.table("class_routines").select("*").eq("id", session_id).execute()
+            if not rout_res.data:
+                raise HTTPException(status_code=404, detail="Session or routine not found")
+
+            routine = rout_res.data[0]
+            if role == "TEACHER" and routine.get("teacher_id") != teacher_id:
+                raise HTTPException(status_code=403, detail="You can only reschedule your own routines")
+
+            orig_date = source_date or date.today().isoformat()
+
+            # Step 1: Create concrete session for orig_date with status=RESCHEDULED
+            orig_payload = {
+                "routine_id": routine["id"],
+                "batch_id": routine["batch_id"],
+                "subject": routine["subject"],
+                "teacher_id": routine["teacher_id"],
+                "session_date": orig_date,
+                "start_time": routine["start_time"],
+                "end_time": routine["end_time"],
+                "status": "RESCHEDULED",
+                "cancellation_reason": f"Rescheduled to {_format_date_dmy(new_date)} from {clean_start} to {clean_end}",
+                "created_at": now_iso,
+                "updated_at": now_iso
+            }
+            orig_res = supabase.table("class_sessions").insert(orig_payload).execute()
+            orig_session = orig_res.data[0] if orig_res.data else orig_payload
+            orig_id = orig_session.get("id")
+
+            # Step 2: Create new session on new_date with status=SCHEDULED
+            new_payload = {
+                "routine_id": routine["id"],
+                "batch_id": routine["batch_id"],
+                "subject": routine["subject"],
+                "teacher_id": routine["teacher_id"],
+                "session_date": new_date,
+                "start_time": new_start_time,
+                "end_time": new_end_time,
+                "status": "SCHEDULED",
+                "rescheduled_from_id": orig_id,
+                "created_at": now_iso,
+                "updated_at": now_iso
+            }
+            new_res = supabase.table("class_sessions").insert(new_payload).execute()
+            new_session = new_res.data[0] if new_res.data else new_payload
+
+            return {
+                "message": f"Routine class rescheduled successfully to {new_date}",
+                "original_session_id": orig_id,
+                "session": new_session
+            }
     except HTTPException:
         raise
     except Exception as e:
@@ -625,32 +767,58 @@ def reschedule_session(
 def cancel_session(
     session_id: str,
     reason: str = "",
+    source_date: Optional[str] = None,
     current_user: dict = Depends(get_current_user)
 ):
-    """Cancel a session: sets status=CANCELLED and stores cancel_reason."""
+    """Cancel a session: sets status=CANCELLED and stores cancellation_reason."""
     try:
         supabase = get_supabase_client()
         teacher_id = current_user.get("id")
         role = current_user.get("role")
+        now_iso = datetime.now(timezone.utc).isoformat()
 
-        # Verify session exists and belongs to this teacher (unless ADMIN)
+        # Check concrete class_sessions
         sess_res = supabase.table("class_sessions").select("id, teacher_id, status").eq("id", session_id).execute()
-        if not sess_res.data:
-            raise HTTPException(status_code=404, detail="Session not found")
+        if sess_res.data:
+            sess = sess_res.data[0]
+            if role == "TEACHER" and sess.get("teacher_id") != teacher_id:
+                raise HTTPException(status_code=403, detail="You can only cancel your own sessions")
 
-        sess = sess_res.data[0]
-        if role == "TEACHER" and sess.get("teacher_id") != teacher_id:
-            raise HTTPException(status_code=403, detail="You can only cancel your own sessions")
+            update_payload = {
+                "status": "CANCELLED",
+                "cancellation_reason": reason.strip() if reason else None,
+                "updated_at": now_iso
+            }
+            result = supabase.table("class_sessions").update(update_payload).eq("id", session_id).execute()
+            updated = result.data[0] if result.data else {}
 
-        update_payload = {
-            "status": "CANCELLED",
-            "cancel_reason": reason.strip() if reason else None,
-            "updated_at": datetime.now(timezone.utc).isoformat()
-        }
-        result = supabase.table("class_sessions").update(update_payload).eq("id", session_id).execute()
-        updated = result.data[0] if result.data else {}
+            return {"message": "Session cancelled successfully", "session": updated}
+        else:
+            # Fallback: check master routines
+            rout_res = supabase.table("class_routines").select("*").eq("id", session_id).execute()
+            if not rout_res.data:
+                raise HTTPException(status_code=404, detail="Session or routine not found")
 
-        return {"message": "Session cancelled successfully", "session": updated}
+            routine = rout_res.data[0]
+            if role == "TEACHER" and routine.get("teacher_id") != teacher_id:
+                raise HTTPException(status_code=403, detail="You can only cancel your own routines")
+
+            orig_date = source_date or date.today().isoformat()
+            cancel_payload = {
+                "routine_id": routine["id"],
+                "batch_id": routine["batch_id"],
+                "subject": routine["subject"],
+                "teacher_id": routine["teacher_id"],
+                "session_date": orig_date,
+                "start_time": routine["start_time"],
+                "end_time": routine["end_time"],
+                "status": "CANCELLED",
+                "cancellation_reason": reason.strip() if reason else None,
+                "created_at": now_iso,
+                "updated_at": now_iso
+            }
+            result = supabase.table("class_sessions").insert(cancel_payload).execute()
+            return {"message": "Routine class cancelled successfully", "session": result.data[0] if result.data else cancel_payload}
     except HTTPException:
         raise
     except Exception as e:
