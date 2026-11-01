@@ -11,7 +11,6 @@ export default function TopHeader({
   onBackToLanding,
   mobileSidebarOpen,
   setMobileSidebarOpen,
-  onOpenMobileProfile,
   user,
   notices = [],
   readNoticeIds = [],
@@ -24,15 +23,6 @@ export default function TopHeader({
   // Unread notices calculation
   const unreadNotices = notices.filter(n => !readNoticeIds.includes(n.id));
   const hasUnread = unreadNotices.length > 0;
-
-  const getInitials = (name) => {
-    if (!name) return 'S';
-    const parts = name.trim().split(/\s+/);
-    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-  };
-
-  const initials = getInitials(displayName);
   const profileRef = useRef(null);
 
   // Close dropdown on outside click

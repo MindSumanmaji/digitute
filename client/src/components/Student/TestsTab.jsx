@@ -3,9 +3,6 @@ import MeritListPage from './MeritListPage';
 import StudentProfileCardModal from './StudentProfileCardModal';
 import { apiRequest } from '../../api';
 
-// Exported structures preserved for compatibility
-export const toppersData = {};
-export const pastTestResults = [];
 export const performanceProgressionData = {
   'All Subjects': { subject: 'All Subjects', color: '#2563eb', avgScore: '0%', grade: '—', growth: 'No records yet', tests: [] },
   'Physics': { subject: 'Physics', color: '#10b981', avgScore: '0%', grade: '—', growth: 'No records yet', tests: [] },
@@ -100,14 +97,9 @@ const renderSubjectInfo = (subject) => {
 
 export default function TestsTab({
   activeTab,
-  setActiveTab,
   testSubTab,
-  setTestSubTab,
   showToast
 }) {
-  const [testFilterSubject, setTestFilterSubject] = useState('All Subjects');
-  const [testFilterType, setTestFilterType] = useState('All Tests');
-  const [showAllRecentRanks, setShowAllRecentRanks] = useState(false);
   const [perfChartSubject, setPerfChartSubject] = useState('All Subjects');
   const [hoveredPerfPoint, setHoveredPerfPoint] = useState(null);
   const [viewingMeritTest, setViewingMeritTest] = useState(null);

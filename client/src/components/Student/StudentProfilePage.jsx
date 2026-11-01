@@ -28,13 +28,6 @@ export default function StudentProfilePage({
     photo: studentProfile?.photo || null
   };
 
-  const getInitials = (name) => {
-    if (!name) return 'PS';
-    const parts = name.trim().split(/\s+/);
-    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-  };
-
   return (
     <div className="sp-student-full-profile-page">
       {/* Top Banner with refined gradient aesthetic & soft pattern */}

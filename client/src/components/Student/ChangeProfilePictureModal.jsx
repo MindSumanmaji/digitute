@@ -24,7 +24,6 @@ export default function ChangeProfilePictureModal({
   onRemoveSuccess,
   showToast
 }) {
-  const [selectedFile, setSelectedFile] = useState(null);
   const [imageSrc, setImageSrc] = useState(null);
   const [imageObj, setImageObj] = useState(null);
   const [zoom, setZoom] = useState(1);
@@ -54,7 +53,6 @@ export default function ChangeProfilePictureModal({
       if (imageSrc && imageSrc.startsWith('blob:')) {
         URL.revokeObjectURL(imageSrc);
       }
-      setSelectedFile(null);
       setImageSrc(null);
       setImageObj(null);
       setZoom(1);
@@ -99,7 +97,6 @@ export default function ChangeProfilePictureModal({
     const img = new Image();
     img.onload = () => {
       setImageObj(img);
-      setSelectedFile(file);
       setImageSrc(objectUrl);
       setZoom(1);
       setOffset({ x: 0, y: 0 });
@@ -531,7 +528,6 @@ export default function ChangeProfilePictureModal({
                   }
                   setImageObj(null);
                   setImageSrc(null);
-                  setSelectedFile(null);
                 }}
                 disabled={isUploading}
               >

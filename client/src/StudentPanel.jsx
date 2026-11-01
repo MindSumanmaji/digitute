@@ -120,22 +120,12 @@ export default function StudentPanel({ onBackToLanding }) {
   }, [activeTab, notices]);
 
   // Modals state
-  const [payModalOpen, setPayModalOpen] = useState(false);
-  const [paymentDone, setPaymentDone] = useState(false);
-  const [activePaymentInvoice, setActivePaymentInvoice] = useState(null);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   // Helper to show temporary toasts
   const showToast = (msg) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3200);
-  };
-
-  const handlePaymentSuccess = (res) => {
-    setPaymentDone(prev => !prev);
-    setPayModalOpen(false);
-    const amt = res?.amount_paid ? `₹${Number(res.amount_paid).toLocaleString('en-IN')}` : 'fee';
-    showToast(`Payment of ${amt} received successfully via Razorpay! Receipt generated.`);
   };
 
   const handleUpdateUser = (fields) => {
@@ -259,7 +249,11 @@ export default function StudentPanel({ onBackToLanding }) {
         </main>
       </div>
 
-
+      {toastMessage && (
+        <div className="sp-floating-toast">
+          <span>✓</span> {toastMessage}
+        </div>
+      )}
     </div>
   );
 }

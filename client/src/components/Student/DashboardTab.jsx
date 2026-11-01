@@ -24,7 +24,7 @@ const getSubjectSquircleClass = (subject = '') => {
 
 export default function DashboardTab({ setActiveTab, user }) {
   const [time, setTime] = useState(new Date());
-  const [monthOffset, setMonthOffset] = useState(0);
+  const monthOffset = 0;
 
   const displayName = user?.full_name || 'Student';
   const batchSubtitle = (Array.isArray(user?.batches) ? user.batches[0]?.name : user?.batches?.name)
@@ -114,7 +114,6 @@ export default function DashboardTab({ setActiveTab, user }) {
 
   // Selected date in calendar
   const todayDateNum = new Date().getDate();
-  const [selectedDate, setSelectedDate] = useState(todayDateNum);
 
   // Dynamic Today's classes from summary or routines
   const todayClasses = useMemo(() => {

@@ -49,7 +49,6 @@ export default function ProfileTab({ showToast, onBack, user, onUpdateUser }) {
 
   // Modal sub-dialogs for actions
   const [activeModal, setActiveModal] = useState(null); // 'picture' | 'email' | 'password' | 'about' | 'privacy' | 'terms' | 'support'
-  const [tempInput, setTempInput] = useState('');
   const [newEmailInput, setNewEmailInput] = useState('');
   const [isUpdatingEmail, setIsUpdatingEmail] = useState(false);
   const [emailError, setEmailError] = useState('');
@@ -238,19 +237,6 @@ export default function ProfileTab({ showToast, onBack, user, onUpdateUser }) {
       setPasswordError(err.message || 'Failed to update password. Please try again.');
     } finally {
       setIsUpdatingPassword(false);
-    }
-  };
-
-  const handleSaveModal = (type) => {
-    if (type === 'email') {
-      handleUpdateEmail();
-    } else if (type === 'mobile') {
-      handleUpdateMobile();
-    } else if (type === 'password') {
-      handleUpdatePassword();
-    } else if (type === 'picture') {
-      if (showToast) showToast('Profile picture updated successfully!');
-      setActiveModal(null);
     }
   };
 

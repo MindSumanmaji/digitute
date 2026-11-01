@@ -16,7 +16,6 @@ export default function StudentProfileCardModal({ isOpen, onClose, studentData, 
 
   // Real backend metrics state
   const [liveData, setLiveData] = useState(null);
-  const [loading, setLoading] = useState(false);
 
   // Fetch real database metrics for the specific student ID
   useEffect(() => {
@@ -24,7 +23,6 @@ export default function StudentProfileCardModal({ isOpen, onClose, studentData, 
     if (!studentId) return;
 
     let isMounted = true;
-    setLoading(true);
 
     apiRequest(`/api/student/peers/${studentId}/academic-card`)
       .then((data) => {
@@ -36,7 +34,6 @@ export default function StudentProfileCardModal({ isOpen, onClose, studentData, 
         console.warn('Could not fetch peer live academic metrics:', err);
       })
       .finally(() => {
-        if (isMounted) setLoading(false);
       });
 
     return () => {

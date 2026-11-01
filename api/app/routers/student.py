@@ -9,7 +9,7 @@ from app.models import (
     VerifyPaymentRequest,
     VerifyPaymentResponse
 )
-from typing import Optional, Any
+from typing import Optional
 from datetime import datetime, date, time, timezone
 import os
 import re
@@ -929,66 +929,6 @@ def get_my_doubts(current_user: dict = Depends(get_current_user)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/doubts/upload-attachment", summary="Upload Student Doubt Attachment")
-async def upload_student_doubt_attachment(
-    file: UploadFile = File(...),
-    current_user: dict = Depends(get_current_user)
-):
-    try:
-        supabase = get_supabase_client()
-        student_id = current_user.get("id")
-
-        original_filename = file.filename or "doubt_file"
-        clean_filename = os.path.basename(original_filename)
-        ext = os.path.splitext(clean_filename)[1].lower()
-
-        allowed_exts = {
-            ".pdf": "application/pdf",
-            ".doc": "application/msword",
-            ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            ".png": "image/png",
-            ".jpg": "image/jpeg",
-            ".jpeg": "image/jpeg",
-            ".webp": "image/webp",
-        }
-
-        if ext not in allowed_exts:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Unsupported file extension '{ext}'. Allowed: PNG, JPG, JPEG, WEBP, PDF, DOC, DOCX"
-            )
-
-        contents = await file.read()
-        if not contents or len(contents) == 0:
-            raise HTTPException(status_code=400, detail="Uploaded file is empty.")
-
-        if len(contents) > 15 * 1024 * 1024:
-            raise HTTPException(status_code=413, detail="File size exceeds 15 MiB limit.")
-
-        safe_name = re.sub(r'[^a-zA-Z0-9_.-]', '_', clean_filename)
-        object_name = f"{uuid.uuid4().hex[:12]}_{safe_name}"
-        storage_path = f"doubts/student/{student_id}/{object_name}"
-
-        content_type = file.content_type or allowed_exts.get(ext, "application/octet-stream")
-
-        supabase.storage.from_("digitute").upload(
-            path=storage_path,
-            file=contents,
-            file_options={"content-type": content_type, "upsert": "true"}
-        )
-
-        signed = supabase.storage.from_("digitute").create_signed_url(storage_path, 3600)
-        signed_url = signed.get("signedURL") or signed.get("signedUrl")
-
-        return {
-            "file_url": storage_path,
-            "signed_url": signed_url,
-            "filename": clean_filename
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Attachment upload failed: {str(e)}")
 
 
 # ==============================================================================
@@ -1394,7 +1334,6 @@ def get_exam_merit_list(exam_id: str, current_user: dict = Depends(get_current_u
 def get_peer_academic_card(peer_id: str, current_user: dict = Depends(get_current_user)):
     try:
         supabase = get_supabase_client()
-        user_batch_id = current_user.get("batch_id")
 
         # 1. Fetch user profile
         u_res = supabase.table("users").select("id, full_name, email, phone, avatar_url, batch_id, batches(id, name)").eq("id", peer_id).execute()
@@ -1571,10 +1510,6 @@ def get_peer_academic_card(peer_id: str, current_user: dict = Depends(get_curren
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-@router.get("/academic-card", summary="Get Live Database Academic Card Metrics for Current Student")
-def get_current_user_academic_card(current_user: dict = Depends(get_current_user)):
-    return get_peer_academic_card(current_user["id"], current_user)
 
 
 # ==============================================================================

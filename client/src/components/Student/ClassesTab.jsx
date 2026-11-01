@@ -57,7 +57,6 @@ export default function ClassesTab({ showToast }) {
   const [attendanceData, setAttendanceData] = useState(null);
   const [sessionsList, setSessionsList] = useState([]);
   const [routinesList, setRoutinesList] = useState([]);
-  const [loading, setLoading] = useState(true);
 
   // Local ISO date formatter (avoiding UTC timezone shifting bugs)
   const formatToIso = (d) => {
@@ -74,7 +73,6 @@ export default function ClassesTab({ showToast }) {
   // 1. Fetch live data from backend
   useEffect(() => {
     let isMounted = true;
-    setLoading(true);
 
     Promise.all([
       apiRequest('/api/student/my-attendance').catch(() => null),
@@ -127,7 +125,6 @@ export default function ClassesTab({ showToast }) {
         }
       })
       .finally(() => {
-        if (isMounted) setLoading(false);
       });
 
     return () => {
