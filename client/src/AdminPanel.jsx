@@ -20,6 +20,7 @@ import TeachersView from './components/Admin/TeachersView';
 import StudentsView from './components/Admin/StudentsView';
 import FinanceView from './components/Admin/FinanceView';
 import NoticeBoardView from './components/Admin/NoticeBoardView';
+import HomeView from './components/Admin/HomeView';
 
 const navItems = [
   { label: 'Home', icon: Home, path: '/admin' },
@@ -67,21 +68,6 @@ const pageToPath = {
   'Finance & Fees': '/admin/finance',
   'Notice Board': '/admin/notice-board',
 };
-
-const monthData = [
-  { month: 'May', cash: 35, online: 24 },
-  { month: 'Jun', cash: 46, online: 30 },
-  { month: 'Jul', cash: 40, online: 39 },
-  { month: 'Aug', cash: 52, online: 32 },
-  { month: 'Sep', cash: 48, online: 43 },
-  { month: 'Oct', cash: 61, online: 36 },
-];
-
-const schedule = [
-  { time: '04:00 PM', end: '05:30 PM', subject: 'Physics', batch: 'Class 12 ┬╖ Science', teacher: 'Arindam Roy', room: 'Room 02', color: 'teal' },
-  { time: '04:30 PM', end: '06:00 PM', subject: 'Mathematics', batch: 'JEE Foundation', teacher: 'S. Mukherjee', room: 'Room 01', color: 'violet' },
-  { time: '05:30 PM', end: '07:00 PM', subject: 'Chemistry', batch: 'Class 11 ┬╖ Science', teacher: 'Debjani Paul', room: 'Room 03', color: 'orange' },
-];
 
 function formatINR(value) {
   return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(value);
@@ -145,7 +131,7 @@ function Sidebar({ activePage, onNavigate, collapsed, setCollapsed, mobileOpen, 
   );
 }
 
-function Topbar({ user, searchQuery, setSearchQuery, onMobileMenu, darkMode, setDarkMode, onQuickAction, onNavigate }) {
+function Topbar({ user, searchQuery, setSearchQuery, onMobileMenu, darkMode, setDarkMode, onQuickAction, onNavigate, notices = [] }) {
   const [profileOpen, setProfileOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
 
@@ -193,24 +179,24 @@ function Topbar({ user, searchQuery, setSearchQuery, onMobileMenu, darkMode, set
                 <strong>Notifications</strong>
                 <button onClick={() => setNotifOpen(false)}>Mark read</button>
               </div>
-              <div className="notification-row">
-                <div className="notification-icon orange-soft"><Wallet size={16} /></div>
-                <div>
-                  <strong>Γé╣2,000 received via Razorpay</strong>
-                  <p>Priyanka Roy (Class 12) paid October tuition fees.</p>
-                  <small>Today, 11:24 AM</small>
+              {notices && notices.length > 0 ? (
+                notices.slice(0, 3).map((n, idx) => (
+                  <div className="notification-row" key={n.id || idx}>
+                    <div className="notification-icon blue-soft"><Megaphone size={16} /></div>
+                    <div>
+                      <strong>{n.title}</strong>
+                      <p>{n.description || n.content || ''}</p>
+                      <small>{n.audience || 'Broadcast'}</small>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div style={{ padding: '16px', textAlign: 'center', color: 'var(--text-3)', fontSize: '13px' }}>
+                  No new notifications
                 </div>
-              </div>
-              <div className="notification-row">
-                <div className="notification-icon blue-soft"><Users size={16} /></div>
-                <div>
-                  <strong>1-Click Reminder sent</strong>
-                  <p>Due reminders sent to 4 parents on WhatsApp.</p>
-                  <small>Yesterday, 04:00 PM</small>
-                </div>
-              </div>
-              <button className="popover-footer" onClick={() => { setNotifOpen(false); onNavigate('Finance & Fees'); }}>
-                View complete ledger <ChevronRight size={14} />
+              )}
+              <button className="popover-footer" onClick={() => { setNotifOpen(false); onNavigate('Notice Board'); }}>
+                View notice board <ChevronRight size={14} />
               </button>
             </div>
           )}
@@ -252,237 +238,6 @@ function Topbar({ user, searchQuery, setSearchQuery, onMobileMenu, darkMode, set
   );
 }
 
-function MetricCard({ icon: Icon, label, value, change, changeType = 'positive', note, iconClass, trend }) {
-  return (
-    <div className="metric-card">
-      <div className="metric-card-top">
-        <div className={`metric-icon ${iconClass}`}><Icon size={18} /></div>
-        <span className={`metric-change ${changeType}`}>{change}</span>
-      </div>
-      <div className="metric-value">{value}</div>
-      <div className="metric-label">{label}</div>
-      <div className="metric-bottom">
-        <span>{note}</span>
-        <div className="mini-sparkline">
-          {trend.map((h, i) => (
-            <i key={i} style={{ height: `${Math.max(4, (h / 100) * 22)}px` }} />
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function CollectionChart({ period, setPeriod }) {
-  return (
-    <section className="panel collection-panel">
-      <div className="card-header">
-        <div>
-          <h2>Fee Collection Overview</h2>
-          <p>Cash counter vs. Razorpay online payment split</p>
-        </div>
-        <div className="card-actions">
-          <select className="subtle-select" value={period} onChange={(e) => setPeriod(e.target.value)}>
-            <option>Last 6 months</option>
-            <option>This semester</option>
-            <option>Current academic year</option>
-          </select>
-        </div>
-      </div>
-
-      <div className="chart-summary">
-        <strong>Γé╣4,82,500</strong>
-        <span className="summary-positive"><ArrowUpRight size={13} /> +12.8%</span>
-        <span className="chart-summary-note">collected in October 2026</span>
-      </div>
-
-      <div className="chart-legend">
-        <span><i className="legend-dot online-dot-legend" /> Online (Razorpay)</span>
-        <span><i className="legend-dot cash-dot-legend" /> Offline Cash</span>
-      </div>
-
-      <div className="bar-chart">
-        <div className="chart-grid-lines">
-          <span>Γé╣6L</span><span>Γé╣4L</span><span>Γé╣2L</span><span>Γé╣0</span>
-        </div>
-        <div className="bar-chart-area">
-          {monthData.map((d) => {
-            const total = d.cash + d.online;
-            const pct = Math.min(100, (total / 100) * 100);
-            const onlineRatio = (d.online / total) * 100;
-            return (
-              <div className="bar-column" key={d.month}>
-                <div className="bar-stack" style={{ height: `${pct}%` }}>
-                  <span className="bar-online" style={{ height: `${onlineRatio}%` }} />
-                  <span className="bar-cash" style={{ height: `${100 - onlineRatio}%` }} />
-                </div>
-                <span className={d.month === 'Oct' ? 'current-month' : ''}>{d.month}</span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="chart-footnote">
-        <span><i className="tiny-dot teal-dot" /> Razorpay: <strong>Γé╣2,17,000</strong></span>
-        <span><i className="tiny-dot orange-dot" /> Cash: <strong>Γé╣2,65,500</strong></span>
-      </div>
-    </section>
-  );
-}
-
-function TodaySchedule({ onViewAll }) {
-  return (
-    <section className="panel schedule-panel">
-      <div className="card-header">
-        <div>
-          <h2>Today's Class Schedule</h2>
-          <p>Tuesday, 13 October 2026</p>
-        </div>
-        <button className="text-link" onClick={onViewAll}>
-          View all <ChevronRight size={13} />
-        </button>
-      </div>
-
-      <div className="schedule-tabs">
-        <button className="selected">All classes <span>3</span></button>
-        <button>Morning</button>
-        <button>Evening</button>
-      </div>
-
-      <div className="schedule-list">
-        {schedule.map((item, idx) => (
-          <div className="schedule-item" key={idx}>
-            <div className="schedule-time">
-              <strong>{item.time}</strong>
-              <span>{item.end}</span>
-            </div>
-            <div className={`schedule-color-bar ${item.color}`} />
-            <div className="schedule-info">
-              <div className="schedule-title-row">
-                <strong>{item.subject}</strong>
-              </div>
-              <p>{item.batch}</p>
-              <div className="teacher-line">
-                <span className="teacher-avatar">{item.teacher[0]}</span>
-                <span>{item.teacher}</span>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function HomeView({ searchQuery, onQuickAction, onNavigate, students }) {
-  const [period, setPeriod] = useState('This month');
-  const dueList = students.filter(s => s.dueAmount > 0);
-
-  const metrics = [
-    { icon: Users, label: 'Active students', value: '180', change: '+12 new', note: 'across 4 batches', iconClass: 'teal-icon', trend: [30, 50, 42, 65, 56, 84, 76, 100] },
-    { icon: BookOpen, label: 'Active batches', value: '4', change: '100% active', note: 'running smoothly', iconClass: 'violet-icon', trend: [35, 35, 45, 45, 60, 60, 83, 83] },
-    { icon: Wallet, label: 'Fee collected', value: 'Γé╣4.82L', change: '+12.8%', note: 'this month', iconClass: 'orange-icon', trend: [24, 43, 34, 62, 51, 75, 69, 100] },
-    { icon: AlertCircle, label: 'Pending dues', value: 'Γé╣7,400', change: '4 students', changeType: 'negative', note: 'due by 10th Oct', iconClass: 'rose-icon', trend: [80, 64, 73, 52, 58, 42, 30, 22] },
-  ];
-
-  return (
-    <>
-      <div className="metrics-grid">{metrics.map((metric) => <MetricCard key={metric.label} {...metric} />)}</div>
-
-      <div className="main-grid">
-        <CollectionChart period={period} setPeriod={setPeriod} />
-        <TodaySchedule onViewAll={() => onNavigate('Routine & Schedule')} />
-      </div>
-
-      <div className="bottom-grid">
-        <section className="panel dues-panel">
-          <div className="card-header">
-            <div>
-              <h2>Pending Dues & Defaulter Alerts</h2>
-              <p>{dueList.length} students have pending tuition fees</p>
-            </div>
-            <button className="text-link" onClick={() => onNavigate('Finance & Fees')}>View all <ChevronRight size={13} /></button>
-          </div>
-
-          <div className="dues-table-wrap">
-            <table className="dues-table">
-              <thead>
-                <tr>
-                  <th>Student</th>
-                  <th>Batch</th>
-                  <th>Outstanding</th>
-                  <th>Due Date</th>
-                  <th style={{ textAlign: 'right' }}>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {dueList.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} style={{ textAlign: 'center', padding: '24px 16px', color: 'var(--text-3)' }}>
-                      No pending fee dues. All student accounts are clear.
-                    </td>
-                  </tr>
-                ) : (
-                  dueList.map((s) => (
-                    <tr key={s.id}>
-                      <td>
-                        <div className="student-cell">
-                          <div className={`student-avatar ${s.avatarTone}`}>{s.name[0]}</div>
-                          <div><strong>{s.name}</strong><small>{s.studentId || s.id}</small></div>
-                        </div>
-                      </td>
-                      <td><span className="batch-name">{s.batch}</span></td>
-                      <td><strong className="due-amount">Γé╣{s.dueAmount.toLocaleString('en-IN')}</strong></td>
-                      <td><span className="due-date">{s.dueDate}</span></td>
-                      <td style={{ textAlign: 'right' }}>
-                        <button
-                          className="button-secondary"
-                          style={{ minHeight: 28, fontSize: 12, padding: '0 10px' }}
-                          onClick={() => onNavigate('Finance & Fees')}
-                        >
-                          View
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        <section className="panel notice-panel">
-          <div className="card-header">
-            <div>
-              <h2>Recent Notice Board</h2>
-              <p>Active center announcements</p>
-            </div>
-            <button className="text-link" onClick={() => onNavigate('Notice Board')}>View all <ChevronRight size={13} /></button>
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 14 }}>
-            <div style={{ padding: 14, borderRadius: 10, background: '#f8fbfb', border: '1px solid #ebf2f0', display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <strong style={{ fontSize: 16 }}>Kali Puja & Diwali Vacation</strong>
-                <span className="notice-audience-pill" style={{ fontSize: 13 }}>All Students</span>
-              </div>
-              <p style={{ margin: 0, fontSize: 14, color: 'var(--text-2)' }}>Classes suspended from 28th Oct to 3rd Nov 2026.</p>
-            </div>
-            <div style={{ padding: 14, borderRadius: 10, background: '#f8fbfb', border: '1px solid #ebf2f0', display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <strong style={{ fontSize: 16 }}>October Fee Due Reminder</strong>
-                <span className="notice-audience-pill" style={{ fontSize: 13 }}>Pending Dues</span>
-              </div>
-              <p style={{ margin: 0, fontSize: 14, color: 'var(--text-2)' }}>Kindly clear dues by 10th Oct to avoid late fines.</p>
-            </div>
-          </div>
-        </section>
-      </div>
-    </>
-  );
-}
-
 function Modal({ modal, onClose, onSubmit, selectedItem, batches, teachers }) {
   const isAdmission = modal === 'New admission';
   const isEditStudent = modal === 'Edit student';
@@ -516,7 +271,7 @@ function Modal({ modal, onClose, onSubmit, selectedItem, batches, teachers }) {
     lateFine: '100',
     qualification: selectedItem?.qualification || '',
     specialization: selectedItem?.specialization || '',
-    payoutModel: 'Fixed Monthly (Γé╣6,000/mo)',
+    payoutModel: 'Fixed Monthly (₹6,000/mo)',
     audience: 'All Students & Teachers',
     message: '',
   });
@@ -701,7 +456,7 @@ function Modal({ modal, onClose, onSubmit, selectedItem, batches, teachers }) {
               <div style={{ borderTop: '1px solid #e1e9e7', marginTop: 12, paddingTop: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: 12, fontWeight: 700 }}>Total Amount Paid:</span>
                 <strong style={{ font: '800 18px Manrope, sans-serif', color: 'var(--teal-dark)' }}>
-                  Γé╣{(selectedItem?.amount || Number(form.amount) || 2000).toLocaleString('en-IN')}
+                  ₹{(selectedItem?.amount || Number(form.amount) || 2000).toLocaleString('en-IN')}
                 </strong>
               </div>
             </div>
@@ -726,7 +481,7 @@ function Modal({ modal, onClose, onSubmit, selectedItem, batches, teachers }) {
                     </label>
                   ) : (
                     <label className="form-field">
-                      <span>Email Address (Login Identity ┬╖ Read-only)</span>
+                      <span>Email Address (Login Identity • Read-only)</span>
                       <input type="email" value={form.email} disabled readOnly style={{ opacity: 0.75, cursor: 'not-allowed', background: 'var(--bg-card)' }} />
                     </label>
                   )}
@@ -755,7 +510,7 @@ function Modal({ modal, onClose, onSubmit, selectedItem, batches, teachers }) {
                 </div>
                 <div className="form-row">
                   <label className="form-field">
-                    <span>Scholarship / Discount (Γé╣/mo)</span>
+                    <span>Scholarship / Discount (₹/mo)</span>
                     <input type="number" min="0" value={form.discountAmount} onChange={(e) => update('discountAmount', e.target.value)} placeholder="0 for regular fee" />
                   </label>
                   <label className="form-field">
@@ -801,7 +556,7 @@ function Modal({ modal, onClose, onSubmit, selectedItem, batches, teachers }) {
                       </select>
                     </label>
                     <label className="form-field">
-                      <span>{form.feeType === 'ONE_TIME' ? 'Full Course Fee (Γé╣)' : 'Monthly Tuition Fee (Γé╣)'} <b>*</b></span>
+                      <span>{form.feeType === 'ONE_TIME' ? 'Full Course Fee (₹)' : 'Monthly Tuition Fee (₹)'} <b>*</b></span>
                       <input
                         required
                         type="number"
@@ -880,7 +635,7 @@ function Modal({ modal, onClose, onSubmit, selectedItem, batches, teachers }) {
                   <div className="batch-share-summary">
                     <span>
                       Faculty Share Total: <strong>{totalShare}%</strong>
-                      {' ┬╖ '}
+                      {' • '}
                       Institute Retains: <strong>{Math.max(0, 100 - totalShare)}%</strong>
                     </span>
                     {totalShare > 100 && (
@@ -900,7 +655,7 @@ function Modal({ modal, onClose, onSubmit, selectedItem, batches, teachers }) {
                   </label>
                   {isEditTeacher ? (
                     <label className="form-field">
-                      <span>Email Address (Login Identity ┬╖ Read-only)</span>
+                      <span>Email Address (Login Identity • Read-only)</span>
                       <input type="email" value={form.email} disabled readOnly style={{ opacity: 0.75, cursor: 'not-allowed', background: 'var(--bg-card)' }} />
                     </label>
                   ) : (
@@ -1427,6 +1182,7 @@ export default function AdminPanel({ onBackToLanding }) {
           setDarkMode={setDarkMode}
           onQuickAction={openAction}
           onNavigate={navigate}
+          notices={notices}
         />
 
         <main className="page-content">
@@ -1436,6 +1192,8 @@ export default function AdminPanel({ onBackToLanding }) {
               onQuickAction={openAction}
               onNavigate={navigate}
               students={students}
+              batches={batches}
+              teachers={teachers}
               notices={notices}
             />
           )}

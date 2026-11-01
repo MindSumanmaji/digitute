@@ -83,10 +83,24 @@ def get_dashboard_metrics():
             if i.get("status") == "PENDING"
         )
         
+        # Cash payments under verification
+        cash_queue = supabase.table("payments").select("amount").eq("status", "UNDER_VERIFICATION").execute()
+        total_pending_cash = sum(float(p.get("amount") or 0.0) for p in (cash_queue.data or []))
+        queue_count = len(cash_queue.data or [])
+
+        student_count = students.count or 0
+        batch_count = batches.count or 0
+        teacher_count = teachers.count or 0
+
         return {
-            "active_students": students.count or 0,
-            "active_batches": batches.count or 0,
-            "verified_teachers": teachers.count or 0,
+            "total_students": student_count,
+            "active_students": student_count,
+            "total_batches": batch_count,
+            "active_batches": batch_count,
+            "total_teachers": teacher_count,
+            "verified_teachers": teacher_count,
+            "under_verification_cash": total_pending_cash,
+            "under_verification_count": queue_count,
             "total_fee_collected": total_collected,
             "total_outstanding_dues": total_dues
         }
@@ -1749,6 +1763,100 @@ def delete_invoice(invoice_id: str):
 
 
 # ==============================================================================
+# ==============================================================================
+# 7.5 PAYMENTS ANALYTICS (Fee Collection Overview Chart)
+# ==============================================================================
+
+@router.get("/payments/analytics", summary="Get Fee Collection Monthly Analytics from Payments Table")
+def get_payment_collection_analytics(period: str = "Last 6 months"):
+    """
+    Aggregates successful payments from the 'payments' table:
+    - Monthly breakdown: Cash vs Razorpay
+    - Current month totals and growth percentage
+    - Overall period totals
+    """
+    try:
+        supabase = get_supabase_client()
+        res = supabase.table("payments").select("id, amount, payment_mode, status, paid_at, created_at").eq("status", "SUCCESS").execute()
+        raw_payments = res.data or []
+        
+        now = datetime.now()
+        if period == "Current academic year":
+            num_months = 12
+        else:
+            num_months = 6
+            
+        month_keys = []
+        for i in range(num_months - 1, -1, -1):
+            y = now.year
+            m = now.month - i
+            while m <= 0:
+                m += 12
+                y -= 1
+            key = f"{y:04d}-{m:02d}"
+            label = calendar.month_abbr[m]
+            full_label = f"{calendar.month_name[m]} {y}"
+            month_keys.append({
+                "year": y,
+                "month": m,
+                "key": key,
+                "label": label,
+                "full_label": full_label,
+                "cash": 0.0,
+                "online": 0.0
+            })
+            
+        key_map = {item["key"]: item for item in month_keys}
+
+        for p in raw_payments:
+            amt = float(p.get("amount") or 0.0)
+            mode = (p.get("payment_mode") or "CASH").upper()
+            dt_str = p.get("paid_at") or p.get("created_at")
+            if dt_str:
+                try:
+                    pm_key = dt_str[:7]
+                    if pm_key in key_map:
+                        if "RAZOR" in mode or "ONLINE" in mode:
+                            key_map[pm_key]["online"] += amt
+                        else:
+                            key_map[pm_key]["cash"] += amt
+                except Exception:
+                    pass
+
+        for item in month_keys:
+            item["total"] = item["cash"] + item["online"]
+
+        current_m = month_keys[-1]
+        prev_m = month_keys[-2] if len(month_keys) >= 2 else None
+        
+        growth_pct = 0.0
+        if prev_m and prev_m["total"] > 0:
+            growth_pct = round(((current_m["total"] - prev_m["total"]) / prev_m["total"]) * 100, 1)
+
+        total_period_cash = sum(item["cash"] for item in month_keys)
+        total_period_online = sum(item["online"] for item in month_keys)
+        total_period_collected = total_period_cash + total_period_online
+        max_month_total = max([item["total"] for item in month_keys] + [1.0])
+
+        return {
+            "period": period,
+            "current_month_key": current_m["key"],
+            "current_month_name": current_m["full_label"],
+            "current_month_total": current_m["total"],
+            "current_month_cash": current_m["cash"],
+            "current_month_online": current_m["online"],
+            "growth_percent": growth_pct,
+            "total_period_collected": total_period_collected,
+            "total_period_cash": total_period_cash,
+            "total_period_online": total_period_online,
+            "max_month_total": max_month_total,
+            "months": month_keys
+        }
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # 8. CASH VERIFICATION QUEUE (Teacher Handover Approval / Rejection)
 # ==============================================================================
 
