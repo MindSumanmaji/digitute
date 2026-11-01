@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
-import { BookOpen, Plus, Users, Clock, Calendar, CheckCircle2, Search, Filter, Edit3, Trash2 } from 'lucide-react';
+import {
+  BookOpen, Plus, Users, Search, Edit3, Trash2
+} from 'lucide-react';
 
-export default function BatchesView({ batches = [], teachers = [], students = [], onCreateBatch, onEditBatch, onDeleteBatch, onSelectBatch }) {
+export default function BatchesView({ batches = [], teachers = [], students = [], onCreateBatch, onEditBatch, onDeleteBatch }) {
   const [searchTerm, setSearchTerm] = useState('');
 
   const filteredBatches = (batches || []).filter(b => {

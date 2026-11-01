@@ -1,9 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
-  Calendar, Clock, Users, BookOpen, AlertTriangle, CheckCircle2,
-  CalendarDays, Plus, Search, Filter, RefreshCw, ChevronLeft, ChevronRight,
-  UserCheck, AlertCircle, Sparkles, Building2, UserCog, MoreVertical,
-  X, Check, ArrowRight, ShieldAlert, Edit2, Trash2, Loader2
+  Calendar, Clock, AlertTriangle, CalendarDays, Plus, Search, Filter, RefreshCw, ChevronLeft, ChevronRight, Sparkles, X, Check, Trash2, Loader2
 } from 'lucide-react';
 import { apiRequest } from '../../api';
 

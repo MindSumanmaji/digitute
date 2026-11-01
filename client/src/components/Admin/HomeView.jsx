@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Users, BookOpen, UserCog, WalletCards, ArrowUpRight, ChevronRight,
-  ShieldCheck, AlertCircle, CalendarDays, Clock3, Eye, Megaphone
+  Users, BookOpen, UserCog, WalletCards, ChevronRight, CalendarDays
 } from 'lucide-react';
 import { apiRequest } from '../../api';
 
@@ -323,8 +322,6 @@ function TodaySchedule({ onViewAll }) {
 }
 
 export default function HomeView({
-  searchQuery = '',
-  onQuickAction,
   onNavigate,
   students = [],
   batches = [],

@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
-import { UserCog, Plus, Phone, Mail, Award, BookOpen, Wallet, CheckCircle2, Search, Edit3 } from 'lucide-react';
+import {
+  UserCog, Plus, Phone, Mail, BookOpen, Search, Edit3
+} from 'lucide-react';
 
 export default function TeachersView({ teachers, batches = [], onAddTeacher, onEditTeacher }) {
   const [searchTerm, setSearchTerm] = useState('');

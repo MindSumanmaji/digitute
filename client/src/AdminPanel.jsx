@@ -1,15 +1,11 @@
-﻿import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import {
-  Activity, AlertCircle, ArrowDownRight, ArrowUpRight, Bell, BookOpen,
-  CalendarDays, Check, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight,
-  CircleDollarSign, Clock3, Command, CreditCard, Download, Ellipsis,
-  FileText, GraduationCap, Home, LifeBuoy, LogOut, Menu, Moon,
-  MoreHorizontal, Plus, Search, Settings2, ShieldCheck, SlidersHorizontal,
-  Sparkles, Sun, Users, Wallet, X, Megaphone, Building2, UserRoundPlus,
-  BookMarked, CalendarCheck, ClipboardList, PanelLeftClose,
-  PanelLeftOpen, ReceiptText, TrendingUp, UserCheck, UserCog, WalletCards,
-  CircleHelp, Filter, CheckCheck, Printer, MessageSquare, Copy, Link2, Trash2, Edit3
+  Bell, BookOpen, CalendarDays, Check, CheckCircle2,
+  ChevronDown, ChevronRight, Edit3, FileText, GraduationCap,
+  Home, LogOut, Megaphone, Menu, Moon, PanelLeftClose,
+  PanelLeftOpen, Plus, Sparkles, Sun, Trash2, UserCog,
+  Users, WalletCards, X
 } from 'lucide-react';
 
 import { apiRequest, clearAuthSession } from './api';
@@ -69,9 +65,7 @@ const pageToPath = {
   'Notice Board': '/admin/notice-board',
 };
 
-function formatINR(value) {
-  return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(value);
-}
+
 
 function Brand({ collapsed }) {
   return (
@@ -246,7 +240,6 @@ function Modal({ modal, onClose, onSubmit, selectedItem, batches, teachers }) {
   const isDeleteBatch = modal === 'Delete batch';
   const isTeacher = modal === 'Add teacher' || modal === 'Edit teacher';
   const isEditTeacher = modal === 'Edit teacher';
-  const isReceipt = typeof modal === 'string' && modal.startsWith('Receipt: ');
   const isNotice = modal === 'Broadcast notice' || modal === 'Send fee reminders';
   const isExport = modal === 'Export report';
 
@@ -267,11 +260,8 @@ function Modal({ modal, onClose, onSubmit, selectedItem, batches, teachers }) {
     mode: 'Cash',
     title: selectedItem?.name || '',
     duration: selectedItem?.duration || '1 Year',
-    dueDay: '10',
-    lateFine: '100',
     qualification: selectedItem?.qualification || '',
     specialization: selectedItem?.specialization || '',
-    payoutModel: 'Fixed Monthly (₹6,000/mo)',
     audience: 'All Students & Teachers',
     message: '',
   });
@@ -366,8 +356,7 @@ function Modal({ modal, onClose, onSubmit, selectedItem, batches, teachers }) {
                   isBatch ? 'Create New Course Batch' :
                     isEditTeacher ? `Edit Faculty: ${selectedItem?.full_name || selectedItem?.name || ''}` :
                     isTeacher ? 'Add Faculty Member' :
-                      isReceipt ? 'Official Payment Receipt' :
-                        isNotice ? 'Broadcast Announcement' :
+                                              isNotice ? 'Broadcast Announcement' :
                           isExport ? 'Export Institute Report' : modal}
             </h2>
             <p>
@@ -378,8 +367,7 @@ function Modal({ modal, onClose, onSubmit, selectedItem, batches, teachers }) {
                   isBatch ? 'Configure batch name, tuition fee model and faculty revenue sharing.' :
                     isEditTeacher ? 'Update faculty contact info, qualifications and academic specialization.' :
                     isTeacher ? 'Onboard teacher with qualification, subjects and payout model. Default password is #{initials}@123.' :
-                      isReceipt ? 'Official money voucher with institute seal.' :
-                        isNotice ? 'Publish notification to student and faculty portals.' : 'Confirm action.'}
+                                              isNotice ? 'Publish notification to student and faculty portals.' : 'Confirm action.'}
             </p>
           </div>
           <button className="icon-button" onClick={onClose}><X size={19} /></button>
@@ -436,33 +424,6 @@ function Modal({ modal, onClose, onSubmit, selectedItem, batches, teachers }) {
               >
                 <Trash2 size={15} /> Yes, Delete Batch
               </button>
-            </div>
-          </div>
-        ) : isReceipt ? (
-          <div>
-            <div style={{ border: '1px dashed #cedbd7', borderRadius: 12, padding: 18, background: '#f8fbfb', marginBottom: 16 }}>
-              <div style={{ textAlign: 'center', borderBottom: '1px solid #e1e9e7', paddingBottom: 10, marginBottom: 12 }}>
-                <strong style={{ font: '800 16px Manrope, sans-serif', color: 'var(--teal-dark)' }}>DIGITUTE COACHING INSTITUTE</strong>
-                <div style={{ fontSize: 10, color: 'var(--text-3)' }}>Salt Lake Sector V, Kolkata | Phone: +91 98300 12345</div>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: 11 }}>
-                <div><span style={{ color: 'var(--text-3)', fontSize: 9.5 }}>Receipt No:</span> <strong style={{ fontFamily: 'monospace' }}>{selectedItem?.receiptNo || 'REC-2026-0185'}</strong></div>
-                <div><span style={{ color: 'var(--text-3)', fontSize: 9.5 }}>Date & Time:</span> <strong>{selectedItem?.date || '13 Oct, 2026'}</strong></div>
-                <div><span style={{ color: 'var(--text-3)', fontSize: 9.5 }}>Student:</span> <strong>{selectedItem?.studentName || form.name}</strong></div>
-                <div><span style={{ color: 'var(--text-3)', fontSize: 9.5 }}>Batch:</span> <strong>{selectedItem?.batch || form.batch}</strong></div>
-                <div><span style={{ color: 'var(--text-3)', fontSize: 9.5 }}>Payment Mode:</span> <strong>{selectedItem?.mode || form.mode}</strong></div>
-                <div><span style={{ color: 'var(--text-3)', fontSize: 9.5 }}>Status:</span> <strong style={{ color: '#0f8a65' }}>SUCCESS / VERIFIED</strong></div>
-              </div>
-              <div style={{ borderTop: '1px solid #e1e9e7', marginTop: 12, paddingTop: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: 12, fontWeight: 700 }}>Total Amount Paid:</span>
-                <strong style={{ font: '800 18px Manrope, sans-serif', color: 'var(--teal-dark)' }}>
-                  ₹{(selectedItem?.amount || Number(form.amount) || 2000).toLocaleString('en-IN')}
-                </strong>
-              </div>
-            </div>
-            <div className="modal-footer">
-              <button className="button-secondary" onClick={onClose}>Close</button>
-              <button className="button-primary" onClick={() => window.print()}><Printer size={15} /> Print official receipt</button>
             </div>
           </div>
         ) : (
@@ -830,11 +791,7 @@ export default function AdminPanel({ onBackToLanding }) {
   const [batches, setBatches] = useState([]);
   const [teachers, setTeachers] = useState([]);
   const [students, setStudents] = useState([]);
-  const [transactions, setTransactions] = useState([]);
   const [notices, setNotices] = useState([]);
-  const [syllabus, setSyllabus] = useState([]);
-  const [exams, setExams] = useState([]);
-  const [materials, setMaterials] = useState([]);
 
   // Load live course batches and faculty from API
   useEffect(() => {
@@ -895,14 +852,7 @@ export default function AdminPanel({ onBackToLanding }) {
     setModal(action);
   }
 
-  function handleSendReminder(target = 'all') {
-    showToast('1-Click WhatsApp Reminders Sent', 'Automated fee due notifications delivered to parents on WhatsApp.');
-  }
 
-  function handlePrintReceipt(tx) {
-    setModalItem(tx);
-    setModal(`Receipt: ${tx.receiptNo}`);
-  }
 
   async function submitModal(payload) {
     const { type, form } = payload;
@@ -1194,7 +1144,6 @@ export default function AdminPanel({ onBackToLanding }) {
               students={students}
               batches={batches}
               teachers={teachers}
-              notices={notices}
             />
           )}
 
@@ -1206,7 +1155,6 @@ export default function AdminPanel({ onBackToLanding }) {
               onCreateBatch={() => openAction('Create batch')}
               onEditBatch={(batch) => openAction('Edit batch', batch)}
               onDeleteBatch={(batch) => openAction('Delete batch', batch)}
-              onSelectBatch={() => { }}
             />
           )}
 
@@ -1239,10 +1187,7 @@ export default function AdminPanel({ onBackToLanding }) {
             <FinanceView
               batches={batches}
               students={students}
-              transactions={transactions}
               showToast={showToast}
-              onSendReminder={handleSendReminder}
-              onPrintReceipt={handlePrintReceipt}
             />
           )}
 

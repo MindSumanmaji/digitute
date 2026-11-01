@@ -1,9 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
-  Wallet, AlertCircle, ReceiptText, MessageSquare, Download, CheckCircle2,
-  Search, ArrowUpRight, ShieldCheck, Printer, Plus, Calendar, Clock3,
-  Filter, Trash2, ChevronRight, X, Sparkles, RefreshCw, Copy, Check,
-  Building2, Users, AlertTriangle, Layers, Eye, CreditCard
+  AlertCircle, ReceiptText, CheckCircle2, Search, ShieldCheck, Plus, Clock3, Filter, ChevronRight, X, Sparkles, RefreshCw, Copy, Check, AlertTriangle, Layers, CreditCard
 } from 'lucide-react';
 import { apiRequest } from '../../api';
 
@@ -41,10 +38,7 @@ function getMonthLabel(monthOrYyyyMm, year) {
 export default function FinanceView({
   batches = [],
   students = [],
-  transactions = [],
-  showToast = () => {},
-  onSendReminder = () => {},
-  onPrintReceipt = () => {}
+  showToast = () => {}
 }) {
   const currentMonthStr = useMemo(() => {
     const now = new Date();

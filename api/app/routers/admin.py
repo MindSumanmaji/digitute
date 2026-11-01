@@ -2,13 +2,11 @@ from fastapi import APIRouter, HTTPException, Depends
 from app.db import get_supabase_client, safe_execute
 from app.core.dependencies import require_roles, get_current_user
 from app.models import (
-    BatchCreate,
     RoutineSlotCreate,
     StudentCreate,
     StudentUpdate,
     TeacherCreate,
     TeacherUpdate,
-    SessionCreate,
     GenerateMonthSessionsRequest,
     SessionActionRequest,
     BatchInvoiceDemandRequest,

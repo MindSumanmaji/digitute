@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
-import { Users, Plus, MessageSquare, Search, CheckCircle2, Phone, Mail, MapPin, Edit3 } from 'lucide-react';
+import {
+  Plus, MessageSquare, Search, CheckCircle2, Phone, Mail, MapPin, Edit3
+} from 'lucide-react';
 
 export default function StudentsView({ students = [], onNewAdmission, onEditStudent }) {
   const [searchTerm, setSearchTerm] = useState('');

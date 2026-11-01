@@ -1,5 +1,7 @@
 import React from 'react';
-import { Megaphone, Plus, Calendar, Users, Trash2, UserCheck, CheckCircle2 } from 'lucide-react';
+import {
+  Megaphone, Plus, Calendar, Users, Trash2
+} from 'lucide-react';
 
 export default function NoticeBoardView({ notices = [], onBroadcastNotice, onDeleteNotice }) {
   const formatDate = (dateStr) => {
